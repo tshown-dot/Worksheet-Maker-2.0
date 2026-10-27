@@ -6,10 +6,11 @@ import { WorksheetSettings } from './components/WorksheetSettings';
 import { QuestionCard } from './components/QuestionCard';
 import { WorksheetPreview } from './components/WorksheetPreview';
 import { WorksheetPage } from './components/WorksheetPage';
+import { ImportHub } from './components/ImportHub';
 import { AIImportModal } from './components/AIImportModal';
 import { WorksheetListModal } from './components/WorksheetListModal';
 import { generateWorksheetPDF } from './utils/pdfGenerator';
-import { Plus, Eye, Edit3, Sparkles } from 'lucide-react';
+import { Plus, Eye, Edit3, Sparkles, ArrowLeft } from 'lucide-react';
 
 const INITIAL_WORKSHEET: Worksheet = {
   id: '',
@@ -20,7 +21,7 @@ const INITIAL_WORKSHEET: Worksheet = {
   grade_level: '7th Grade',
   style_preset: 'homework',
   total_pages: 1,
-  columns: 2, // Default to 2 columns for clean, professional look!
+  columns: 2,
   spacing: 'balanced',
   student_id_digits: 3,
   layout_config: {
@@ -31,60 +32,12 @@ const INITIAL_WORKSHEET: Worksheet = {
     spacing: 'balanced',
     show_honor_pledge: false,
   },
-  questions: [
-    {
-      id: crypto.randomUUID(),
-      order_index: 1,
-      page_number: 1,
-      prompt: 'Solve for x:  3x + 7 = 22',
-      question_type: 'numeric',
-      options: [],
-      correct_answer: '5',
-      acceptable_alternatives: ['x = 5', '5'],
-      points: 2,
-      rubric_notes: '1 pt for 3x = 15, 1 pt for division.',
-    },
-    {
-      id: crypto.randomUUID(),
-      order_index: 2,
-      page_number: 1,
-      prompt: 'Solve for y:  \\frac{y}{4} - 3 = 5',
-      question_type: 'numeric',
-      options: [],
-      correct_answer: '32',
-      acceptable_alternatives: ['y = 32', '32'],
-      points: 2,
-      rubric_notes: '1 pt for y/4 = 8, 1 pt for multiplication.',
-    },
-    {
-      id: crypto.randomUUID(),
-      order_index: 3,
-      page_number: 1,
-      prompt: 'Solve for m:  2(m + 4) = 18',
-      question_type: 'numeric',
-      options: [],
-      correct_answer: '5',
-      acceptable_alternatives: ['m = 5', '5'],
-      points: 2,
-      rubric_notes: 'Valid to distribute or divide by 2 first.',
-    },
-    {
-      id: crypto.randomUUID(),
-      order_index: 4,
-      page_number: 1,
-      prompt: 'A phone plan is $35/month plus $0.10 per text message. Find the number of text messages (t) sent if the bill is $52.50.',
-      question_type: 'numeric',
-      options: [],
-      correct_answer: '175',
-      acceptable_alternatives: ['175', 't = 175'],
-      points: 3,
-      rubric_notes: 'Equation: 35 + 0.10t = 52.50 -> t = 175.',
-    },
-  ],
+  questions: [], // Starts empty so the Import Hub leads!
 };
 
 export function App() {
   const [worksheet, setWorksheet] = useState<Worksheet>(INITIAL_WORKSHEET);
+  const [viewMode, setViewMode] = useState<'import' | 'editor'>('import');
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusText, setSaveStatusText] = useState('');
@@ -165,7 +118,16 @@ export function App() {
     setWorksheet((prev) => ({ ...prev, questions: reindexed }));
   };
 
-  const handleImportQuestions = (imported: Question[]) => {
+  // When questions are imported from the leading ImportHub
+  const handleHubImport = (imported: Question[]) => {
+    setWorksheet((prev) => ({
+      ...prev,
+      questions: imported,
+    }));
+    setViewMode('editor');
+  };
+
+  const handleModalImport = (imported: Question[]) => {
     setWorksheet((prev) => {
       const startIndex = prev.questions.length;
       const reindexed = imported.map((q, idx) => ({
@@ -204,11 +166,11 @@ export function App() {
         folder_name: worksheet.folder_name || 'General',
         style_preset: worksheet.style_preset,
         total_pages: worksheet.total_pages,
-        columns: worksheet.columns || 1,
+        columns: worksheet.columns || 2,
         student_id_digits: worksheet.student_id_digits,
         layout_config: {
           ...worksheet.layout_config,
-          columns: worksheet.columns || 1,
+          columns: worksheet.columns || 2,
           spacing: worksheet.spacing || 'balanced',
         },
         updated_at: new Date().toISOString(),
@@ -262,16 +224,13 @@ export function App() {
     }
   };
 
-  // NATIVE PRINT HANDLERS: Triggers the browser's native print dialog directly!
   const handlePrint = (isKey: boolean) => {
     setPrintIsAnswerKey(isKey);
-    // Slight tick to ensure state renders in printable-area before window.print()
     setTimeout(() => {
       window.print();
     }, 150);
   };
 
-  // FILE DOWNLOAD HANDLERS (for users who still want the file saved)
   const handleDownloadStudentPDF = async () => {
     try {
       const doc = await generateWorksheetPDF(worksheet, { isAnswerKey: false });
@@ -301,13 +260,14 @@ export function App() {
       title: 'Untitled Math Worksheet',
       questions: [],
     });
+    setViewMode('import'); // Return to the high-conversion import hub
   };
 
   const totalPages = worksheet.total_pages || 1;
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800">
-      {/* App Header (Hidden during printing) */}
+      {/* App Header */}
       <Header
         onNew={handleNewWorksheet}
         onOpenList={() => setIsListModalOpen(true)}
@@ -321,109 +281,154 @@ export function App() {
         saveStatusText={saveStatusText}
       />
 
-      {/* Main Content Area (Hidden during printing) */}
-      <main className="no-print flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Worksheet Metadata & Style Preset Bar */}
-        <WorksheetSettings worksheet={worksheet} onChange={handleUpdateWorksheet} />
-
-        {/* Mobile View Toggle Bar (Editor vs Print Preview) */}
-        <div className="lg:hidden flex bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
-          <button
-            type="button"
-            onClick={() => setActiveTab('editor')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center space-x-1.5 transition ${
-              activeTab === 'editor' ? 'bg-blue-600 text-white' : 'text-slate-600'
-            }`}
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span>Question Editor</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('preview')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center space-x-1.5 transition ${
-              activeTab === 'preview' ? 'bg-blue-600 text-white' : 'text-slate-600'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Live Sheet Preview</span>
-          </button>
-        </div>
-
-        {/* Split Grid View (Editor Left, Live Preview Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT: Question Cards Editor */}
-          <div
-            className={`lg:col-span-6 xl:col-span-7 space-y-4 ${
-              activeTab === 'editor' ? 'block' : 'hidden lg:block'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider flex items-center space-x-2">
-                <span>Questions ({worksheet.questions.length})</span>
-                <span className="text-xs font-normal text-slate-500">
-                  Total Points: {worksheet.questions.reduce((sum, q) => sum + (q.points || 1), 0)}
-                </span>
-              </h3>
-
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAIImportOpen(true)}
-                  className="px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg flex items-center space-x-1 transition"
-                >
-                  <Sparkles className="w-3 h-3 text-purple-600" />
-                  <span>AI / Doc Paste</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Question Cards List */}
-            <div className="space-y-4">
-              {worksheet.questions.map((question, index) => (
-                <QuestionCard
-                  key={question.id}
-                  question={question}
-                  index={index}
-                  totalQuestions={worksheet.questions.length}
-                  totalPages={worksheet.total_pages || 1}
-                  stylePreset={worksheet.style_preset}
-                  onUpdate={(updated) => handleUpdateQuestion(question.id, updated)}
-                  onDelete={() => handleDeleteQuestion(question.id)}
-                  onDuplicate={() => handleDuplicateQuestion(question.id)}
-                  onMoveUp={() => handleMoveQuestion(index, 'up')}
-                  onMoveDown={() => handleMoveQuestion(index, 'down')}
-                />
-              ))}
-
-              {/* Add Problem Button */}
+      {/* VIEW MODE 1: THE LEADING IMPORT & CONVERSION HUB */}
+      {viewMode === 'import' ? (
+        <main className="flex-1 flex items-center justify-center">
+          <ImportHub
+            onImportQuestions={handleHubImport}
+            onOpenBlank={() => setViewMode('editor')}
+            onOpenSavedList={() => setIsListModalOpen(true)}
+          />
+        </main>
+      ) : (
+        /* VIEW MODE 2: THE RICH QUESTION EDITOR & LIVE PRINT PREVIEW */
+        <main className="no-print flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+          {/* Back to Import Hub & Switch bar */}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setViewMode('import')}
+              className="flex items-center space-x-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Import Hub</span>
+            </button>
+            <div className="flex items-center space-x-2">
               <button
                 type="button"
-                onClick={handleAddQuestion}
-                className="w-full py-4 border-2 border-dashed border-slate-300 hover:border-blue-400 bg-white hover:bg-blue-50/30 rounded-xl text-slate-600 hover:text-blue-700 font-bold text-sm flex items-center justify-center space-x-2 transition shadow-xs"
+                onClick={() => setIsAIImportOpen(true)}
+                className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg flex items-center space-x-1.5 shadow-xs transition"
               >
-                <Plus className="w-4 h-4" />
-                <span>Add Another Math Problem</span>
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span>+ Paste More Questions</span>
               </button>
             </div>
           </div>
 
-          {/* RIGHT: Live WYSIWYG Print Preview */}
-          <div
-            className={`lg:col-span-6 xl:col-span-5 sticky top-20 ${
-              activeTab === 'preview' ? 'block' : 'hidden lg:block'
-            }`}
-          >
-            <WorksheetPreview
-              worksheet={worksheet}
-              onPrint={handlePrint}
-              onDownloadPDF={handleDownloadStudentPDF}
-            />
-          </div>
-        </div>
-      </main>
+          {/* Worksheet Metadata & Style Preset Bar */}
+          <WorksheetSettings worksheet={worksheet} onChange={handleUpdateWorksheet} />
 
-      {/* DEDICATED PRINTABLE CONTAINER (Only visible to the printer / print dialog) */}
+          {/* Mobile View Toggle Bar (Editor vs Print Preview) */}
+          <div className="lg:hidden flex bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('editor')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center space-x-1.5 transition ${
+                activeTab === 'editor' ? 'bg-blue-600 text-white' : 'text-slate-600'
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Question Editor</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('preview')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center space-x-1.5 transition ${
+                activeTab === 'preview' ? 'bg-blue-600 text-white' : 'text-slate-600'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Live Sheet Preview</span>
+            </button>
+          </div>
+
+          {/* Split Grid View (Editor Left, Live Preview Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* LEFT: Question Cards Editor */}
+            <div
+              className={`lg:col-span-6 xl:col-span-7 space-y-4 ${
+                activeTab === 'editor' ? 'block' : 'hidden lg:block'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider flex items-center space-x-2">
+                  <span>Questions ({worksheet.questions.length})</span>
+                  <span className="text-xs font-normal text-slate-500">
+                    Total Points: {worksheet.questions.reduce((sum, q) => sum + (q.points || 1), 0)}
+                  </span>
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={handleAddQuestion}
+                  className="px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg flex items-center space-x-1 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add 1 Problem</span>
+                </button>
+              </div>
+
+              {/* Question Cards List */}
+              <div className="space-y-4">
+                {worksheet.questions.length === 0 ? (
+                  <div className="p-8 text-center bg-white rounded-xl border border-slate-200 space-y-3">
+                    <p className="text-slate-500 text-sm">No questions in this worksheet yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('import')}
+                      className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-sm"
+                    >
+                      Paste Questions from AI or Document
+                    </button>
+                  </div>
+                ) : (
+                  worksheet.questions.map((question, index) => (
+                    <QuestionCard
+                      key={question.id}
+                      question={question}
+                      index={index}
+                      totalQuestions={worksheet.questions.length}
+                      totalPages={worksheet.total_pages || 1}
+                      stylePreset={worksheet.style_preset}
+                      onUpdate={(updated) => handleUpdateQuestion(question.id, updated)}
+                      onDelete={() => handleDeleteQuestion(question.id)}
+                      onDuplicate={() => handleDuplicateQuestion(question.id)}
+                      onMoveUp={() => handleMoveQuestion(index, 'up')}
+                      onMoveDown={() => handleMoveQuestion(index, 'down')}
+                    />
+                  ))
+                )}
+
+                {worksheet.questions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleAddQuestion}
+                    className="w-full py-4 border-2 border-dashed border-slate-300 hover:border-blue-400 bg-white hover:bg-blue-50/30 rounded-xl text-slate-600 hover:text-blue-700 font-bold text-sm flex items-center justify-center space-x-2 transition shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Another Math Problem</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT: Live WYSIWYG Print Preview */}
+            <div
+              className={`lg:col-span-6 xl:col-span-5 sticky top-20 ${
+                activeTab === 'preview' ? 'block' : 'hidden lg:block'
+              }`}
+            >
+              <WorksheetPreview
+                worksheet={worksheet}
+                onPrint={handlePrint}
+                onDownloadPDF={handleDownloadStudentPDF}
+              />
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* DEDICATED PRINTABLE CONTAINER (Only visible during print) */}
       <div className="printable-area hidden print:block">
         {Array.from({ length: totalPages }).map((_, idx) => (
           <WorksheetPage
@@ -439,13 +444,16 @@ export function App() {
       <AIImportModal
         isOpen={isAIImportOpen}
         onClose={() => setIsAIImportOpen(false)}
-        onImportQuestions={handleImportQuestions}
+        onImportQuestions={handleModalImport}
       />
 
       <WorksheetListModal
         isOpen={isListModalOpen}
         onClose={() => setIsListModalOpen(false)}
-        onSelectWorksheet={(ws) => setWorksheet(ws)}
+        onSelectWorksheet={(ws) => {
+          setWorksheet(ws);
+          setViewMode('editor');
+        }}
         onNew={handleNewWorksheet}
       />
     </div>
