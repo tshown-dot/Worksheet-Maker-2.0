@@ -41,10 +41,7 @@ TASK: Return a valid JSON array in this exact schema (no conversational text or 
 
   const robustParseJson = (rawText: string): any => {
     let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-    cleaned = cleaned.replace(/\\([a-zA-Z]+|[0-9]+)/g, (match, cmd) => {
-      if (['n', 'r', 't'].includes(cmd)) return match;
-      return '\\\\' + cmd;
-    });
+    cleaned = cleaned.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
     return JSON.parse(cleaned);
   };
 

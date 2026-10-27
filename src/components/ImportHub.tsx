@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Question } from '../types/worksheet';
+import { Question, StylePreset } from '../types/worksheet';
+import { supabase } from '../lib/supabase';
 import { 
   Sparkles, 
   FileText, 
@@ -8,13 +9,20 @@ import {
   ArrowRight, 
   FolderOpen, 
   PlusCircle, 
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Layers
 } from 'lucide-react';
 
 interface ImportHubProps {
-  onImportQuestions: (questions: Question[], title?: string) => void;
+  onImportQuestions: (questions: Question[], metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2 }) => void;
   onOpenBlank: () => void;
   onOpenSavedList: () => void;
+}
+
+interface AssignmentGroup {
+  name: string;
+  items: any[];
 }
 
 export const ImportHub: React.FC<ImportHubProps> = ({
@@ -25,14 +33,18 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   const [inputText, setInputText] = useState('');
   const [copiedType, setCopiedType] = useState<'convert' | 'generate' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detectedGroups, setDetectedGroups] = useState<AssignmentGroup[] | null>(null);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [saveAllMessage, setSaveAllMessage] = useState('');
 
   // 1. Prompt for Converting Existing Docs / Tests / PDFs
   const convertDocPrompt = `You are a middle school math curriculum assistant for Worksheet Maker 2.0. 
 TASK: Extract all math problems from the attached document or text below into an OCR-ready worksheet format.
-Return ONLY a valid JSON array in this exact schema (no conversational introduction, markdown notes, or code blocks):
+Return ONLY a valid JSON array in this exact schema (no conversational text or markdown code blocks):
 
 [
   {
+    "assignmentName": "Math 6 Quiz: Equations",
     "prompt": "Solve for x: 3x - 5 = 16",
     "question_type": "numeric",
     "correct_answer": "7",
@@ -45,16 +57,17 @@ Return ONLY a valid JSON array in this exact schema (no conversational introduct
 RULES:
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
-- For multiple choice, include an "options" list: [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
+- For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Output ONLY the raw JSON array.`;
 
   // 2. Prompt for Generating Brand New Content
   const generateNewPrompt = `You are a middle school math curriculum generator for Worksheet Maker 2.0.
-TASK: Generate 6 high-quality math problems for middle school students on the requested topic.
-Return ONLY a valid JSON array in this exact schema (no conversational introduction, markdown notes, or code blocks):
+TASK: Generate high-quality math problems for middle school students on the requested topic.
+Return ONLY a valid JSON array in this exact schema (no conversational text or markdown code blocks):
 
 [
   {
+    "assignmentName": "Math 6 POD: Ratios",
     "prompt": "Solve for x: \\frac{x}{3} + 4 = 10",
     "question_type": "numeric",
     "correct_answer": "18",
@@ -68,7 +81,6 @@ RULES:
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
-- Include answer keys with acceptable alternatives and brief AI rubric notes.
 - Output ONLY the raw JSON array.`;
 
   const handleCopy = (type: 'convert' | 'generate') => {
@@ -78,20 +90,17 @@ RULES:
     setTimeout(() => setCopiedType(null), 2500);
   };
 
-  // ROBUST PARSER: Handles single backslashes from LLMs (Gemini, ChatGPT) like \frac, \div, \sqrt!
+  // ROBUST PARSER: Safely escapes single backslashes without corrupting already-escaped double backslashes
   const robustParseJson = (rawText: string): any => {
     let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-    // Fix single backslashes in LaTeX commands that crash standard JSON.parse
-    cleaned = cleaned.replace(/\\([a-zA-Z]+|[0-9]+)/g, (match, cmd) => {
-      if (['n', 'r', 't'].includes(cmd)) return match;
-      return '\\\\' + cmd;
-    });
+    // Lookbehind regex: Only escapes a backslash if it is NOT preceded by a backslash
+    // and NOT followed by a valid JSON escape char (" \ / b f n r t u)
+    cleaned = cleaned.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
 
     return JSON.parse(cleaned);
   };
 
-  // Helper to extract options if LLM put "A) 10 B) 12" inside the prompt string
   const parseOptionsFromPrompt = (prompt: string) => {
     const mcRegex = /(?:^|\s+)([A-D])[\)\.]\s*([^A-D\)\.]+?)(?=\s+[A-D][\)\.]|$)/gi;
     const options: { label: string; text: string }[] = [];
@@ -110,8 +119,46 @@ RULES:
     return { cleanPrompt, options };
   };
 
+  const convertRawItemsToQuestions = (items: any[]): { questions: Question[]; totalPages: 1 | 2 } => {
+    const totalCount = items.length;
+    const totalPages: 1 | 2 = totalCount > 6 ? 2 : 1;
+    const perPageLimit = totalPages === 2 ? Math.ceil(totalCount / 2) : totalCount;
+
+    const questions: Question[] = items.map((item, idx) => {
+      let prompt = String(item.prompt || item.question || `Problem ${idx + 1}`);
+      let options = item.options || [];
+      let qType = item.question_type || 'numeric';
+
+      if (qType === 'multiple_choice' && (!options || options.length === 0)) {
+        const extracted = parseOptionsFromPrompt(prompt);
+        if (extracted.options.length > 0) {
+          prompt = extracted.cleanPrompt;
+          options = extracted.options;
+        }
+      }
+
+      const pageNumber = totalPages === 2 && idx >= perPageLimit ? 2 : 1;
+
+      return {
+        id: crypto.randomUUID(),
+        order_index: idx + 1,
+        page_number: pageNumber,
+        prompt,
+        question_type: qType,
+        options,
+        correct_answer: String(item.correct_answer || item.answer || ''),
+        acceptable_alternatives: item.acceptable_alternatives || [],
+        points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
+        rubric_notes: item.rubric_notes || item.explanation || '',
+      };
+    });
+
+    return { questions, totalPages };
+  };
+
   const handleProcessImport = () => {
     setError(null);
+    setDetectedGroups(null);
     const raw = inputText.trim();
     if (!raw) {
       setError('Please paste your questions or JSON into the box below.');
@@ -119,47 +166,46 @@ RULES:
     }
 
     try {
-      // 1. Robust JSON parsing
       const parsed = robustParseJson(raw);
-      const items = Array.isArray(parsed) ? parsed : parsed.questions || parsed.problems;
+      const items: any[] = Array.isArray(parsed) ? parsed : parsed.questions || parsed.problems;
 
       if (Array.isArray(items) && items.length > 0) {
-        const questions: Question[] = items.map((item, idx) => {
-          let prompt = String(item.prompt || item.question || `Problem ${idx + 1}`);
-          let options = item.options || [];
-          let qType = item.question_type || 'numeric';
+        // Check if there are multiple assignments bundled together (e.g. Mon, Tue, Wed...)
+        const groupMap: { [key: string]: any[] } = {};
+        for (const it of items) {
+          const grpName = it.assignmentName || 'Main Assignment';
+          if (!groupMap[grpName]) groupMap[grpName] = [];
+          groupMap[grpName].push(it);
+        }
 
-          // If multiple choice and options are embedded in the prompt string
-          if (qType === 'multiple_choice' && (!options || options.length === 0)) {
-            const extracted = parseOptionsFromPrompt(prompt);
-            if (extracted.options.length > 0) {
-              prompt = extracted.cleanPrompt;
-              options = extracted.options;
-            }
-          }
+        const groupKeys = Object.keys(groupMap);
+        if (groupKeys.length > 1) {
+          // Multiple assignments detected! Show assignment picker
+          const groups: AssignmentGroup[] = groupKeys.map((name) => ({
+            name,
+            items: groupMap[name],
+          }));
+          setDetectedGroups(groups);
+          return;
+        }
 
-          return {
-            id: crypto.randomUUID(),
-            order_index: idx + 1,
-            page_number: item.page_number || 1,
-            prompt,
-            question_type: qType,
-            options,
-            correct_answer: String(item.correct_answer || item.answer || ''),
-            acceptable_alternatives: item.acceptable_alternatives || [],
-            points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
-            rubric_notes: item.rubric_notes || item.explanation || '',
-          };
+        // Single assignment
+        const title = items[0]?.assignmentName || undefined;
+        const isPod = title ? title.toLowerCase().includes('pod') || title.toLowerCase().includes('problem of the day') : false;
+        const { questions, totalPages } = convertRawItemsToQuestions(items);
+
+        onImportQuestions(questions, {
+          title,
+          stylePreset: isPod ? 'pod' : 'homework',
+          totalPages,
         });
-
-        onImportQuestions(questions);
         return;
       }
-    } catch {
-      // JSON parse failed, try text list fallback
+    } catch (e: any) {
+      console.error(e);
     }
 
-    // 2. Fallback: Parse plain text numbered lists (from Google Docs or PDF copy-paste)
+    // 2. Fallback: Parse plain text numbered lists
     const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
     const questions: Question[] = [];
     let currentQ: Partial<Question> | null = null;
@@ -204,6 +250,78 @@ RULES:
     }
   };
 
+  const handleSelectGroup = (group: AssignmentGroup) => {
+    const isPod = group.name.toLowerCase().includes('pod') || group.name.toLowerCase().includes('problem of the day');
+    const { questions, totalPages } = convertRawItemsToQuestions(group.items);
+
+    onImportQuestions(questions, {
+      title: group.name,
+      stylePreset: isPod ? 'pod' : 'homework',
+      totalPages,
+    });
+  };
+
+  // One-click batch save all assignments to Supabase!
+  const handleSaveAllGroups = async () => {
+    if (!detectedGroups || detectedGroups.length === 0) return;
+    setIsSavingAll(true);
+    setSaveAllMessage('Saving assignments to your Supabase folder...');
+
+    try {
+      for (const group of detectedGroups) {
+        const isPod = group.name.toLowerCase().includes('pod');
+        const code = 'M' + Math.floor(1000 + Math.random() * 9000);
+        const { questions, totalPages } = convertRawItemsToQuestions(group.items);
+
+        const { data: wsData, error: wsError } = await supabase
+          .from('worksheets')
+          .insert({
+            short_code: code,
+            title: group.name,
+            subject: 'Mathematics',
+            grade_level: '6th Grade',
+            folder_name: 'Daily Warm-Ups (POD)',
+            style_preset: isPod ? 'pod' : 'homework',
+            total_pages: totalPages,
+            columns: 2,
+            student_id_digits: 3,
+            layout_config: { columns: 2, spacing: 'balanced' },
+          })
+          .select('id')
+          .single();
+
+        if (wsError) throw wsError;
+
+        if (wsData && wsData.id) {
+          const qPayload = questions.map((q) => ({
+            worksheet_id: wsData.id,
+            order_index: q.order_index,
+            page_number: q.page_number,
+            prompt: q.prompt,
+            question_type: q.question_type,
+            options: q.options,
+            correct_answer: q.correct_answer,
+            acceptable_alternatives: q.acceptable_alternatives,
+            points: q.points,
+            rubric_notes: q.rubric_notes,
+            bounding_box: {},
+          }));
+          await supabase.from('questions').insert(qPayload);
+        }
+      }
+
+      setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments successfully saved to "Daily Warm-Ups (POD)"!`);
+      setTimeout(() => {
+        setIsSavingAll(false);
+        // Load the first one
+        handleSelectGroup(detectedGroups[0]);
+      }, 1500);
+    } catch (err: any) {
+      alert('Save all failed: ' + err.message);
+      setIsSavingAll(false);
+    }
+  };
+
   const finalizeQuestion = (q: Partial<Question>, idx: number): Question => ({
     id: crypto.randomUUID(),
     order_index: idx,
@@ -232,6 +350,64 @@ RULES:
           Convert your existing PDFs or generate fresh curriculum problems in seconds. We format the fiducials, QR codes, and answer boxes automatically for automated grading.
         </p>
       </div>
+
+      {/* MULTI-ASSIGNMENT BATCH DETECTOR MODAL / BANNER */}
+      {detectedGroups && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-400 rounded-2xl p-6 shadow-md mb-6 space-y-4 animate-in fade-in">
+          <div className="flex items-center justify-between border-b border-blue-200 pb-3">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-blue-700" />
+              <h3 className="font-extrabold text-slate-900 text-base">
+                Found {detectedGroups.length} Daily Assignments in Your Paste!
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveAllGroups}
+              disabled={isSavingAll}
+              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer"
+            >
+              {isSavingAll ? 'Saving to Cloud...' : '💾 Save All 5 to Folder'}
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-600">
+            Click any day below to open and print it immediately, or save all 5 directly into your worksheets folder:
+          </p>
+
+          {saveAllMessage && (
+            <div className="p-2.5 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-lg">
+              {saveAllMessage}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {detectedGroups.map((grp) => (
+              <div
+                key={grp.name}
+                onClick={() => handleSelectGroup(grp)}
+                className="p-3.5 bg-white border border-blue-200 hover:border-blue-500 rounded-xl cursor-pointer hover:shadow-md transition flex flex-col justify-between group"
+              >
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
+                    ★ Problem of the Day
+                  </span>
+                  <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-700 transition">
+                    {grp.name}
+                  </h4>
+                  <span className="text-xs text-slate-500 mt-1 block">
+                    {grp.items.length} Questions • 1 Page
+                  </span>
+                </div>
+                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-blue-600">
+                  <span>Open & Print</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* STEP 1: Two Prominent Copy Prompt Action Cards */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mb-6 space-y-4">
@@ -307,7 +483,7 @@ RULES:
           rows={8}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          placeholder={`Paste what Gemini, ChatGPT, or Claude gives you here:\n\n[\n  {\n    "prompt": "Solve for x: 2x - 5 = 11",\n    "question_type": "numeric",\n    "correct_answer": "8"\n  }\n]`}
+          placeholder={`Paste what Gemini, ChatGPT, or Claude gives you here:\n\n[\n  {\n    "assignmentName": "Math 6 POD Mon 10/26",\n    "prompt": "Solve for x: 2x - 5 = 11",\n    "question_type": "numeric",\n    "correct_answer": "8"\n  }\n]`}
           className="w-full p-4 font-mono text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 transition"
         />
 

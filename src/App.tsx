@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import { Worksheet, Question } from './types/worksheet';
+import { Worksheet, Question, StylePreset } from './types/worksheet';
 import { Header } from './components/Header';
 import { WorksheetSettings } from './components/WorksheetSettings';
 import { QuestionCard } from './components/QuestionCard';
@@ -119,9 +119,15 @@ export function App() {
   };
 
   // When questions are imported from the leading ImportHub
-  const handleHubImport = (imported: Question[]) => {
+  const handleHubImport = (
+    imported: Question[],
+    metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2 }
+  ) => {
     setWorksheet((prev) => ({
       ...prev,
+      title: metadata?.title || prev.title,
+      style_preset: metadata?.stylePreset || prev.style_preset,
+      total_pages: metadata?.totalPages || (imported.length > 6 ? 2 : 1),
       questions: imported,
     }));
     setViewMode('editor');
