@@ -1,15 +1,15 @@
-import React from 'react';
-import { Worksheet, StylePreset } from '../types/worksheet';
 import { 
   GraduationCap, 
   Layers, 
   Hash, 
   QrCode,
   Folder,
-  Plus
+  Columns,
+  Maximize2
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { Worksheet, StylePreset, SpacingMode } from '../types/worksheet';
 
 interface WorksheetSettingsProps {
   worksheet: Worksheet;
@@ -54,6 +54,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
     setNewFolderInput('');
     setIsAddingFolder(false);
   };
+
   const presets: { id: StylePreset; label: string; desc: string; icon: string }[] = [
     {
       id: 'homework',
@@ -82,7 +83,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
   ];
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
+    <div className="no-print bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
       {/* Title & Metadata Row */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4 items-center">
         {/* Title */}
@@ -150,7 +151,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
             <select
               value={worksheet.folder_name || 'General'}
               onChange={(e) => onChange({ folder_name: e.target.value })}
-              className="w-full px-3 py-2 bg-amber-50/50 border border-amber-200/80 rounded-lg text-sm font-medium text-slate-850 focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
+              className="w-full px-3 py-2 bg-amber-50/50 border border-amber-200/80 rounded-lg text-sm font-medium text-slate-800 focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
             >
               {folders.map((f) => (
                 <option key={f} value={f}>
@@ -196,12 +197,12 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
         </div>
       </div>
 
-      {/* Style Presets & Page Controls */}
-      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+      {/* Style Presets, Column Selector & Spacing Controls */}
+      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
         {/* Presets selector buttons */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">
-            Style Theme:
+            Style:
           </span>
           {presets.map((p) => {
             const isSelected = worksheet.style_preset === p.id;
@@ -212,7 +213,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
                 onClick={() => onChange({ style_preset: p.id })}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition ${
                   isSelected
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                    ? 'bg-blue-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
                 title={p.desc}
@@ -224,17 +225,63 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
           })}
         </div>
 
-        {/* Pages & ID Digits */}
-        <div className="flex items-center space-x-3 text-xs">
+        {/* Layout Customization Controls (Columns & Spacing) */}
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          {/* Columns Toggle (1 vs 2) */}
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg">
+            <Columns className="w-3.5 h-3.5 text-slate-500 ml-1" />
+            <button
+              type="button"
+              onClick={() => onChange({ columns: 1 })}
+              className={`px-2 py-0.5 rounded font-bold transition ${
+                (worksheet.columns || 1) === 1
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              1 Col
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange({ columns: 2 })}
+              className={`px-2 py-0.5 rounded font-bold transition ${
+                worksheet.columns === 2
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              2 Col
+            </button>
+          </div>
+
+          {/* Spacing Control */}
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg">
+            <Maximize2 className="w-3.5 h-3.5 text-slate-500 ml-1" />
+            {(['compact', 'balanced', 'spacious'] as SpacingMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onChange({ spacing: mode })}
+                className={`px-2 py-0.5 rounded font-medium capitalize transition ${
+                  (worksheet.spacing || 'balanced') === mode
+                    ? 'bg-white text-blue-700 font-bold shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+
           {/* Total Pages Toggle */}
-          <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-lg">
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg">
             <Layers className="w-3.5 h-3.5 text-slate-500 ml-1" />
             <button
               type="button"
               onClick={() => onChange({ total_pages: 1 })}
               className={`px-2 py-0.5 rounded font-medium ${
                 worksheet.total_pages === 1
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -245,7 +292,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
               onClick={() => onChange({ total_pages: 2 })}
               className={`px-2 py-0.5 rounded font-medium ${
                 worksheet.total_pages === 2
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -256,7 +303,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
           {/* Student ID Digits */}
           <div className="flex items-center space-x-1 bg-slate-100 px-2 py-1 rounded-lg">
             <Hash className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-slate-600 font-medium">Student ID:</span>
+            <span className="text-slate-600">ID:</span>
             <span className="font-bold text-slate-900">{worksheet.student_id_digits || 3} digits</span>
           </div>
         </div>

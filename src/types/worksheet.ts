@@ -2,6 +2,8 @@ export type QuestionType = 'numeric' | 'fraction' | 'expression' | 'multiple_cho
 
 export type StylePreset = 'homework' | 'pod' | 'quiz' | 'exit_ticket';
 
+export type SpacingMode = 'compact' | 'balanced' | 'spacious';
+
 export interface BoundingBox {
   work_box: {
     x_mm: number;
@@ -42,6 +44,7 @@ export interface LayoutConfig {
   header_style: 'clean' | 'grey_pill' | 'dark_badge';
   show_dot_grid: boolean;
   columns: 1 | 2;
+  spacing: SpacingMode;
   show_honor_pledge: boolean;
 }
 
@@ -55,6 +58,8 @@ export interface Worksheet {
   grade_level: string;
   style_preset: StylePreset;
   total_pages: 1 | 2;
+  columns: 1 | 2;
+  spacing: SpacingMode;
   student_id_digits: number;
   layout_config: LayoutConfig;
   questions: Question[];

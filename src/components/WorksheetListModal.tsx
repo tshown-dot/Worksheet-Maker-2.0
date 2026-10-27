@@ -122,6 +122,8 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
         folder_name: wsData.folder_name || 'General',
         style_preset: wsData.style_preset,
         total_pages: wsData.total_pages || 1,
+        columns: wsData.columns || wsData.layout_config?.columns || 2,
+        spacing: wsData.spacing || wsData.layout_config?.spacing || 'balanced',
         student_id_digits: wsData.student_id_digits || 3,
         layout_config: wsData.layout_config || {
           border_style: 'solid',

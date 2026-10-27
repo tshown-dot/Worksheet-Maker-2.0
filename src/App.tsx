@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { WorksheetSettings } from './components/WorksheetSettings';
 import { QuestionCard } from './components/QuestionCard';
 import { WorksheetPreview } from './components/WorksheetPreview';
+import { WorksheetPage } from './components/WorksheetPage';
 import { AIImportModal } from './components/AIImportModal';
 import { WorksheetListModal } from './components/WorksheetListModal';
 import { generateWorksheetPDF } from './utils/pdfGenerator';
@@ -19,12 +20,15 @@ const INITIAL_WORKSHEET: Worksheet = {
   grade_level: '7th Grade',
   style_preset: 'homework',
   total_pages: 1,
+  columns: 2, // Default to 2 columns for clean, professional look!
+  spacing: 'balanced',
   student_id_digits: 3,
   layout_config: {
     border_style: 'solid',
     header_style: 'clean',
     show_dot_grid: false,
-    columns: 1,
+    columns: 2,
+    spacing: 'balanced',
     show_honor_pledge: false,
   },
   questions: [
@@ -38,7 +42,7 @@ const INITIAL_WORKSHEET: Worksheet = {
       correct_answer: '5',
       acceptable_alternatives: ['x = 5', '5'],
       points: 2,
-      rubric_notes: '1 point for subtracting 7 correctly (3x = 15). 1 point for dividing by 3.',
+      rubric_notes: '1 pt for 3x = 15, 1 pt for division.',
     },
     {
       id: crypto.randomUUID(),
@@ -50,7 +54,7 @@ const INITIAL_WORKSHEET: Worksheet = {
       correct_answer: '32',
       acceptable_alternatives: ['y = 32', '32'],
       points: 2,
-      rubric_notes: 'Award 1 point if student added 3 to get y/4 = 8.',
+      rubric_notes: '1 pt for y/4 = 8, 1 pt for multiplication.',
     },
     {
       id: crypto.randomUUID(),
@@ -62,19 +66,19 @@ const INITIAL_WORKSHEET: Worksheet = {
       correct_answer: '5',
       acceptable_alternatives: ['m = 5', '5'],
       points: 2,
-      rubric_notes: 'Student may distribute or divide by 2 first. Both valid.',
+      rubric_notes: 'Valid to distribute or divide by 2 first.',
     },
     {
       id: crypto.randomUUID(),
       order_index: 4,
       page_number: 1,
-      prompt: 'A cell phone plan costs $35 per month plus $0.10 per text message. Write and solve an equation to find how many text messages (t) were sent if the total bill was $52.50.',
+      prompt: 'A phone plan is $35/mo plus $0.10/text. Find text count (t) for a $52.50 bill.',
       question_type: 'numeric',
       options: [],
       correct_answer: '175',
-      acceptable_alternatives: ['175', '175 texts', 't = 175'],
+      acceptable_alternatives: ['175', 't = 175'],
       points: 3,
-      rubric_notes: 'Equation: 35 + 0.10t = 52.50 -> 0.10t = 17.50 -> t = 175.',
+      rubric_notes: 'Equation: 35 + 0.10t = 52.50 -> t = 175.',
     },
   ],
 };
@@ -86,8 +90,8 @@ export function App() {
   const [saveStatusText, setSaveStatusText] = useState('');
   const [isAIImportOpen, setIsAIImportOpen] = useState(false);
   const [isListModalOpen, setIsListModalOpen] = useState(false);
+  const [printIsAnswerKey, setPrintIsAnswerKey] = useState<boolean>(false);
 
-  // Auto-generate random short code if empty
   useEffect(() => {
     if (!worksheet.short_code) {
       const code = 'M' + Math.floor(1000 + Math.random() * 9000);
@@ -179,10 +183,8 @@ export function App() {
     setIsSaving(true);
     setSaveStatusText('');
     try {
-      // 1. Upsert worksheet record
       let wsId = worksheet.id;
       if (!wsId) {
-        // Check if short_code already exists
         const { data: existing } = await supabase
           .from('worksheets')
           .select('id')
@@ -202,8 +204,13 @@ export function App() {
         folder_name: worksheet.folder_name || 'General',
         style_preset: worksheet.style_preset,
         total_pages: worksheet.total_pages,
+        columns: worksheet.columns || 1,
         student_id_digits: worksheet.student_id_digits,
-        layout_config: worksheet.layout_config,
+        layout_config: {
+          ...worksheet.layout_config,
+          columns: worksheet.columns || 1,
+          spacing: worksheet.spacing || 'balanced',
+        },
         updated_at: new Date().toISOString(),
       };
 
@@ -223,7 +230,6 @@ export function App() {
 
       setWorksheet((prev) => ({ ...prev, id: savedId }));
 
-      // 2. Delete and re-insert questions to guarantee order and coordinates
       if (savedId) {
         await supabase.from('questions').delete().eq('worksheet_id', savedId);
 
@@ -256,23 +262,33 @@ export function App() {
     }
   };
 
-  const handleExportStudentPDF = async () => {
+  // NATIVE PRINT HANDLERS: Triggers the browser's native print dialog directly!
+  const handlePrint = (isKey: boolean) => {
+    setPrintIsAnswerKey(isKey);
+    // Slight tick to ensure state renders in printable-area before window.print()
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  // FILE DOWNLOAD HANDLERS (for users who still want the file saved)
+  const handleDownloadStudentPDF = async () => {
     try {
       const doc = await generateWorksheetPDF(worksheet, { isAnswerKey: false });
       const filename = `${worksheet.short_code}_${worksheet.title.replace(/[^a-zA-Z0-9]/g, '_')}_Student.pdf`;
       doc.save(filename);
     } catch (err: any) {
-      alert('PDF generation error: ' + err.message);
+      alert('PDF download error: ' + err.message);
     }
   };
 
-  const handleExportKeyPDF = async () => {
+  const handleDownloadKeyPDF = async () => {
     try {
       const doc = await generateWorksheetPDF(worksheet, { isAnswerKey: true });
       const filename = `${worksheet.short_code}_${worksheet.title.replace(/[^a-zA-Z0-9]/g, '_')}_AnswerKey.pdf`;
       doc.save(filename);
     } catch (err: any) {
-      alert('PDF generation error: ' + err.message);
+      alert('PDF download error: ' + err.message);
     }
   };
 
@@ -287,28 +303,33 @@ export function App() {
     });
   };
 
+  const totalPages = worksheet.total_pages || 1;
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800">
-      {/* App Header */}
+      {/* App Header (Hidden during printing) */}
       <Header
         onNew={handleNewWorksheet}
         onOpenList={() => setIsListModalOpen(true)}
         onOpenAIImport={() => setIsAIImportOpen(true)}
         onSave={handleSaveToSupabase}
-        onExportStudentPDF={handleExportStudentPDF}
-        onExportKeyPDF={handleExportKeyPDF}
+        onPrintStudent={() => handlePrint(false)}
+        onPrintKey={() => handlePrint(true)}
+        onDownloadStudentPDF={handleDownloadStudentPDF}
+        onDownloadKeyPDF={handleDownloadKeyPDF}
         isSaving={isSaving}
         saveStatusText={saveStatusText}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* Main Content Area (Hidden during printing) */}
+      <main className="no-print flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Worksheet Metadata & Style Preset Bar */}
         <WorksheetSettings worksheet={worksheet} onChange={handleUpdateWorksheet} />
 
         {/* Mobile View Toggle Bar (Editor vs Print Preview) */}
         <div className="lg:hidden flex bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
           <button
+            type="button"
             onClick={() => setActiveTab('editor')}
             className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center space-x-1.5 transition ${
               activeTab === 'editor' ? 'bg-blue-600 text-white' : 'text-slate-600'
@@ -318,6 +339,7 @@ export function App() {
             <span>Question Editor</span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('preview')}
             className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center space-x-1.5 transition ${
               activeTab === 'preview' ? 'bg-blue-600 text-white' : 'text-slate-600'
@@ -386,16 +408,32 @@ export function App() {
             </div>
           </div>
 
-          {/* RIGHT: Live US Letter Sheet Preview */}
+          {/* RIGHT: Live WYSIWYG Print Preview */}
           <div
             className={`lg:col-span-6 xl:col-span-5 sticky top-20 ${
               activeTab === 'preview' ? 'block' : 'hidden lg:block'
             }`}
           >
-            <WorksheetPreview worksheet={worksheet} />
+            <WorksheetPreview
+              worksheet={worksheet}
+              onPrint={handlePrint}
+              onDownloadPDF={handleDownloadStudentPDF}
+            />
           </div>
         </div>
       </main>
+
+      {/* DEDICATED PRINTABLE CONTAINER (Only visible to the printer / print dialog) */}
+      <div className="printable-area hidden print:block">
+        {Array.from({ length: totalPages }).map((_, idx) => (
+          <WorksheetPage
+            key={idx + 1}
+            worksheet={worksheet}
+            pageNum={idx + 1}
+            isAnswerKey={printIsAnswerKey}
+          />
+        ))}
+      </div>
 
       {/* Modals */}
       <AIImportModal

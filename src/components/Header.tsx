@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   FileText, 
   Printer, 
@@ -8,7 +8,9 @@ import {
   Sparkles, 
   PlusCircle, 
   CheckCircle2, 
-  Loader2 
+  Loader2,
+  Download,
+  ChevronDown
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -16,8 +18,10 @@ interface HeaderProps {
   onOpenList: () => void;
   onOpenAIImport: () => void;
   onSave: () => void;
-  onExportStudentPDF: () => void;
-  onExportKeyPDF: () => void;
+  onPrintStudent: () => void;
+  onPrintKey: () => void;
+  onDownloadStudentPDF: () => void;
+  onDownloadKeyPDF: () => void;
   isSaving: boolean;
   saveStatusText: string;
 }
@@ -27,13 +31,17 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenList,
   onOpenAIImport,
   onSave,
-  onExportStudentPDF,
-  onExportKeyPDF,
+  onPrintStudent,
+  onPrintKey,
+  onDownloadStudentPDF,
+  onDownloadKeyPDF,
   isSaving,
   saveStatusText,
 }) => {
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand / Logo */}
         <div className="flex items-center space-x-3">
@@ -61,6 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* New Button */}
           <button
+            type="button"
             onClick={onNew}
             title="Create fresh worksheet"
             className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
@@ -70,6 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Open Saved Worksheets */}
           <button
+            type="button"
             onClick={onOpenList}
             className="flex items-center space-x-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
           >
@@ -79,6 +89,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* AI / Document Import */}
           <button
+            type="button"
             onClick={onOpenAIImport}
             className="flex items-center space-x-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition"
           >
@@ -88,6 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Save to Supabase */}
           <button
+            type="button"
             onClick={onSave}
             disabled={isSaving}
             className="flex items-center space-x-1.5 px-3.5 py-1.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 rounded-lg shadow-sm transition"
@@ -102,22 +114,63 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
 
-          {/* Export PDFs */}
+          {/* PRIMARY: Print Test Directly (Browser Print Dialog) */}
           <button
-            onClick={onExportStudentPDF}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-600/20 transition"
+            type="button"
+            onClick={onPrintStudent}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-600/20 transition cursor-pointer"
+            title="Open print dialog to send to copier/printer"
           >
             <Printer className="w-4 h-4" />
             <span>Print Test</span>
           </button>
 
+          {/* Print Answer Key */}
           <button
-            onClick={onExportKeyPDF}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm transition"
+            type="button"
+            onClick={onPrintKey}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-xs transition"
+            title="Print Teacher Master with answers filled in"
           >
             <Key className="w-4 h-4 text-amber-600" />
-            <span className="hidden md:inline">Answer Key</span>
+            <span className="hidden md:inline">Print Key</span>
           </button>
+
+          {/* Secondary: Download PDF Menu */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+              className="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-xs transition"
+              title="Download PDF files"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            {showDownloadMenu && (
+              <div
+                className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl py-1 z-50 text-xs font-medium text-slate-700"
+                onClick={() => setShowDownloadMenu(false)}
+              >
+                <button
+                  type="button"
+                  onClick={onDownloadStudentPDF}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-100 flex items-center space-x-2"
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Download Student PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onDownloadKeyPDF}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-100 flex items-center space-x-2"
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Download Answer Key PDF</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
