@@ -32,10 +32,11 @@ INSTRUCTIONS:
 1. Extract the 3-digit Student ID written in the three boxes at the top right header (e.g. "104", "023").
 2. Read the Assignment Code in the header or next to the QR code (e.g. "ALG-701", "M7-4821").
 3. For each question on the page:
+   - Identify the Common Core Standard (e.g. "6.NS.C.7a", "5.G.A.1", "6.EE.B.7") from the question or rubric notes.
    - Read the student's handwritten final answer in the "FINAL ANSWER" box.
    - Inspect their scratch work in the "Show your work" box.
    - Compare the student's answer against the correct answer and rubric notes.
-   - Assign points earned and provide a 1-sentence diagnostic note if incorrect.
+   - Assign points earned and provide a diagnostic note with standard tag e.g. "Student reversed coordinates. [5.G.A.1]".
 
 Output ONLY a JSON object in this exact schema:
 {
@@ -46,11 +47,12 @@ Output ONLY a JSON object in this exact schema:
   "questions": [
     {
       "orderIndex": 1,
+      "standard": "6.NS.C.7a",
       "studentAnswer": "5",
       "isCorrect": true,
       "pointsEarned": 2.0,
       "pointsPossible": 2.0,
-      "feedback": "Correct solution."
+      "feedback": "Correct solution. [6.NS.C.7a]"
     }
   ],
   "totalScore": 2.0,

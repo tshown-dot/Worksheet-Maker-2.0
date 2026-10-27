@@ -13,7 +13,8 @@ function onOpen() {
     .addItem('📱 Open Autograder Sidebar', 'showSidebar')
     .addSeparator()
     .addItem('🚀 Grade Scanned Worksheets (from Drive)', 'gradeScannedWorksheets')
-    .addItem('📊 Setup / Format Gradebook Sheet', 'setupGradebookSheet')
+    .addItem('📈 Refresh Student Standards Monitoring', 'updateStudentMonitoringSheet')
+    .addItem('📊 Setup / Format All Sheets (Gradebook & Standards)', 'setupAllSheets')
     .addItem('🔗 Test Connection to Worksheet Maker', 'testSupabaseConnection')
     .addItem('⚙️ Set Gemini API Key', 'setGeminiApiKeyPrompt')
     .addToUi();
@@ -78,8 +79,14 @@ function testSupabaseConnection() {
 }
 
 /**
- * Sets up a clean, professionally formatted Gradebook sheet
+ * Sets up Gradebook, Standards Map, and Student Monitoring sheets
  */
+function setupAllSheets() {
+  setupGradebookSheet();
+  setupStandardsMapSheet();
+  updateStudentMonitoringSheet();
+  SpreadsheetApp.getUi().alert('Sheets Formatted ✅', 'Created and styled "Gradebook", "Standards Map", and "Student Monitoring" sheets.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
 function setupGradebookSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Gradebook');
@@ -358,7 +365,14 @@ function runGradingFromSidebar() {
     }
   }
 
-  return `Graded ${gradedCount} submissions! Scores and analytics updated.`;
+  // Update student monitoring and standards tracking in real-time
+  try {
+    updateStudentMonitoringSheet();
+  } catch (e) {
+    console.error('Monitoring update error:', e);
+  }
+
+  return `Graded ${gradedCount} submissions! Scores, standards, and monitoring updated.`;
 }
 
 /**
