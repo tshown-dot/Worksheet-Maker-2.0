@@ -36,7 +36,7 @@ TASK: Return a valid JSON array in this exact schema (no conversational text or 
 
 RULES:
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
-- Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.`;
+- Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.`;
 
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(aiSystemPromptTemplate);

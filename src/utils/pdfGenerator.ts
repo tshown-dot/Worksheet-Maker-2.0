@@ -34,9 +34,9 @@ export async function generateWorksheetPDF(
       .filter((q) => (q.page_number || 1) === pageNum)
       .sort((a, b) => a.order_index - b.order_index);
 
-    // 1. DRAW 4-CORNER FIDUCIAL MARKERS (6mm x 6mm solid black squares at 8mm inset)
-    const fiducialSize = 6;
-    const fiducialOffset = 8;
+    // 1. DRAW 4-CORNER FIDUCIAL MARKERS (5mm x 5mm solid black squares at 6mm inset — 4mm clear margin from content)
+    const fiducialSize = 5;
+    const fiducialOffset = 6;
     doc.setFillColor(0, 0, 0);
     // Top-left
     doc.rect(fiducialOffset, fiducialOffset, fiducialSize, fiducialSize, 'F');
@@ -47,25 +47,25 @@ export async function generateWorksheetPDF(
     // Bottom-right
     doc.rect(pageWidth - fiducialOffset - fiducialSize, pageHeight - fiducialOffset - fiducialSize, fiducialSize, fiducialSize, 'F');
 
-    // 2. GENERATE AND DRAW QR CODE (Compact Top-Right: 13mm x 13mm)
+    // 2. GENERATE AND DRAW QR CODE (Compact Top-Right: 12mm x 12mm)
     const qrData = `ASG_${worksheet.short_code}:P${pageNum}`;
     const qrDataUrl = await QRCode.toDataURL(qrData, {
       margin: 1,
       width: 100,
       errorCorrectionLevel: 'M',
     });
-    const qrX = pageWidth - margin - 18;
-    const qrY = margin + 1;
-    doc.addImage(qrDataUrl, 'PNG', qrX, qrY, 13, 13);
+    const qrX = pageWidth - margin - 17;
+    const qrY = margin + 2;
+    doc.addImage(qrDataUrl, 'PNG', qrX, qrY, 12, 12);
 
     // QR Label below code
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`${worksheet.short_code} • P${pageNum}`, qrX + 6.5, qrY + 16, { align: 'center' });
+    doc.setTextColor(71, 85, 105);
+    doc.text(`${worksheet.short_code} • P${pageNum}`, qrX + 6, qrY + 14.5, { align: 'center' });
 
-    // 3. DRAW PAGE HEADER (Compact & Space-Saving)
-    let currentY = margin + 1;
+    // 3. DRAW PAGE HEADER (Publishing-Grade Academic Masthead)
+    let currentY = margin + 2.5;
 
     // Watermark/Header banner if Answer Key
     if (isAnswerKey) {
@@ -214,63 +214,73 @@ function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number)
 // ----------------------------------------------------------------------------
 function renderStudentHeader(
   doc: jsPDF,
-  worksheet: Worksheet,
+  _worksheet: Worksheet,
   x: number,
   y: number,
   pageWidth: number
 ) {
   const margin = 10;
-  const qrX = pageWidth - margin - 18;
-  const idBoxWidth = 26;
-  const idBoxHeight = 8.5;
+  const qrX = pageWidth - margin - 17;
+  const idBoxWidth = 28;
+  const idBoxHeight = 7.5;
   const idBoxX = qrX - idBoxWidth - 3;
+
+  // Top rule of Student Info Strip
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.5);
+  doc.line(x, y - 0.5, qrX - 2, y - 0.5);
 
   // 1. NAME FIELD (Crisp vector line)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  doc.setTextColor(51, 65, 85);
-  doc.text('NAME:', x, y + 5.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('NAME:', x, y + 5.2);
   const nameLabelWidth = doc.getTextWidth('NAME: ') + 1;
-  const nameLineEnd = x + 62;
+  const nameLineEnd = x + 60;
   doc.setDrawColor(148, 163, 184);
   doc.setLineWidth(0.3);
-  doc.line(x + nameLabelWidth, y + 6, nameLineEnd, y + 6);
+  doc.line(x + nameLabelWidth, y + 5.7, nameLineEnd, y + 5.7);
 
   // 2. DATE FIELD (Crisp vector line)
   const dateStartX = nameLineEnd + 4;
   doc.setFont('helvetica', 'bold');
-  doc.text('DATE:', dateStartX, y + 5.5);
+  doc.text('DATE:', dateStartX, y + 5.2);
   const dateLabelWidth = doc.getTextWidth('DATE: ') + 1;
-  const dateLineEnd = dateStartX + 26;
-  doc.line(dateStartX + dateLabelWidth, y + 6, dateLineEnd, y + 6);
+  const dateLineEnd = dateStartX + 25;
+  doc.line(dateStartX + dateLabelWidth, y + 5.7, dateLineEnd, y + 5.7);
 
   // 3. PERIOD FIELD (Crisp vector line)
   const pdStartX = dateLineEnd + 4;
   doc.setFont('helvetica', 'bold');
-  doc.text('PERIOD:', pdStartX, y + 5.5);
+  doc.text('PERIOD:', pdStartX, y + 5.2);
   const pdLabelWidth = doc.getTextWidth('PERIOD: ') + 1;
   const pdLineEnd = pdStartX + 18;
-  doc.line(pdStartX + pdLabelWidth, y + 6, pdLineEnd, y + 6);
+  doc.line(pdStartX + pdLabelWidth, y + 5.7, pdLineEnd, y + 5.7);
 
-  // 4. SINGLE LARGE STUDENT ID BOX (Spacious for kids to write their number)
+  // 4. SINGLE LARGE STUDENT ID BOX with Side Label Tab (Full Vertical Room for Handwriting)
   doc.setDrawColor(15, 23, 42);
   doc.setLineWidth(0.6);
   doc.setFillColor(255, 255, 255);
-  doc.rect(idBoxX, y, idBoxWidth, idBoxHeight, 'FD');
+  doc.rect(idBoxX, y + 0.8, idBoxWidth, idBoxHeight, 'FD');
 
-  // Top header banner in ID box
+  // Left side label tab inside ID box
+  const tabW = 7.5;
   doc.setFillColor(241, 245, 249);
-  doc.rect(idBoxX, y, idBoxWidth, 2.8, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(5.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('STUDENT ID #', idBoxX + (idBoxWidth / 2), y + 2.1, { align: 'center' });
+  doc.rect(idBoxX + 0.3, y + 1.1, tabW, idBoxHeight - 0.6, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.3);
+  doc.line(idBoxX + tabW, y + 0.8, idBoxX + tabW, y + 0.8 + idBoxHeight);
 
-  // Faint dashed handwriting center guideline
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(5.8);
+  doc.setTextColor(30, 41, 59);
+  doc.text('ID #', idBoxX + (tabW / 2), y + 5.4, { align: 'center' });
+
+  // Faint dashed handwriting baseline inside ID box
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.2);
   doc.setLineDashPattern([1, 1], 0);
-  doc.line(idBoxX + 1.5, y + 5.6, idBoxX + idBoxWidth - 1.5, y + 5.6);
+  doc.line(idBoxX + tabW + 2, y + 6.5, idBoxX + idBoxWidth - 2, y + 6.5);
   doc.setLineDashPattern([], 0);
 }
 
@@ -279,13 +289,28 @@ function renderStudentHeader(
 // ----------------------------------------------------------------------------
 function cleanLatexForPdf(text: string): string {
   if (!text) return '';
-  let s = text;
+  let s = text
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => `$$${m.trim()}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m.trim()}$`);
+
+  // Protect standalone currency (e.g. $45.50.)
+  const currencyPlaceholder = '___CURRENCY_DOLLAR___';
+  const currencyRegex =
+    /\$(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)(?=\s+(?!(?:when|for|where|if)\b)[a-zA-Z]{2,}|[.,;!?)]|\s*$)/g;
+  s = s.replace(currencyRegex, `${currencyPlaceholder}$1`);
+
+  // Strip math delimiters $...$ and $$...$$
+  s = s.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
+  s = s.replace(/\$([^\s$](?:[^\n$]*?[^\s$])?)\$/g, '$1');
+
   // Convert superscripts
   s = s.replace(/\^2\b/g, '²')
        .replace(/\^3\b/g, '³')
        .replace(/\^([0-9])/g, (_, d) => ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'][Number(d)] || `^${d}`);
   // Convert fractions \frac{a}{b} -> a/b
   s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+  // Convert square roots \sqrt{x} -> √(x)
+  s = s.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
   // Convert common latex symbols
   s = s.replace(/\\times\b/g, '×')
        .replace(/\\div\b/g, '÷')
@@ -295,12 +320,12 @@ function cleanLatexForPdf(text: string): string {
        .replace(/\\ge\b/g, '≥')
        .replace(/\\neq\b/g, '≠')
        .replace(/\\approx\b/g, '≈')
+       .replace(/\\pi\b/g, 'π')
        .replace(/\\text\{([^}]+)\}/g, '$1')
        .replace(/\\mathrm\{([^}]+)\}/g, '$1')
        .replace(/\\quad\b/g, ' ');
-  // Strip math delimiters $...$ (preserving standalone currency like $45.50)
-  s = s.replace(/\$([^\s$](?:[^\n$]*?[^\s$])?)\$/g, '$1');
-  return s;
+
+  return s.replace(new RegExp(currencyPlaceholder, 'g'), '$');
 }
 
 // ----------------------------------------------------------------------------
@@ -313,90 +338,81 @@ function renderQuestionCard(
   height: number,
   x: number,
   width: number,
-  preset: StylePreset,
+  _preset: StylePreset,
   isAnswerKey: boolean,
   trackStandards: boolean = true
 ) {
-  // 1. Outer Question Container Border
-  doc.setLineWidth(0.4);
-  if (preset === 'pod') {
-    doc.setDrawColor(156, 163, 175);
-    doc.setLineDashPattern([2, 1.5], 0);
-  } else {
-    doc.setDrawColor(180, 185, 195);
-    doc.setLineDashPattern([], 0);
-  }
-  doc.roundedRect(x, y, width, height, 1.5, 1.5, 'S');
-  doc.setLineDashPattern([], 0); // reset
+  // 1. Unified Outer Question Container Border (Crisp Solid Border)
+  doc.setLineWidth(0.35);
+  doc.setDrawColor(180, 190, 203);
+  doc.setLineDashPattern([], 0);
+  doc.roundedRect(x, y, width, height, 1, 1, 'S');
 
-  // 2. Question Header Bar (Pill / Badge)
-  const headerHeight = 7;
-  if (preset === 'pod') {
-    doc.setFillColor(243, 244, 246);
-    doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
-  } else if (preset === 'quiz') {
-    doc.setFillColor(248, 250, 252);
-    doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
-  }
+  // 2. Question Header Bar (Subtle Academic Top Strip)
+  const headerHeight = 6.5;
+  doc.setFillColor(248, 250, 252);
+  doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.25);
+  doc.line(x, y + headerHeight, x + width, y + headerHeight);
 
   // Question Number Badge (Dark Slate Pill with White Inverted Numeral)
   doc.setFillColor(15, 23, 42); // slate-900
-  doc.roundedRect(x + 2.5, y + 1.8, 4.8, 4.2, 0.6, 0.6, 'F');
+  doc.roundedRect(x + 2.5, y + 1.4, 4.5, 4, 0.5, 0.5, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   doc.setTextColor(255, 255, 255);
-  doc.text(`${q.order_index}`, x + 4.9, y + 4.8, { align: 'center' });
+  doc.text(`${q.order_index}`, x + 4.75, y + 4.3, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8.2);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Question ${q.order_index}`, x + 8.8, y + 4.9);
+  doc.text(`Question ${q.order_index}`, x + 8.5, y + 4.4);
 
-  let currentHeaderX = x + 8.8 + doc.getTextWidth(`Question ${q.order_index}`) + 2.5;
-
-  // Points Badge
-  if (q.points) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(100, 116, 139);
-    const ptText = `[ ${q.points} pt${q.points > 1 ? 's' : ''} ]`;
-    doc.text(ptText, currentHeaderX, y + 4.8);
-    currentHeaderX += doc.getTextWidth(ptText) + 2.5;
-  }
+  let currentHeaderX = x + 8.5 + doc.getTextWidth(`Question ${q.order_index}`) + 2.5;
 
   // NJSLS Standards Badge on Answer Key
   if (isAnswerKey && trackStandards && q.standard) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(6.8);
     doc.setTextColor(126, 34, 206); // Purple-700
-    doc.text(`[ NJSLS: ${q.standard} ]`, currentHeaderX, y + 4.8);
+    doc.text(`[${q.standard}]`, currentHeaderX, y + 4.4);
+  }
+
+  // Points Badge on Right of Header Bar
+  if (q.points) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(100, 116, 139);
+    const ptText = `${q.points} pt${q.points > 1 ? 's' : ''}`;
+    doc.text(ptText, x + width - 2.5, y + 4.4, { align: 'right' });
   }
 
   // 3. Question Prompt Text
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(31, 41, 55);
+  doc.setFontSize(8.8);
+  doc.setTextColor(15, 23, 42);
 
   const is2Col = width < 120;
 
   // Wrap prompt text cleanly (clean LaTeX commands for crisp PDF display)
-  const promptMaxWidth = width - 8;
+  const promptMaxWidth = width - 6;
   const promptText = cleanLatexForPdf(q.prompt);
   const promptLines = doc.splitTextToSize(promptText, promptMaxWidth);
-  doc.text(promptLines, x + 3, y + headerHeight + 4.2);
+  doc.text(promptLines, x + 3, y + headerHeight + 4);
 
-  let promptBottomY = y + headerHeight + 3.2 + (promptLines.length * 3.8);
+  let promptBottomY = y + headerHeight + 3 + (promptLines.length * 3.8);
 
   // MULTIPLE CHOICE OPTIONS: Rendered in body under prompt
   if (q.question_type === 'multiple_choice' && q.options && q.options.length > 0) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(31, 41, 55);
-    const halfWidth = (width - 8) / 2;
+    doc.setFontSize(7.8);
+    doc.setTextColor(30, 41, 59);
+    const halfWidth = (width - 6) / 2;
     q.options.forEach((opt, oIdx) => {
       const col = oIdx % 2;
       const row = Math.floor(oIdx / 2);
-      const optX = x + 4 + col * halfWidth;
+      const optX = x + 3.5 + col * halfWidth;
       const optY = promptBottomY + 2 + (row * 3.8);
       doc.setFont('helvetica', 'bold');
       doc.text(`(${opt.label}) `, optX, optY);
@@ -410,7 +426,7 @@ function renderQuestionCard(
     promptBottomY += (totalOptionRows * 3.8) + 1.5;
   }
 
-  // 4. Calculate Zones: Scratch Work Area vs Final Answer Box
+  // 4. Calculate Zones: Seamless Work Area vs Final Answer Box
   const workAreaY = promptBottomY + 1;
   let workAreaHeight: number;
   let answerBoxWidth: number;
@@ -421,61 +437,65 @@ function renderQuestionCard(
 
   if (is2Col) {
     // 2-Column: Final Answer Box is a bar across the bottom (Taller for student handwriting)
-    answerBoxWidth = width - 6;
-    answerBoxHeight = Math.min(Math.max(height * 0.32, 18), 22);
-    answerBoxX = x + 3;
+    answerBoxWidth = width - 5;
+    answerBoxHeight = Math.min(Math.max(height * 0.3, 17.5), 21);
+    answerBoxX = x + 2.5;
     answerBoxY = y + height - answerBoxHeight - 2;
 
-    workBoxWidth = width - 6;
+    workBoxWidth = width;
     workAreaHeight = Math.max(answerBoxY - workAreaY - 1.5, 12);
   } else {
     // 1-Column: Work on Left, Answer on Right
     answerBoxWidth = 54;
     workAreaHeight = Math.max(y + height - workAreaY - 2.5, 18);
     answerBoxHeight = workAreaHeight;
-    answerBoxX = x + width - answerBoxWidth - 3;
+    answerBoxX = x + width - answerBoxWidth - 2.5;
     answerBoxY = workAreaY;
-    workBoxWidth = answerBoxX - x - 5;
+    workBoxWidth = answerBoxX - x - 4;
   }
 
-  // A. WORK SPACE (SCRATCH WORK)
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.3);
-  doc.rect(x + 3, workAreaY, workBoxWidth, workAreaHeight, 'S');
+  // A. SEAMLESS WORK SPACE (Subtle top dashed divider instead of cramped inner box)
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.25);
+  doc.setLineDashPattern([1.2, 1.2], 0);
+  doc.line(x + 0.5, workAreaY, x + width - 0.5, workAreaY);
+  doc.setLineDashPattern([], 0);
 
-  // Work Space Label (Subtle, professional academic badge)
-  doc.setFillColor(248, 250, 252);
-  doc.rect(x + 3.2, workAreaY + 0.2, 22, 3.5, 'F');
+  // Work Space Label
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(5.5);
   doc.setTextColor(148, 163, 184); // slate-400
-  doc.text('WORK SPACE', x + 4.5, workAreaY + 2.5);
+  doc.text('WORK SPACE', x + 3, workAreaY + 3);
 
   // If Answer Key, write rubric guidance & standard in work box
   if (isAnswerKey && (q.rubric_notes || (trackStandards && q.standard))) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(6.8);
     doc.setTextColor(37, 99, 235);
     const keyNotes: string[] = [];
     if (trackStandards && q.standard) keyNotes.push(`Target: ${q.standard}`);
-    if (q.rubric_notes) keyNotes.push(`Rubric: ${q.rubric_notes}`);
-    const rubricLines = doc.splitTextToSize(keyNotes.join(' • '), workBoxWidth - 4);
-    doc.text(rubricLines, x + 5, workAreaY + 7.5);
+    if (q.rubric_notes) keyNotes.push(`Rubric: ${cleanLatexForPdf(q.rubric_notes)}`);
+    const rubricLines = doc.splitTextToSize(keyNotes.join(' • '), workBoxWidth - 6);
+    doc.text(rubricLines, x + 3, workAreaY + 6.8);
   }
 
-  // B. FINAL ANSWER BOX (HIGH CONTRAST FOR VISION OCR)
+  // B. FINAL ANSWER BOX (HIGH CONTRAST FOR VISION OCR, CLEAN LIGHT HEADER STRIP)
   doc.setDrawColor(15, 23, 42); // slate-900 crisp border
-  doc.setLineWidth(0.8);
+  doc.setLineWidth(0.65);
   doc.setFillColor(255, 255, 255);
   doc.rect(answerBoxX, answerBoxY, answerBoxWidth, answerBoxHeight, 'FD');
 
-  // Final Answer Header inside box (Solid dark slate with inverted white text)
-  doc.setFillColor(15, 23, 42);
-  doc.rect(answerBoxX, answerBoxY, answerBoxWidth, 4.2, 'F');
+  // Final Answer Header inside box (Clean light-slate strip instead of heavy black bar)
+  doc.setFillColor(241, 245, 249);
+  doc.rect(answerBoxX + 0.3, answerBoxY + 0.3, answerBoxWidth - 0.6, 3.8, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.25);
+  doc.line(answerBoxX, answerBoxY + 4.1, answerBoxX + answerBoxWidth, answerBoxY + 4.1);
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text('FINAL ANSWER', answerBoxX + 2.5, answerBoxY + 3.1);
+  doc.setFontSize(6);
+  doc.setTextColor(30, 41, 59);
+  doc.text('FINAL ANSWER', answerBoxX + 2, answerBoxY + 2.9);
 
   // Answer Box Content: Multiple Choice vs Text / Numeric
   if (q.question_type === 'multiple_choice') {
@@ -483,39 +503,46 @@ function renderQuestionCard(
       const keyBadgeW = Math.min(answerBoxWidth - 8, 26);
       doc.setFillColor(239, 246, 255);
       doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(0.4);
-      doc.roundedRect(answerBoxX + (answerBoxWidth - keyBadgeW) / 2, answerBoxY + 5.2, keyBadgeW, answerBoxHeight - 6.5, 1, 1, 'FD');
+      doc.setLineWidth(0.35);
+      doc.roundedRect(answerBoxX + (answerBoxWidth - keyBadgeW) / 2, answerBoxY + 5.2, keyBadgeW, answerBoxHeight - 6.5, 0.8, 0.8, 'FD');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
+      doc.setFontSize(10);
       doc.setTextColor(29, 78, 216);
-      doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
+      doc.text(cleanLatexForPdf(q.correct_answer || ''), answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
     } else {
       // 4 clean Scantron-style bubbles for student to bubble/circle
       const letters = ['A', 'B', 'C', 'D'];
       const bubbleSpacing = answerBoxWidth / 5;
-      const bubbleY = answerBoxY + (answerBoxHeight / 2) + 2.2;
+      const bubbleY = answerBoxY + (answerBoxHeight / 2) + 2.1;
       letters.forEach((letter, bIdx) => {
         const bx = answerBoxX + (bIdx + 1) * bubbleSpacing;
-        doc.setDrawColor(15, 23, 42);
-        doc.setLineWidth(0.4);
+        doc.setDrawColor(30, 41, 59);
+        doc.setLineWidth(0.35);
         doc.setFillColor(255, 255, 255);
-        doc.circle(bx, bubbleY - 0.5, 2.7, 'FD');
+        doc.circle(bx, bubbleY - 0.5, 2.6, 'FD');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
+        doc.setFontSize(6.8);
         doc.setTextColor(15, 23, 42);
-        doc.text(letter, bx, bubbleY + 0.6, { align: 'center' });
+        doc.text(letter, bx, bubbleY + 0.5, { align: 'center' });
       });
     }
   } else if (isAnswerKey) {
-    const keyBadgeW = Math.min(answerBoxWidth - 8, 32);
+    const keyBadgeW = Math.min(answerBoxWidth - 8, 34);
     doc.setFillColor(239, 246, 255);
     doc.setDrawColor(59, 130, 246);
-    doc.setLineWidth(0.4);
-    doc.roundedRect(answerBoxX + (answerBoxWidth - keyBadgeW) / 2, answerBoxY + 5.2, keyBadgeW, answerBoxHeight - 6.5, 1, 1, 'FD');
+    doc.setLineWidth(0.35);
+    doc.roundedRect(answerBoxX + (answerBoxWidth - keyBadgeW) / 2, answerBoxY + 5.2, keyBadgeW, answerBoxHeight - 6.5, 0.8, 0.8, 'FD');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
+    doc.setFontSize(10);
     doc.setTextColor(29, 78, 216);
-    doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
+    doc.text(cleanLatexForPdf(q.correct_answer || ''), answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
+  } else {
+    // Faint dashed handwriting baseline at bottom of open-ended answer box
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(answerBoxX + 4, answerBoxY + answerBoxHeight - 3.2, answerBoxX + answerBoxWidth - 4, answerBoxY + answerBoxHeight - 3.2);
+    doc.setLineDashPattern([], 0);
   }
 
   // Update question's bounding_box coordinates for the autograder manifest

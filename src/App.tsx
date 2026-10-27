@@ -510,7 +510,9 @@ export function App() {
               <WorksheetPreview
                 worksheet={worksheet}
                 onPrint={handlePrint}
-                onDownloadPDF={handleDownloadStudentPDF}
+                onDownloadPDF={(isKey) =>
+                  isKey ? handleDownloadKeyPDF() : handleDownloadStudentPDF()
+                }
               />
             </div>
           </div>

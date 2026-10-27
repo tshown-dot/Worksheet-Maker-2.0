@@ -44,49 +44,54 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
         width: '215.9mm',
         minHeight: '279.4mm',
         height: '279.4mm',
-        padding: '12mm 14mm',
+        padding: '13mm 15mm',
         pageBreakAfter: 'always',
         margin: '0 auto',
       }}
     >
-      {/* 4 SOLID CORNER FIDUCIAL MARKERS FOR COPIER SCANNER DESKEW */}
-      <div className="absolute top-[8mm] left-[8mm] w-[6mm] h-[6mm] bg-black" />
-      <div className="absolute top-[8mm] right-[8mm] w-[6mm] h-[6mm] bg-black" />
-      <div className="absolute bottom-[8mm] left-[8mm] w-[6mm] h-[6mm] bg-black" />
-      <div className="absolute bottom-[8mm] right-[8mm] w-[6mm] h-[6mm] bg-black" />
+      {/* 4 SOLID CORNER FIDUCIAL MARKERS FOR COPIER SCANNER DESKEW (4mm clear margin from content) */}
+      <div className="absolute top-[6mm] left-[6mm] w-[5mm] h-[5mm] bg-black" />
+      <div className="absolute top-[6mm] right-[6mm] w-[5mm] h-[5mm] bg-black" />
+      <div className="absolute bottom-[6mm] left-[6mm] w-[5mm] h-[5mm] bg-black" />
+      <div className="absolute bottom-[6mm] right-[6mm] w-[5mm] h-[5mm] bg-black" />
 
-      {/* TOP HEADER SECTION (Publishing-Grade Academic Header) */}
+      {/* TOP HEADER SECTION (Publishing-Grade Academic Masthead) */}
       <div className="w-full">
         {/* Answer Key Alert Banner */}
         {isAnswerKey && (
-          <div className="mb-1.5 bg-blue-50 border border-blue-500 text-blue-900 text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-xs uppercase tracking-wider inline-flex items-center shadow-2xs">
+          <div className="mb-1 bg-blue-50 border border-blue-500 text-blue-900 text-[9px] font-extrabold px-2.5 py-0.5 rounded-xs uppercase tracking-wider inline-flex items-center">
             <span className="mr-1.5 text-blue-600">★</span> OFFICIAL TEACHER MASTER • ANSWER KEY
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <div className="flex-1 pr-3">
-            <div className="flex items-center space-x-2 flex-wrap">
-              <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-tight">
+        <div className="flex items-center justify-between pb-1.5">
+          <div className="flex-1 pr-4">
+            <div className="flex items-center space-x-2.5 flex-wrap">
+              <h1 className="text-[17px] font-extrabold text-slate-900 tracking-tight leading-snug">
                 {worksheet.title || 'Untitled Math Worksheet'}
               </h1>
               {worksheet.style_preset === 'pod' && (
-                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 rounded-xs">
+                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-300 rounded-xs">
                   ★ Problem of the Day
                 </span>
               )}
               {worksheet.style_preset === 'quiz' && (
-                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded-xs">
-                  Quiz Assessment
+                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-red-50 text-red-800 border border-red-200 rounded-xs">
+                  Assessment / Quiz
                 </span>
               )}
               {worksheet.style_preset === 'exit_ticket' && (
-                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xs">
+                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xs">
                   Exit Ticket
                 </span>
               )}
+              {worksheet.style_preset === 'homework' && (
+                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-xs">
+                  Practice Assignment
+                </span>
+              )}
             </div>
-            <p className="text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 mt-0.5">
+            <p className="text-[9.5px] uppercase tracking-widest font-bold text-slate-500 mt-0.5">
               {worksheet.subject} • {worksheet.grade_level}
             </p>
           </div>
@@ -94,64 +99,66 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
           {/* QR Code Block (Compact Scanner Target) */}
           <div className="flex items-center space-x-2 shrink-0">
             <div className="text-right">
-              <span className="text-[9px] font-mono font-bold text-slate-800 block leading-tight">
+              <span className="text-[9.5px] font-mono font-extrabold text-slate-900 block leading-tight">
                 {worksheet.short_code}
               </span>
-              <span className="text-[8px] font-mono text-slate-500 block leading-tight">
+              <span className="text-[8px] font-mono font-medium text-slate-500 block leading-tight mt-0.5">
                 Page {pageNum} of {worksheet.total_pages || 1}
               </span>
             </div>
             {qrUrl ? (
-              <img src={qrUrl} alt="QR Code" className="w-9 h-9 border border-slate-200" />
+              <img src={qrUrl} alt="QR Code" className="w-10 h-10 border border-slate-300 p-0.5 bg-white" />
             ) : (
-              <div className="w-9 h-9 bg-slate-100 border border-slate-300" />
+              <div className="w-10 h-10 bg-slate-100 border border-slate-300" />
             )}
           </div>
         </div>
 
-        {/* Professional Academic Form Bar: Sleek Underlined Fields + Single Large Student ID Box */}
-        <div className="mt-1.5 pt-1.5 border-t-2 border-slate-900 flex items-end justify-between">
-          <div className="flex-1 flex items-end space-x-5 mr-3">
+        {/* Unified Student Info Strip + Single Large Full-Height Student ID Box */}
+        <div className="py-1.5 border-t-2 border-t-slate-900 border-b border-b-slate-300 flex items-center justify-between gap-4">
+          <div className="flex-1 flex items-baseline space-x-5">
             {/* Student Name */}
-            <div className="flex items-baseline space-x-1.5 flex-1 min-w-[140px]">
-              <span className="text-[9px] font-bold tracking-wider text-slate-800 uppercase shrink-0">
+            <div className="flex items-baseline space-x-1.5 flex-1 min-w-[150px]">
+              <span className="text-[9px] font-extrabold tracking-wider text-slate-800 uppercase shrink-0">
                 NAME:
               </span>
-              <div className="flex-1 border-b border-slate-500 h-3.5" />
+              <div className="flex-1 border-b border-slate-400 h-4" />
             </div>
 
             {/* Date */}
             <div className="flex items-baseline space-x-1.5 w-28 shrink-0">
-              <span className="text-[9px] font-bold tracking-wider text-slate-800 uppercase shrink-0">
+              <span className="text-[9px] font-extrabold tracking-wider text-slate-800 uppercase shrink-0">
                 DATE:
               </span>
-              <div className="flex-1 border-b border-slate-500 h-3.5" />
+              <div className="flex-1 border-b border-slate-400 h-4" />
             </div>
 
             {/* Period */}
             <div className="flex items-baseline space-x-1.5 w-20 shrink-0">
-              <span className="text-[9px] font-bold tracking-wider text-slate-800 uppercase shrink-0">
+              <span className="text-[9px] font-extrabold tracking-wider text-slate-800 uppercase shrink-0">
                 PERIOD:
               </span>
-              <div className="flex-1 border-b border-slate-500 h-3.5" />
+              <div className="flex-1 border-b border-slate-400 h-4" />
             </div>
           </div>
 
-          {/* Single Large Professional Student ID Box */}
+          {/* Single Large Student ID Box with Side Label Tab (Full Vertical Room for Handwriting) */}
           <div className="shrink-0 flex items-center">
-            <div className="w-24 h-[30px] border-2 border-slate-900 bg-white rounded-xs flex flex-col justify-between overflow-hidden shadow-2xs">
-              <div className="bg-slate-100 border-b border-slate-300 px-1 py-0.2 text-[7px] font-bold uppercase tracking-widest text-slate-700 text-center leading-none">
-                STUDENT ID #
+            <div className="w-32 h-[28px] border-2 border-slate-900 bg-white rounded-xs flex items-stretch overflow-hidden">
+              <div className="bg-slate-100 border-r border-slate-300 px-1.5 flex items-center justify-center shrink-0">
+                <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-800 leading-none">
+                  ID #
+                </span>
               </div>
-              <div className="flex-1 flex items-center justify-center relative bg-white">
-                <div className="w-full border-t border-dashed border-slate-200 pointer-events-none" />
+              <div className="flex-1 bg-white relative flex items-center justify-center">
+                <div className="w-4/5 border-b border-dashed border-slate-200 translate-y-2 pointer-events-none" />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* QUESTIONS GRID (Fills 100% of vertical page space with auto-stretching cards) */}
+      {/* QUESTIONS GRID (Fills 100% of vertical page space with auto-stretching unified cards) */}
       <div className="flex-1 my-2 overflow-hidden flex flex-col">
         {pageQuestions.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm italic">
@@ -169,81 +176,88 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
             {pageQuestions.map((q) => (
               <div
                 key={q.id}
-                className={`rounded-xs border p-2.5 flex flex-col justify-between bg-white h-full overflow-hidden shadow-2xs ${
-                  worksheet.style_preset === 'pod'
-                    ? 'border-dashed border-slate-300'
-                    : 'border-slate-300'
-                }`}
+                className="rounded-xs border border-slate-300 flex flex-col justify-between bg-white h-full overflow-hidden"
               >
-                {/* Question Header, Rendered Prompt & Multiple Choice Options */}
+                {/* 1. Card Top Header Bar */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-slate-150">
+                  <div className="bg-slate-50 border-b border-slate-200 px-2.5 py-1 flex items-center justify-between">
                     <div className="flex items-center space-x-2 flex-wrap">
                       <div className="flex items-center space-x-1.5">
-                        <span className="w-5 h-5 rounded-xs bg-slate-900 text-white font-black text-[11px] flex items-center justify-center shrink-0">
+                        <span className="w-4.5 h-4.5 rounded-xs bg-slate-900 text-white font-black text-[10px] flex items-center justify-center shrink-0">
                           {q.order_index}
                         </span>
-                        <span className="text-xs font-bold text-slate-900 tracking-tight">
+                        <span className="text-[11.5px] font-extrabold text-slate-900 tracking-tight">
                           Question {q.order_index}
                         </span>
                       </div>
                       {isAnswerKey && worksheet.track_standards !== false && q.standard && (
-                        <span className="text-[9px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded-xs border border-purple-200">
-                          {q.standard}{getStandardDescription(q.standard) ? ` • ${getStandardDescription(q.standard)}` : ''}
+                        <span className="text-[8.5px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.2 rounded-xs border border-purple-200">
+                          {q.standard}
+                          {getStandardDescription(q.standard)
+                            ? ` • ${getStandardDescription(q.standard)}`
+                            : ''}
                         </span>
                       )}
                     </div>
                     {q.points && (
-                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-                        [{q.points} pt{q.points > 1 ? 's' : ''}]
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+                        {q.points} pt{q.points > 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
 
-                  {/* Math text rendered via KaTeX */}
-                  <div className="text-[12px] text-slate-900 leading-relaxed font-sans mt-0.5">
-                    <MathText text={q.prompt} />
-                  </div>
-
-                  {/* MULTIPLE CHOICE OPTIONS: Academic Clean Grid */}
-                  {q.question_type === 'multiple_choice' && q.options && q.options.length > 0 && (
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 my-2 pt-1 text-xs text-slate-900">
-                      {q.options.map((opt) => (
-                        <div key={opt.label} className="flex items-baseline space-x-1.5">
-                          <span className="font-extrabold text-slate-900 text-xs shrink-0 tracking-tight">
-                            ({opt.label})
-                          </span>
-                          <div className="text-xs leading-relaxed font-sans text-slate-800">
-                            <MathText text={opt.text} />
-                          </div>
-                        </div>
-                      ))}
+                  {/* 2. Problem Prompt & Multiple Choice Options */}
+                  <div className="px-3 pt-2 pb-1.5">
+                    <div className="text-[12.5px] text-slate-900 leading-relaxed font-sans">
+                      <MathText text={q.prompt} />
                     </div>
-                  )}
+
+                    {q.question_type === 'multiple_choice' && q.options && q.options.length > 0 && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1.5 pt-1 text-xs text-slate-900">
+                        {q.options.map((opt) => (
+                          <div key={opt.label} className="flex items-baseline space-x-1.5">
+                            <span className="font-extrabold text-slate-900 text-[11.5px] shrink-0">
+                              ({opt.label})
+                            </span>
+                            <div className="text-[11.5px] leading-snug font-sans text-slate-800">
+                              <MathText text={opt.text} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Bottom Row: Scratch Work Area + Final Answer Box */}
+                {/* 3. Seamless Work Area + Crisp Final Answer Box */}
                 <div
-                  className={`flex mt-2 gap-2 flex-1 min-h-0 ${
-                    columns === 2 ? 'flex-col' : 'flex-row items-stretch'
+                  className={`flex flex-1 min-h-0 ${
+                    columns === 2
+                      ? 'flex-col'
+                      : 'flex-row items-stretch border-t border-dashed border-slate-200'
                   }`}
                 >
-                  {/* Scratch Work Area with subtle academic dot-grid background */}
+                  {/* Full-width Open Work Space (No double inner borders) */}
                   <div
-                    className="border border-slate-200 rounded-xs p-2 relative bg-white flex-1 min-h-[44px] flex flex-col justify-between"
+                    className={`px-3 py-1.5 relative bg-white flex-1 min-h-[42px] flex flex-col justify-between ${
+                      columns === 2 ? 'border-t border-dashed border-slate-200' : ''
+                    }`}
                     style={{
-                      backgroundImage: 'radial-gradient(#cbd5e1 0.75px, transparent 0.75px)',
+                      backgroundImage: 'radial-gradient(#cbd5e1 0.7px, transparent 0.7px)',
                       backgroundSize: '10px 10px',
                     }}
                   >
-                    <span className="text-[7.5px] font-extrabold uppercase tracking-widest text-slate-400 bg-white/90 px-1 py-0.2 rounded-2xs inline-block self-start border border-slate-100">
+                    <span className="text-[7px] font-extrabold uppercase tracking-widest text-slate-400 bg-white/90 px-1 rounded-2xs inline-block self-start">
                       WORK SPACE
                     </span>
-                    {isAnswerKey && (
-                      <div className="mt-0.5 space-y-0.5 bg-white/95 p-1 rounded-xs border border-blue-100">
+                    {isAnswerKey && (q.rubric_notes || (worksheet.track_standards !== false && q.standard)) && (
+                      <div className="my-0.5 space-y-0.5 bg-white/95 p-1.5 rounded-xs border border-blue-100">
                         {worksheet.track_standards !== false && q.standard && (
                           <div className="text-[8px] font-semibold text-purple-800 leading-tight">
-                            Target: {q.standard} {getStandardDescription(q.standard) ? `(${getStandardDescription(q.standard)})` : ''}
+                            Standard: {q.standard}{' '}
+                            {getStandardDescription(q.standard)
+                              ? `(${getStandardDescription(q.standard)})`
+                              : ''}
                           </div>
                         )}
                         {q.rubric_notes && (
@@ -255,41 +269,60 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                     )}
                   </div>
 
-                  {/* FINAL ANSWER BOX (High Contrast for OCR Scanner) */}
+                  {/* FINAL ANSWER BOX (High-Contrast 2px Black Border with Clean Light Header Strip) */}
                   <div
-                    className={`border-2 border-slate-900 rounded-xs bg-white flex flex-col justify-between overflow-hidden shadow-2xs shrink-0 ${
-                      columns === 2 ? 'h-[74px] w-full' : 'w-52 h-full min-h-[64px]'
+                    className={`border-2 border-slate-900 rounded-xs bg-white flex flex-col justify-between overflow-hidden shrink-0 ${
+                      columns === 2
+                        ? 'h-[66px] mx-2.5 mb-2'
+                        : 'w-52 my-2 mr-2.5 min-h-[64px]'
                     }`}
                   >
-                    <div className="bg-slate-900 text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest flex justify-between items-center">
+                    <div className="bg-slate-100 border-b border-slate-300 px-2 py-0.5 text-[7.5px] font-black uppercase tracking-widest text-slate-800 flex justify-between items-center">
                       <span>FINAL ANSWER</span>
                     </div>
 
-                    <div className="flex-1 flex items-center justify-center p-1.5 bg-white">
+                    <div className="flex-1 flex items-center justify-center px-2 py-1 bg-white relative">
                       {isAnswerKey ? (
-                        <div className="text-base font-bold text-blue-700 font-sans flex items-center space-x-2">
-                          <span className="px-2.5 py-1 bg-blue-50 text-blue-900 rounded-xs font-mono text-base font-black border border-blue-300">
-                            {q.correct_answer || '—'}
+                        <div className="text-sm font-bold text-blue-800 font-sans flex items-center space-x-2">
+                          <span className="px-2.5 py-0.5 bg-blue-50 text-blue-900 rounded-xs font-extrabold border border-blue-300 text-sm">
+                            <MathText text={q.correct_answer || '—'} />
                           </span>
                           {q.question_type === 'multiple_choice' &&
-                            q.options?.find((o) => o.label.toUpperCase() === q.correct_answer?.trim().toUpperCase()) && (
-                              <span className="text-xs text-blue-800 font-medium truncate max-w-[150px]">
-                                {q.options.find((o) => o.label.toUpperCase() === q.correct_answer?.trim().toUpperCase())?.text}
+                            q.options?.find(
+                              (o) =>
+                                o.label.toUpperCase() ===
+                                q.correct_answer?.trim().toUpperCase()
+                            ) && (
+                              <span className="text-xs text-blue-800 font-medium truncate max-w-[140px]">
+                                <MathText
+                                  text={
+                                    q.options.find(
+                                      (o) =>
+                                        o.label.toUpperCase() ===
+                                        q.correct_answer?.trim().toUpperCase()
+                                    )?.text || ''
+                                  }
+                                />
                               </span>
                             )}
                         </div>
                       ) : q.question_type === 'multiple_choice' ? (
                         /* Clean Scantron-Style Bubble Letter Choices */
-                        <div className="flex items-center justify-around w-full px-2 py-1">
+                        <div className="flex items-center justify-around w-full px-2">
                           {['A', 'B', 'C', 'D'].map((letter) => (
                             <div key={letter} className="flex flex-col items-center">
-                              <div className="w-6 h-6 rounded-full border-1.5 border-slate-900 flex items-center justify-center font-bold text-xs text-slate-900 bg-white shadow-2xs">
+                              <div className="w-6 h-6 rounded-full border-1.5 border-slate-800 flex items-center justify-center font-bold text-xs text-slate-900 bg-white">
                                 {letter}
                               </div>
                             </div>
                           ))}
                         </div>
-                      ) : null}
+                      ) : (
+                        /* Subtle writing baseline for student open-ended answer */
+                        <div className="w-full h-full flex items-end justify-center pb-1.5 pointer-events-none">
+                          <div className="w-11/12 border-b border-dashed border-slate-200" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -300,12 +333,12 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
       </div>
 
       {/* FOOTER */}
-      <div className="text-center text-[8.5px] uppercase tracking-wider text-slate-400 border-t border-slate-200 pt-1.5 flex justify-between items-center font-medium">
+      <div className="text-center text-[8px] uppercase tracking-widest text-slate-400 border-t border-slate-200 pt-1 flex justify-between items-center font-semibold">
         <span>Worksheet Maker 2.0 • Form {worksheet.short_code}</span>
         <span className="font-mono font-bold text-slate-500">
           Page {pageNum} of {worksheet.total_pages || 1}
         </span>
-        <span>Standardized OCR Assessment Layout</span>
+        <span>Standardized Assessment Layout</span>
       </div>
     </div>
   );

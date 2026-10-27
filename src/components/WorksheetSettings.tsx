@@ -321,11 +321,11 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
             </span>
           </button>
 
-          {/* Student ID Digits */}
-          <div className="flex items-center space-x-1 bg-slate-100 px-2 py-1 rounded-lg">
+          {/* Student ID Box Indicator */}
+          <div className="flex items-center space-x-1 bg-slate-100 px-2.5 py-1.5 rounded-lg">
             <Hash className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-slate-600">ID:</span>
-            <span className="font-bold text-slate-900">{worksheet.student_id_digits || 3} digits</span>
+            <span className="text-slate-600">ID Box:</span>
+            <span className="font-bold text-slate-900">Unified</span>
           </div>
         </div>
       </div>

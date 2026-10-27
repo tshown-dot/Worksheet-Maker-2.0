@@ -60,8 +60,28 @@ export const NJSLS_STANDARDS: { [key: string]: string } = {
   "7.RP.A.3": "Multi-Step Percent Problems",
   "7.NS.A.1": "Adding & Subtracting Rational Numbers",
   "7.NS.A.2": "Multiplying & Dividing Rational Numbers",
+  "7.NS.A.3": "Solving Real-World Rational Number Problems",
   "7.EE.A.1": "Linear Expressions with Rational Coefficients",
-  "7.EE.B.4": "Solving Multi-Step Real-Life Equations"
+  "7.EE.A.2": "Rewriting Expressions in Equivalent Forms",
+  "7.EE.B.3": "Multi-Step Real-Life Rational Number Problems",
+  "7.EE.B.4": "Solving Multi-Step Real-Life Equations & Inequalities",
+  "7.G.A.1": "Scale Drawings of Geometric Figures",
+  "7.G.B.4": "Area & Circumference of Circles",
+  "7.G.B.5": "Supplementary, Complementary, & Vertical Angles",
+  "7.G.B.6": "Area, Volume, & Surface Area of 2D/3D Objects",
+  "7.SP.C.5": "Understanding Probability of Chance Events",
+  "8.NS.A.1": "Rational & Irrational Numbers",
+  "8.NS.A.2": "Approximating Irrational Numbers",
+  "8.EE.A.1": "Properties of Integer Exponents",
+  "8.EE.A.3": "Scientific Notation",
+  "8.EE.B.5": "Graphing Proportional Relationships & Slope",
+  "8.EE.C.7": "Solving Linear Equations in One Variable",
+  "8.EE.C.8": "Systems of Linear Equations",
+  "8.F.A.1": "Understanding Functions",
+  "8.F.B.4": "Modeling Linear Relationships ($y = mx + b$)",
+  "8.G.A.1": "Rigid Transformations (Translations, Rotations, Reflections)",
+  "8.G.B.7": "Applying the Pythagorean Theorem",
+  "8.G.C.9": "Volume of Cones, Cylinders, & Spheres"
 };
 
 export function getStandardDescription(code?: string): string | null {

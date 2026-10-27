@@ -111,7 +111,7 @@ Return ONLY a valid JSON array in this exact schema (no conversational text or m
 RULES:
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
-- Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
+- Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Output ONLY the raw JSON array.`;
 
@@ -136,7 +136,7 @@ Return ONLY a valid JSON array in this exact schema (no conversational text or m
 RULES:
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
-- Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
+- Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Output ONLY the raw JSON array.`;
 
@@ -263,6 +263,7 @@ RULES:
           title,
           stylePreset: isPod ? 'pod' : 'homework',
           totalPages,
+          folderName: selectedFolder,
         });
         return;
       }
