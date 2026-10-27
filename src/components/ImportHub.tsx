@@ -8,8 +8,7 @@ import {
   ArrowRight, 
   FolderOpen, 
   PlusCircle, 
-  AlertCircle,
-  HelpCircle
+  AlertCircle
 } from 'lucide-react';
 
 interface ImportHubProps {
@@ -28,9 +27,9 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // 1. Prompt for Converting Existing Docs / Tests / PDFs
-  const convertDocPrompt = `You are a middle school math assistant for Worksheet Maker 2.0. 
+  const convertDocPrompt = `You are a middle school math curriculum assistant for Worksheet Maker 2.0. 
 TASK: Extract all math problems from the attached document or text below into an OCR-ready worksheet format.
-Return ONLY a valid JSON array in this exact schema (no conversational introduction or markdown code blocks):
+Return ONLY a valid JSON array in this exact schema (no conversational introduction, markdown notes, or code blocks):
 
 [
   {
@@ -44,15 +43,15 @@ Return ONLY a valid JSON array in this exact schema (no conversational introduct
 ]
 
 RULES:
-- "question_type" must be: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
+- "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
-- For multiple choice, include "options": [{"label": "A", "text": "..."}, {"label": "B", "text": "..."}].
+- For multiple choice, include an "options" list: [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Output ONLY the raw JSON array.`;
 
   // 2. Prompt for Generating Brand New Content
   const generateNewPrompt = `You are a middle school math curriculum generator for Worksheet Maker 2.0.
 TASK: Generate 6 high-quality math problems for middle school students on the requested topic.
-Return ONLY a valid JSON array in this exact schema (no conversational introduction or markdown code blocks):
+Return ONLY a valid JSON array in this exact schema (no conversational introduction, markdown notes, or code blocks):
 
 [
   {
@@ -66,8 +65,9 @@ Return ONLY a valid JSON array in this exact schema (no conversational introduct
 ]
 
 RULES:
-- "question_type" must be: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
+- "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
+- For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Include answer keys with acceptable alternatives and brief AI rubric notes.
 - Output ONLY the raw JSON array.`;
 
@@ -76,6 +76,38 @@ RULES:
     navigator.clipboard.writeText(textToCopy);
     setCopiedType(type);
     setTimeout(() => setCopiedType(null), 2500);
+  };
+
+  // ROBUST PARSER: Handles single backslashes from LLMs (Gemini, ChatGPT) like \frac, \div, \sqrt!
+  const robustParseJson = (rawText: string): any => {
+    let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    // Fix single backslashes in LaTeX commands that crash standard JSON.parse
+    cleaned = cleaned.replace(/\\([a-zA-Z]+|[0-9]+)/g, (match, cmd) => {
+      if (['n', 'r', 't'].includes(cmd)) return match;
+      return '\\\\' + cmd;
+    });
+
+    return JSON.parse(cleaned);
+  };
+
+  // Helper to extract options if LLM put "A) 10 B) 12" inside the prompt string
+  const parseOptionsFromPrompt = (prompt: string) => {
+    const mcRegex = /(?:^|\s+)([A-D])[\)\.]\s*([^A-D\)\.]+?)(?=\s+[A-D][\)\.]|$)/gi;
+    const options: { label: string; text: string }[] = [];
+    let match: RegExpExecArray | null;
+
+    const firstMatchIdx = prompt.search(/(?:^|\s+)[A-D][\)\.]/i);
+    const cleanPrompt = firstMatchIdx !== -1 ? prompt.substring(0, firstMatchIdx).trim() : prompt;
+
+    while ((match = mcRegex.exec(prompt)) !== null) {
+      options.push({
+        label: match[1].toUpperCase(),
+        text: match[2].trim(),
+      });
+    }
+
+    return { cleanPrompt, options };
   };
 
   const handleProcessImport = () => {
@@ -87,38 +119,47 @@ RULES:
     }
 
     try {
-      // 1. Try parsing JSON first
-      let parsed: any;
-      if (raw.startsWith('[') || raw.startsWith('{')) {
-        const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsed = JSON.parse(cleaned);
-        if (!Array.isArray(parsed) && parsed.questions) {
-          parsed = parsed.questions;
-        }
-      }
+      // 1. Robust JSON parsing
+      const parsed = robustParseJson(raw);
+      const items = Array.isArray(parsed) ? parsed : parsed.questions || parsed.problems;
 
-      if (Array.isArray(parsed)) {
-        const questions: Question[] = parsed.map((item, idx) => ({
-          id: crypto.randomUUID(),
-          order_index: idx + 1,
-          page_number: item.page_number || 1,
-          prompt: item.prompt || item.question || `Problem ${idx + 1}`,
-          question_type: item.question_type || 'numeric',
-          options: item.options || [],
-          correct_answer: String(item.correct_answer || item.answer || ''),
-          acceptable_alternatives: item.acceptable_alternatives || [],
-          points: Number(item.points) || 1,
-          rubric_notes: item.rubric_notes || item.explanation || '',
-        }));
+      if (Array.isArray(items) && items.length > 0) {
+        const questions: Question[] = items.map((item, idx) => {
+          let prompt = String(item.prompt || item.question || `Problem ${idx + 1}`);
+          let options = item.options || [];
+          let qType = item.question_type || 'numeric';
+
+          // If multiple choice and options are embedded in the prompt string
+          if (qType === 'multiple_choice' && (!options || options.length === 0)) {
+            const extracted = parseOptionsFromPrompt(prompt);
+            if (extracted.options.length > 0) {
+              prompt = extracted.cleanPrompt;
+              options = extracted.options;
+            }
+          }
+
+          return {
+            id: crypto.randomUUID(),
+            order_index: idx + 1,
+            page_number: item.page_number || 1,
+            prompt,
+            question_type: qType,
+            options,
+            correct_answer: String(item.correct_answer || item.answer || ''),
+            acceptable_alternatives: item.acceptable_alternatives || [],
+            points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
+            rubric_notes: item.rubric_notes || item.explanation || '',
+          };
+        });
 
         onImportQuestions(questions);
         return;
       }
     } catch {
-      // Fallback to text parser
+      // JSON parse failed, try text list fallback
     }
 
-    // 2. Parse plain text numbered lists (e.g. copied directly from a Google Doc or PDF)
+    // 2. Fallback: Parse plain text numbered lists (from Google Docs or PDF copy-paste)
     const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
     const questions: Question[] = [];
     let currentQ: Partial<Question> | null = null;
@@ -136,7 +177,7 @@ RULES:
           prompt: qMatch[2] || line,
           correct_answer: '',
           question_type: 'numeric',
-          points: 1,
+          points: 2,
         };
       } else if (ansMatch && currentQ) {
         currentQ.correct_answer = ansMatch[1].trim();
@@ -147,7 +188,7 @@ RULES:
           prompt: line,
           correct_answer: '',
           question_type: 'numeric',
-          points: 1,
+          points: 2,
         };
       }
     }
@@ -159,7 +200,7 @@ RULES:
     if (questions.length > 0) {
       onImportQuestions(questions);
     } else {
-      setError('Could not parse the pasted text into questions. Try using the AI prompt button above.');
+      setError('Could not parse the pasted text. Please verify the format or copy the AI prompt above.');
     }
   };
 
@@ -172,7 +213,7 @@ RULES:
     options: [],
     correct_answer: q.correct_answer || '',
     acceptable_alternatives: [],
-    points: q.points || 1,
+    points: q.points || 2,
     rubric_notes: '',
   });
 
@@ -218,7 +259,7 @@ RULES:
             <button
               type="button"
               onClick={() => handleCopy('convert')}
-              className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition"
+              className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition cursor-pointer"
             >
               {copiedType === 'convert' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copiedType === 'convert' ? 'Copied Prompt to Clipboard!' : 'Copy Prompt for Existing Doc'}</span>
@@ -239,7 +280,7 @@ RULES:
             <button
               type="button"
               onClick={() => handleCopy('generate')}
-              className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition"
+              className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition cursor-pointer"
             >
               {copiedType === 'generate' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               <span>{copiedType === 'generate' ? 'Copied Prompt to Clipboard!' : 'Copy Prompt to Generate New'}</span>
@@ -259,14 +300,14 @@ RULES:
               Paste the AI Output or Questions Here
             </h3>
           </div>
-          <span className="text-xs text-slate-400">Accepts JSON or standard numbered text</span>
+          <span className="text-xs text-slate-400">Accepts Gemini/ChatGPT JSON or standard text</span>
         </div>
 
         <textarea
           rows={8}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          placeholder={`Paste what the AI gives you, or paste straight from your document:\n\n1. Solve for x:  3x + 7 = 22\nAnswer: 5\n\n2. Solve for y:  y/4 - 3 = 5\nAnswer: 32`}
+          placeholder={`Paste what Gemini, ChatGPT, or Claude gives you here:\n\n[\n  {\n    "prompt": "Solve for x: 2x - 5 = 11",\n    "question_type": "numeric",\n    "correct_answer": "8"\n  }\n]`}
           className="w-full p-4 font-mono text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 transition"
         />
 

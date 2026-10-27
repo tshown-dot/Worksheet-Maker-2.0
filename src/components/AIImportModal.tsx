@@ -19,15 +19,17 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
 
   if (!isOpen) return null;
 
-  const aiSystemPromptTemplate = `Please generate math questions for a worksheet. Return ONLY a valid JSON array in this exact format:
+  const aiSystemPromptTemplate = `You are a middle school math curriculum assistant for Worksheet Maker 2.0.
+TASK: Return a valid JSON array in this exact schema (no conversational text or markdown code blocks):
+
 [
   {
-    "prompt": "Solve for x: \\\\quad 3x - 5 = 16",
+    "prompt": "Solve for x: \\frac{x}{3} + 4 = 10",
     "question_type": "numeric",
-    "correct_answer": "7",
-    "acceptable_alternatives": ["x = 7", "7"],
+    "correct_answer": "18",
+    "acceptable_alternatives": ["x = 18", "18"],
     "points": 2,
-    "rubric_notes": "1 point for adding 5 (3x = 21), 1 point for dividing by 3."
+    "rubric_notes": "1 pt for subtracting 4 (x/3 = 6), 1 pt for multiplying by 3."
   }
 ]`;
 
@@ -35,6 +37,33 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
     navigator.clipboard.writeText(aiSystemPromptTemplate);
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 2500);
+  };
+
+  const robustParseJson = (rawText: string): any => {
+    let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    cleaned = cleaned.replace(/\\([a-zA-Z]+|[0-9]+)/g, (match, cmd) => {
+      if (['n', 'r', 't'].includes(cmd)) return match;
+      return '\\\\' + cmd;
+    });
+    return JSON.parse(cleaned);
+  };
+
+  const parseOptionsFromPrompt = (prompt: string) => {
+    const mcRegex = /(?:^|\s+)([A-D])[\)\.]\s*([^A-D\)\.]+?)(?=\s+[A-D][\)\.]|$)/gi;
+    const options: { label: string; text: string }[] = [];
+    let match: RegExpExecArray | null;
+
+    const firstMatchIdx = prompt.search(/(?:^|\s+)[A-D][\)\.]/i);
+    const cleanPrompt = firstMatchIdx !== -1 ? prompt.substring(0, firstMatchIdx).trim() : prompt;
+
+    while ((match = mcRegex.exec(prompt)) !== null) {
+      options.push({
+        label: match[1].toUpperCase(),
+        text: match[2].trim(),
+      });
+    }
+
+    return { cleanPrompt, options };
   };
 
   const handleProcessImport = () => {
@@ -46,48 +75,51 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
     }
 
     try {
-      // 1. Try parsing as JSON first
-      let parsed: any;
-      if (raw.startsWith('[') || raw.startsWith('{')) {
-        // Strip markdown code blocks if present
-        const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsed = JSON.parse(cleaned);
-        if (!Array.isArray(parsed) && parsed.questions) {
-          parsed = parsed.questions;
-        }
-      }
+      const parsed = robustParseJson(raw);
+      const items = Array.isArray(parsed) ? parsed : parsed.questions || parsed.problems;
 
-      if (Array.isArray(parsed)) {
-        const importedQuestions: Question[] = parsed.map((item, idx) => ({
-          id: crypto.randomUUID(),
-          order_index: idx + 1,
-          page_number: item.page_number || 1,
-          prompt: item.prompt || item.question || `Question ${idx + 1}`,
-          question_type: item.question_type || 'numeric',
-          options: item.options || [],
-          correct_answer: String(item.correct_answer || item.answer || ''),
-          acceptable_alternatives: item.acceptable_alternatives || [],
-          points: Number(item.points) || 1,
-          rubric_notes: item.rubric_notes || item.explanation || '',
-        }));
+      if (Array.isArray(items) && items.length > 0) {
+        const questions: Question[] = items.map((item, idx) => {
+          let prompt = String(item.prompt || item.question || `Problem ${idx + 1}`);
+          let options = item.options || [];
+          let qType = item.question_type || 'numeric';
 
-        onImportQuestions(importedQuestions);
+          if (qType === 'multiple_choice' && (!options || options.length === 0)) {
+            const extracted = parseOptionsFromPrompt(prompt);
+            if (extracted.options.length > 0) {
+              prompt = extracted.cleanPrompt;
+              options = extracted.options;
+            }
+          }
+
+          return {
+            id: crypto.randomUUID(),
+            order_index: idx + 1,
+            page_number: item.page_number || 1,
+            prompt,
+            question_type: qType,
+            options,
+            correct_answer: String(item.correct_answer || item.answer || ''),
+            acceptable_alternatives: item.acceptable_alternatives || [],
+            points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
+            rubric_notes: item.rubric_notes || item.explanation || '',
+          };
+        });
+
+        onImportQuestions(questions);
         setInputText('');
         onClose();
         return;
       }
-    } catch {
-      // Not pure JSON, fall back to plain text parser
-    }
+    } catch {}
 
-    // 2. Fallback: Parse plain text numbered lists (e.g., from Docs or PDF copy-paste)
+    // Fallback: Parse plain text numbered lists
     const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
     const questions: Question[] = [];
     let currentQ: Partial<Question> | null = null;
     let qCounter = 1;
 
     for (const line of lines) {
-      // Detect question start: "1." or "1)" or "Question 1:"
       const qMatch = line.match(/^(\d+)[\.\)]\s*(.*)/i) || line.match(/^question\s*(\d+)[:\.]?\s*(.*)/i);
       const ansMatch = line.match(/^(?:ans|answer|correct|key)[:\s]+(.*)/i);
 
@@ -99,19 +131,18 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
           prompt: qMatch[2] || line,
           correct_answer: '',
           question_type: 'numeric',
-          points: 1,
+          points: 2,
         };
       } else if (ansMatch && currentQ) {
         currentQ.correct_answer = ansMatch[1].trim();
       } else if (currentQ) {
         currentQ.prompt = (currentQ.prompt ? currentQ.prompt + ' ' : '') + line;
       } else {
-        // First line wasn't numbered
         currentQ = {
           prompt: line,
           correct_answer: '',
           question_type: 'numeric',
-          points: 1,
+          points: 2,
         };
       }
     }
@@ -125,7 +156,7 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
       setInputText('');
       onClose();
     } else {
-      setError('Could not extract questions from the pasted text. Try using the AI prompt template above.');
+      setError('Could not extract questions from the pasted text.');
     }
   };
 
@@ -138,7 +169,7 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
     options: [],
     correct_answer: q.correct_answer || '',
     acceptable_alternatives: [],
-    points: q.points || 1,
+    points: q.points || 2,
     rubric_notes: '',
   });
 
@@ -152,8 +183,8 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900">Import from AI, PDF, or Docs</h3>
-              <p className="text-xs text-slate-500">Paste questions or LLM JSON to auto-build cards</p>
+              <h3 className="font-bold text-base text-slate-900">Add Questions via AI or Text</h3>
+              <p className="text-xs text-slate-500">Paste Gemini, ChatGPT, or Claude output</p>
             </div>
           </div>
           <button
@@ -166,27 +197,25 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-4">
-          {/* Quick AI Prompt Helper */}
           <div className="p-3.5 bg-purple-50/60 border border-purple-200 rounded-xl flex items-center justify-between">
             <div>
               <span className="text-xs font-bold text-purple-900 block">
                 Using ChatGPT, Claude, or Gemini?
               </span>
               <span className="text-xs text-purple-700">
-                Copy our custom AI prompt to get instant, perfectly formatted math problems.
+                Copy our custom AI prompt to get instant, formatted math problems.
               </span>
             </div>
             <button
               type="button"
               onClick={handleCopyPrompt}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition shrink-0 ml-3"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition shrink-0 ml-3 cursor-pointer"
             >
               {copiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedPrompt ? 'Copied!' : 'Copy Prompt'}</span>
             </button>
           </div>
 
-          {/* Paste area */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1">
               <FileText className="w-3.5 h-3.5 text-slate-500" />
@@ -196,7 +225,7 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
               rows={9}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder={`Paste output from ChatGPT, or paste standard text from your Doc:\n\n1. Solve for x:  2x + 7 = 19\nAnswer: 6\n\n2. Solve for y:  y/4 - 3 = 5\nAnswer: 32`}
+              placeholder={`Paste output from Gemini or ChatGPT here...`}
               className="w-full p-3 font-mono text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-slate-800"
             />
           </div>
@@ -221,9 +250,9 @@ export const AIImportModal: React.FC<AIImportModalProps> = ({
           <button
             type="button"
             onClick={handleProcessImport}
-            className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-sm shadow-purple-600/20 transition"
+            className="px-5 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-sm shadow-purple-600/20 transition cursor-pointer"
           >
-            Generate Question Cards
+            Add Questions to Worksheet
           </button>
         </div>
       </div>
