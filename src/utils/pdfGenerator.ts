@@ -101,21 +101,18 @@ export async function generateWorksheetPDF(
     doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin + 5, currentY + 2.5);
     currentY += 4;
 
-    // Student Info Bar & 3-Digit ID Grid
+    // Student Info Bar & Single Large ID Box
     renderStudentHeader(doc, worksheet, margin + 5, currentY, pageWidth);
     currentY += 10.5;
 
-    // Decorative Separator Line
-    doc.setDrawColor(209, 213, 219);
-    doc.setLineWidth(0.4);
-    if (worksheet.style_preset === 'pod') {
-      doc.setLineDashPattern([2, 2], 0);
-    } else {
-      doc.setLineDashPattern([], 0);
-    }
+    // Academic Double Divider Line
+    doc.setDrawColor(15, 23, 42);
+    doc.setLineWidth(0.5);
     doc.line(margin + 5, currentY, pageWidth - margin - 5, currentY);
-    doc.setLineDashPattern([], 0); // reset
-    currentY += 3;
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.2);
+    doc.line(margin + 5, currentY + 0.6, pageWidth - margin - 5, currentY + 0.6);
+    currentY += 3.5;
 
     // 4. DRAW QUESTIONS GRID (Dynamically fills entire page height in 1 or 2 columns)
     const columns = worksheet.columns || 1;
@@ -155,16 +152,19 @@ export async function generateWorksheetPDF(
       );
     });
 
-    // 5. FOOTER
+    // 5. FOOTER (Professional Clean Running Footer)
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(margin + 5, pageHeight - 11, pageWidth - margin - 5, pageHeight - 11);
+
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(156, 163, 175);
-    doc.text(
-      `Worksheet Maker 2.0 • Page ${pageNum} of ${totalPages} • Code: ${worksheet.short_code}`,
-      pageWidth / 2,
-      pageHeight - 8,
-      { align: 'center' }
-    );
+    doc.setFontSize(6.8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Worksheet Maker 2.0 • Form ${worksheet.short_code}`, margin + 5, pageHeight - 7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 7.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text('Standardized OCR Assessment Layout', pageWidth - margin - 5, pageHeight - 7.5, { align: 'right' });
   }
 
   return doc;
@@ -210,7 +210,7 @@ function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number)
 }
 
 // ----------------------------------------------------------------------------
-// HELPER: Student Info & 3-Digit ID Header Box
+// HELPER: Student Info & Single Large ID Header Box
 // ----------------------------------------------------------------------------
 function renderStudentHeader(
   doc: jsPDF,
@@ -219,43 +219,59 @@ function renderStudentHeader(
   y: number,
   pageWidth: number
 ) {
-  const idDigits = worksheet.student_id_digits || 3;
-  const boxWidth = 7;
-  const boxHeight = 7.5;
+  const margin = 10;
+  const qrX = pageWidth - margin - 18;
+  const idBoxWidth = 26;
+  const idBoxHeight = 8.5;
+  const idBoxX = qrX - idBoxWidth - 3;
 
-  // Name, Date, Period blanks
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(75, 85, 99);
-
-  doc.text('Name: _______________________________', x, y + 4.5);
-  doc.text('Period: _____', x + 64, y + 4.5);
-  doc.text('Date: _________', x + 86, y + 4.5);
-
-  // Student ID Block at Right (before QR code)
-  const idStartX = pageWidth - 36 - (idDigits * boxWidth);
-
+  // 1. NAME FIELD (Crisp vector line)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.8);
-  doc.setTextColor(31, 41, 55);
-  doc.text('STUDENT ID:', idStartX, y + 1.5);
+  doc.setFontSize(7);
+  doc.setTextColor(51, 65, 85);
+  doc.text('NAME:', x, y + 5.5);
+  const nameLabelWidth = doc.getTextWidth('NAME: ') + 1;
+  const nameLineEnd = x + 62;
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.3);
+  doc.line(x + nameLabelWidth, y + 6, nameLineEnd, y + 6);
 
-  // Draw 3 distinct digit boxes
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.4);
+  // 2. DATE FIELD (Crisp vector line)
+  const dateStartX = nameLineEnd + 4;
+  doc.setFont('helvetica', 'bold');
+  doc.text('DATE:', dateStartX, y + 5.5);
+  const dateLabelWidth = doc.getTextWidth('DATE: ') + 1;
+  const dateLineEnd = dateStartX + 26;
+  doc.line(dateStartX + dateLabelWidth, y + 6, dateLineEnd, y + 6);
+
+  // 3. PERIOD FIELD (Crisp vector line)
+  const pdStartX = dateLineEnd + 4;
+  doc.setFont('helvetica', 'bold');
+  doc.text('PERIOD:', pdStartX, y + 5.5);
+  const pdLabelWidth = doc.getTextWidth('PERIOD: ') + 1;
+  const pdLineEnd = pdStartX + 18;
+  doc.line(pdStartX + pdLabelWidth, y + 6, pdLineEnd, y + 6);
+
+  // 4. SINGLE LARGE STUDENT ID BOX (Spacious for kids to write their number)
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.6);
   doc.setFillColor(255, 255, 255);
+  doc.rect(idBoxX, y, idBoxWidth, idBoxHeight, 'FD');
 
-  for (let i = 0; i < idDigits; i++) {
-    const curBoxX = idStartX + i * boxWidth;
-    doc.rect(curBoxX, y + 2.5, boxWidth - 1, boxHeight, 'S');
+  // Top header banner in ID box
+  doc.setFillColor(241, 245, 249);
+  doc.rect(idBoxX, y, idBoxWidth, 2.8, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(5.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('STUDENT ID #', idBoxX + (idBoxWidth / 2), y + 2.1, { align: 'center' });
 
-    // Light guideline dashed/solid center in box
-    doc.setDrawColor(229, 231, 235);
-    doc.setLineWidth(0.2);
-    doc.line(curBoxX + 0.5, y + 2.5 + (boxHeight / 2), curBoxX + boxWidth - 1.5, y + 2.5 + (boxHeight / 2));
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.4);
-  }
+  // Faint dashed handwriting center guideline
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(idBoxX + 1.5, y + 5.6, idBoxX + idBoxWidth - 1.5, y + 5.6);
+  doc.setLineDashPattern([], 0);
 }
 
 // ----------------------------------------------------------------------------
@@ -294,28 +310,35 @@ function renderQuestionCard(
     doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
   }
 
-  // Question Number
+  // Question Number Badge (Dark Slate Pill with White Inverted Numeral)
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.roundedRect(x + 2.5, y + 1.8, 4.8, 4.2, 0.6, 0.6, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(17, 24, 39);
-  doc.text(`Question ${q.order_index}.`, x + 3, y + 5);
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`${q.order_index}`, x + 4.9, y + 4.8, { align: 'center' });
 
-  let currentHeaderX = x + 26;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`Question ${q.order_index}`, x + 8.8, y + 4.9);
+
+  let currentHeaderX = x + 8.8 + doc.getTextWidth(`Question ${q.order_index}`) + 2.5;
 
   // Points Badge
   if (q.points) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(107, 114, 128);
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
     const ptText = `[ ${q.points} pt${q.points > 1 ? 's' : ''} ]`;
     doc.text(ptText, currentHeaderX, y + 4.8);
-    currentHeaderX += doc.getTextWidth(ptText) + 3;
+    currentHeaderX += doc.getTextWidth(ptText) + 2.5;
   }
 
   // NJSLS Standards Badge on Answer Key
   if (isAnswerKey && trackStandards && q.standard) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.setTextColor(126, 34, 206); // Purple-700
     doc.text(`[ NJSLS: ${q.standard} ]`, currentHeaderX, y + 4.8);
   }
@@ -385,15 +408,17 @@ function renderQuestionCard(
   }
 
   // A. WORK SPACE (SCRATCH WORK)
-  doc.setDrawColor(220, 225, 232);
+  doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
   doc.rect(x + 3, workAreaY, workBoxWidth, workAreaHeight, 'S');
 
-  // Work Space Label
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7);
-  doc.setTextColor(156, 163, 175);
-  doc.text('Show your work:', x + 5, workAreaY + 3.5);
+  // Work Space Label (Subtle, professional academic badge)
+  doc.setFillColor(248, 250, 252);
+  doc.rect(x + 3.2, workAreaY + 0.2, 22, 3.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(5.5);
+  doc.setTextColor(148, 163, 184); // slate-400
+  doc.text('WORK SPACE', x + 4.5, workAreaY + 2.5);
 
   // If Answer Key, write rubric guidance & standard in work box
   if (isAnswerKey && (q.rubric_notes || (trackStandards && q.standard))) {
@@ -408,45 +433,56 @@ function renderQuestionCard(
   }
 
   // B. FINAL ANSWER BOX (HIGH CONTRAST FOR VISION OCR)
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.8); // Thick crisp border
+  doc.setDrawColor(15, 23, 42); // slate-900 crisp border
+  doc.setLineWidth(0.8);
   doc.setFillColor(255, 255, 255);
   doc.rect(answerBoxX, answerBoxY, answerBoxWidth, answerBoxHeight, 'FD');
 
-  // Final Answer Header inside box
-  doc.setFillColor(243, 244, 246);
-  doc.rect(answerBoxX, answerBoxY, answerBoxWidth, 4.5, 'F');
+  // Final Answer Header inside box (Solid dark slate with inverted white text)
+  doc.setFillColor(15, 23, 42);
+  doc.rect(answerBoxX, answerBoxY, answerBoxWidth, 4.2, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(0, 0, 0);
-  doc.text('FINAL ANSWER:', answerBoxX + 2, answerBoxY + 3.4);
+  doc.setFontSize(6.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('FINAL ANSWER', answerBoxX + 2.5, answerBoxY + 3.1);
 
   // Answer Box Content: Multiple Choice vs Text / Numeric
   if (q.question_type === 'multiple_choice') {
     if (isAnswerKey) {
+      const keyBadgeW = Math.min(answerBoxWidth - 8, 26);
+      doc.setFillColor(239, 246, 255);
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(answerBoxX + (answerBoxWidth - keyBadgeW) / 2, answerBoxY + 5.2, keyBadgeW, answerBoxHeight - 6.5, 1, 1, 'FD');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10.5);
       doc.setTextColor(29, 78, 216);
       doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
     } else {
-      // 4 clean bubbles for student to bubble/circle
+      // 4 clean Scantron-style bubbles for student to bubble/circle
       const letters = ['A', 'B', 'C', 'D'];
       const bubbleSpacing = answerBoxWidth / 5;
-      const bubbleY = answerBoxY + (answerBoxHeight / 2) + 2;
+      const bubbleY = answerBoxY + (answerBoxHeight / 2) + 2.2;
       letters.forEach((letter, bIdx) => {
         const bx = answerBoxX + (bIdx + 1) * bubbleSpacing;
-        doc.setDrawColor(156, 163, 175);
-        doc.setLineWidth(0.3);
-        doc.circle(bx, bubbleY - 0.5, 2.5, 'S');
+        doc.setDrawColor(15, 23, 42);
+        doc.setLineWidth(0.4);
+        doc.setFillColor(255, 255, 255);
+        doc.circle(bx, bubbleY - 0.5, 2.7, 'FD');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6.5);
-        doc.setTextColor(55, 65, 81);
-        doc.text(letter, bx, bubbleY + 0.5, { align: 'center' });
+        doc.setFontSize(7);
+        doc.setTextColor(15, 23, 42);
+        doc.text(letter, bx, bubbleY + 0.6, { align: 'center' });
       });
     }
   } else if (isAnswerKey) {
+    const keyBadgeW = Math.min(answerBoxWidth - 8, 32);
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(59, 130, 246);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(answerBoxX + (answerBoxWidth - keyBadgeW) / 2, answerBoxY + 5.2, keyBadgeW, answerBoxHeight - 6.5, 1, 1, 'FD');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10.5);
     doc.setTextColor(29, 78, 216);
     doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
   }

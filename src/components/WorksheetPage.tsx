@@ -55,82 +55,97 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
       <div className="absolute bottom-[8mm] left-[8mm] w-[6mm] h-[6mm] bg-black" />
       <div className="absolute bottom-[8mm] right-[8mm] w-[6mm] h-[6mm] bg-black" />
 
-      {/* TOP HEADER SECTION (Compact & Space-Saving) */}
+      {/* TOP HEADER SECTION (Publishing-Grade Academic Header) */}
       <div className="w-full">
         {/* Answer Key Alert Banner */}
         {isAnswerKey && (
-          <div className="mb-1 bg-blue-50 border border-blue-400 text-blue-800 text-[9.5px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wide inline-block">
-            ★ Teacher Master / Answer Key
+          <div className="mb-1.5 bg-blue-50 border border-blue-500 text-blue-900 text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-xs uppercase tracking-wider inline-flex items-center shadow-2xs">
+            <span className="mr-1.5 text-blue-600">★</span> OFFICIAL TEACHER MASTER • ANSWER KEY
           </div>
         )}
 
         <div className="flex items-center justify-between">
           <div className="flex-1 pr-3">
             <div className="flex items-center space-x-2 flex-wrap">
-              <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-none">
+              <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-tight">
                 {worksheet.title || 'Untitled Math Worksheet'}
               </h1>
               {worksheet.style_preset === 'pod' && (
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-300 rounded-sm">
+                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 rounded-xs">
                   ★ Problem of the Day
                 </span>
               )}
               {worksheet.style_preset === 'quiz' && (
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 bg-red-50 text-red-700 border border-red-200 rounded-sm">
-                  Quiz
+                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded-xs">
+                  Quiz Assessment
                 </span>
               )}
               {worksheet.style_preset === 'exit_ticket' && (
-                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-sm">
+                <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xs">
                   Exit Ticket
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+            <p className="text-[9.5px] uppercase tracking-wider font-semibold text-slate-500 mt-0.5">
               {worksheet.subject} • {worksheet.grade_level}
             </p>
           </div>
 
-          {/* QR Code Block (Compact) */}
-          <div className="flex items-center space-x-1.5 shrink-0">
+          {/* QR Code Block (Compact Scanner Target) */}
+          <div className="flex items-center space-x-2 shrink-0">
             <div className="text-right">
-              <span className="text-[9px] font-mono font-bold text-slate-700 block leading-tight">
+              <span className="text-[9px] font-mono font-bold text-slate-800 block leading-tight">
                 {worksheet.short_code}
               </span>
-              <span className="text-[8px] font-mono text-slate-400 block leading-tight">
-                P{pageNum} of {worksheet.total_pages || 1}
+              <span className="text-[8px] font-mono text-slate-500 block leading-tight">
+                Page {pageNum} of {worksheet.total_pages || 1}
               </span>
             </div>
             {qrUrl ? (
-              <img src={qrUrl} alt="QR Code" className="w-9 h-9" />
+              <img src={qrUrl} alt="QR Code" className="w-9 h-9 border border-slate-200" />
             ) : (
               <div className="w-9 h-9 bg-slate-100 border border-slate-300" />
             )}
           </div>
         </div>
 
-        {/* Compact Student Name / Period / Date / 3-Digit ID Bar */}
-        <div className="mt-1 pt-1 border-t border-slate-300 flex items-center justify-between text-[11px] text-slate-800">
-          <div className="flex items-center space-x-4">
-            <span>Name: _______________________________</span>
-            <span>Period: _____</span>
-            <span>Date: _________</span>
+        {/* Professional Academic Form Bar: Sleek Underlined Fields + Single Large Student ID Box */}
+        <div className="mt-1.5 pt-1.5 border-t-2 border-slate-900 flex items-end justify-between">
+          <div className="flex-1 flex items-end space-x-5 mr-3">
+            {/* Student Name */}
+            <div className="flex items-baseline space-x-1.5 flex-1 min-w-[140px]">
+              <span className="text-[9px] font-bold tracking-wider text-slate-800 uppercase shrink-0">
+                NAME:
+              </span>
+              <div className="flex-1 border-b border-slate-500 h-3.5" />
+            </div>
+
+            {/* Date */}
+            <div className="flex items-baseline space-x-1.5 w-28 shrink-0">
+              <span className="text-[9px] font-bold tracking-wider text-slate-800 uppercase shrink-0">
+                DATE:
+              </span>
+              <div className="flex-1 border-b border-slate-500 h-3.5" />
+            </div>
+
+            {/* Period */}
+            <div className="flex items-baseline space-x-1.5 w-20 shrink-0">
+              <span className="text-[9px] font-bold tracking-wider text-slate-800 uppercase shrink-0">
+                PERIOD:
+              </span>
+              <div className="flex-1 border-b border-slate-500 h-3.5" />
+            </div>
           </div>
 
-          {/* Standardized 3-Digit Student ID Box */}
-          <div className="flex items-center space-x-1.5">
-            <span className="text-[9.5px] font-bold text-slate-900 uppercase tracking-wider">
-              ID:
-            </span>
-            <div className="flex space-x-1">
-              {Array.from({ length: worksheet.student_id_digits || 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="w-4.5 h-5 border-2 border-black bg-white flex items-center justify-center relative"
-                >
-                  <div className="w-full border-t border-dashed border-slate-200 pointer-events-none" />
-                </div>
-              ))}
+          {/* Single Large Professional Student ID Box */}
+          <div className="shrink-0 flex items-center">
+            <div className="w-24 h-[30px] border-2 border-slate-900 bg-white rounded-xs flex flex-col justify-between overflow-hidden shadow-2xs">
+              <div className="bg-slate-100 border-b border-slate-300 px-1 py-0.2 text-[7px] font-bold uppercase tracking-widest text-slate-700 text-center leading-none">
+                STUDENT ID #
+              </div>
+              <div className="flex-1 flex items-center justify-center relative bg-white">
+                <div className="w-full border-t border-dashed border-slate-200 pointer-events-none" />
+              </div>
             </div>
           </div>
         </div>
@@ -154,7 +169,7 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
             {pageQuestions.map((q) => (
               <div
                 key={q.id}
-                className={`rounded border p-2 flex flex-col justify-between bg-white h-full overflow-hidden ${
+                className={`rounded-xs border p-2.5 flex flex-col justify-between bg-white h-full overflow-hidden shadow-2xs ${
                   worksheet.style_preset === 'pod'
                     ? 'border-dashed border-slate-300'
                     : 'border-slate-300'
@@ -162,36 +177,43 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
               >
                 {/* Question Header, Rendered Prompt & Multiple Choice Options */}
                 <div>
-                  <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-100">
-                    <div className="flex items-center space-x-1.5 flex-wrap">
-                      <span className="text-xs font-bold text-slate-900">
-                        Problem {q.order_index}.
-                      </span>
+                  <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-slate-150">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="w-5 h-5 rounded-xs bg-slate-900 text-white font-black text-[11px] flex items-center justify-center shrink-0">
+                          {q.order_index}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 tracking-tight">
+                          Question {q.order_index}
+                        </span>
+                      </div>
                       {isAnswerKey && worksheet.track_standards !== false && q.standard && (
-                        <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                        <span className="text-[9px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.5 rounded-xs border border-purple-200">
                           {q.standard}{getStandardDescription(q.standard) ? ` • ${getStandardDescription(q.standard)}` : ''}
                         </span>
                       )}
                     </div>
                     {q.points && (
-                      <span className="text-[10px] font-semibold text-slate-500 shrink-0">
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
                         [{q.points} pt{q.points > 1 ? 's' : ''}]
                       </span>
                     )}
                   </div>
 
                   {/* Math text rendered via KaTeX */}
-                  <div className="text-xs text-slate-900 leading-relaxed font-sans mt-0.5">
+                  <div className="text-[12px] text-slate-900 leading-relaxed font-sans mt-0.5">
                     <MathText text={q.prompt} />
                   </div>
 
-                  {/* MULTIPLE CHOICE OPTIONS: Rendered in the problem body */}
+                  {/* MULTIPLE CHOICE OPTIONS: Academic Clean Grid */}
                   {q.question_type === 'multiple_choice' && q.options && q.options.length > 0 && (
-                    <div className="grid grid-cols-2 gap-x-2.5 gap-y-1 my-1.5 pt-0.5 text-xs text-slate-800">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 my-2 pt-1 text-xs text-slate-900">
                       {q.options.map((opt) => (
-                        <div key={opt.label} className="flex items-baseline space-x-1 bg-slate-50/70 px-1.5 py-0.5 rounded border border-slate-150">
-                          <span className="font-bold text-slate-900 text-xs shrink-0">({opt.label})</span>
-                          <div className="text-xs leading-snug">
+                        <div key={opt.label} className="flex items-baseline space-x-1.5">
+                          <span className="font-extrabold text-slate-900 text-xs shrink-0 tracking-tight">
+                            ({opt.label})
+                          </span>
+                          <div className="text-xs leading-relaxed font-sans text-slate-800">
                             <MathText text={opt.text} />
                           </div>
                         </div>
@@ -202,20 +224,26 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
 
                 {/* Bottom Row: Scratch Work Area + Final Answer Box */}
                 <div
-                  className={`flex mt-1.5 gap-2 flex-1 min-h-0 ${
+                  className={`flex mt-2 gap-2 flex-1 min-h-0 ${
                     columns === 2 ? 'flex-col' : 'flex-row items-stretch'
                   }`}
                 >
-                  {/* Scratch Work Area (flex-1 so it expands to absorb ALL page height) */}
-                  <div className="border border-slate-200 rounded-sm p-1.5 relative bg-white flex-1 min-h-[42px] flex flex-col justify-between">
-                    <span className="text-[8px] text-slate-400 italic block">
-                      Show your work:
+                  {/* Scratch Work Area with subtle academic dot-grid background */}
+                  <div
+                    className="border border-slate-200 rounded-xs p-2 relative bg-white flex-1 min-h-[44px] flex flex-col justify-between"
+                    style={{
+                      backgroundImage: 'radial-gradient(#cbd5e1 0.75px, transparent 0.75px)',
+                      backgroundSize: '10px 10px',
+                    }}
+                  >
+                    <span className="text-[7.5px] font-extrabold uppercase tracking-widest text-slate-400 bg-white/90 px-1 py-0.2 rounded-2xs inline-block self-start border border-slate-100">
+                      WORK SPACE
                     </span>
                     {isAnswerKey && (
-                      <div className="mt-0.5 space-y-0.5">
+                      <div className="mt-0.5 space-y-0.5 bg-white/95 p-1 rounded-xs border border-blue-100">
                         {worksheet.track_standards !== false && q.standard && (
                           <div className="text-[8px] font-semibold text-purple-800 leading-tight">
-                            Standard: {q.standard} {getStandardDescription(q.standard) ? `(${getStandardDescription(q.standard)})` : ''}
+                            Target: {q.standard} {getStandardDescription(q.standard) ? `(${getStandardDescription(q.standard)})` : ''}
                           </div>
                         )}
                         {q.rubric_notes && (
@@ -229,18 +257,18 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
 
                   {/* FINAL ANSWER BOX (High Contrast for OCR Scanner) */}
                   <div
-                    className={`border-2 border-black rounded-sm bg-white flex flex-col justify-between overflow-hidden shadow-xs shrink-0 ${
+                    className={`border-2 border-slate-900 rounded-xs bg-white flex flex-col justify-between overflow-hidden shadow-2xs shrink-0 ${
                       columns === 2 ? 'h-[74px] w-full' : 'w-52 h-full min-h-[64px]'
                     }`}
                   >
-                    <div className="bg-slate-100 border-b border-slate-300 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-black flex justify-between items-center">
-                      <span>FINAL ANSWER:</span>
+                    <div className="bg-slate-900 text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-widest flex justify-between items-center">
+                      <span>FINAL ANSWER</span>
                     </div>
 
-                    <div className="flex-1 flex items-center justify-center p-1.5">
+                    <div className="flex-1 flex items-center justify-center p-1.5 bg-white">
                       {isAnswerKey ? (
                         <div className="text-base font-bold text-blue-700 font-sans flex items-center space-x-2">
-                          <span className="px-2.5 py-1 bg-blue-100 text-blue-900 rounded font-mono text-base font-extrabold border border-blue-300">
+                          <span className="px-2.5 py-1 bg-blue-50 text-blue-900 rounded-xs font-mono text-base font-black border border-blue-300">
                             {q.correct_answer || '—'}
                           </span>
                           {q.question_type === 'multiple_choice' &&
@@ -251,11 +279,11 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                             )}
                         </div>
                       ) : q.question_type === 'multiple_choice' ? (
-                        /* Clean Bubble Letter Choices for Student to Circle / Fill */
-                        <div className="flex items-center justify-around w-full px-3 py-1">
+                        /* Clean Scantron-Style Bubble Letter Choices */
+                        <div className="flex items-center justify-around w-full px-2 py-1">
                           {['A', 'B', 'C', 'D'].map((letter) => (
                             <div key={letter} className="flex flex-col items-center">
-                              <div className="w-6 h-6 rounded-full border-2 border-slate-500 flex items-center justify-center font-bold text-xs text-slate-800 bg-slate-50 shadow-2xs">
+                              <div className="w-6 h-6 rounded-full border-1.5 border-slate-900 flex items-center justify-center font-bold text-xs text-slate-900 bg-white shadow-2xs">
                                 {letter}
                               </div>
                             </div>
@@ -272,12 +300,12 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
       </div>
 
       {/* FOOTER */}
-      <div className="text-center text-[9px] text-slate-400 border-t border-slate-200 pt-1.5 flex justify-between items-center">
-        <span>Worksheet Maker 2.0 • OCR Alignment Grid</span>
-        <span className="font-mono">
+      <div className="text-center text-[8.5px] uppercase tracking-wider text-slate-400 border-t border-slate-200 pt-1.5 flex justify-between items-center font-medium">
+        <span>Worksheet Maker 2.0 • Form {worksheet.short_code}</span>
+        <span className="font-mono font-bold text-slate-500">
           Page {pageNum} of {worksheet.total_pages || 1}
         </span>
-        <span className="font-mono">Code: {worksheet.short_code}</span>
+        <span>Standardized OCR Assessment Layout</span>
       </div>
     </div>
   );
