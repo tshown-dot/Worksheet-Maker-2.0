@@ -47,64 +47,67 @@ export async function generateWorksheetPDF(
     // Bottom-right
     doc.rect(pageWidth - fiducialOffset - fiducialSize, pageHeight - fiducialOffset - fiducialSize, fiducialSize, fiducialSize, 'F');
 
-    // 2. GENERATE AND DRAW QR CODE (Top-Right: 16mm x 16mm)
+    // 2. GENERATE AND DRAW QR CODE (Compact Top-Right: 13mm x 13mm)
     const qrData = `ASG_${worksheet.short_code}:P${pageNum}`;
     const qrDataUrl = await QRCode.toDataURL(qrData, {
       margin: 1,
-      width: 120,
+      width: 100,
       errorCorrectionLevel: 'M',
     });
-    const qrX = pageWidth - margin - 22;
-    const qrY = margin + 3;
-    doc.addImage(qrDataUrl, 'PNG', qrX, qrY, 18, 18);
+    const qrX = pageWidth - margin - 18;
+    const qrY = margin + 1;
+    doc.addImage(qrDataUrl, 'PNG', qrX, qrY, 13, 13);
 
     // QR Label below code
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
+    doc.setFontSize(6);
     doc.setTextColor(80, 80, 80);
-    doc.text(`${worksheet.short_code} • P${pageNum}`, qrX + 9, qrY + 21, { align: 'center' });
+    doc.text(`${worksheet.short_code} • P${pageNum}`, qrX + 6.5, qrY + 16, { align: 'center' });
 
-    // 3. DRAW PAGE HEADER
-    let currentY = margin + 4;
+    // 3. DRAW PAGE HEADER (Compact & Space-Saving)
+    let currentY = margin + 1;
 
     // Watermark/Header banner if Answer Key
     if (isAnswerKey) {
       doc.setFillColor(239, 246, 255);
       doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(0.6);
-      doc.roundedRect(margin + 5, currentY - 2, 75, 7, 1.5, 1.5, 'FD');
+      doc.setLineWidth(0.5);
+      doc.roundedRect(margin + 5, currentY - 1, 65, 5.5, 1, 1, 'FD');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setTextColor(29, 78, 216);
       doc.text('TEACHER MASTER / ANSWER KEY', margin + 7, currentY + 3);
-      currentY += 8;
+      currentY += 6.5;
     }
 
-    // Assignment Type Badge (Theme Preset)
-    renderThemeBadge(doc, worksheet.style_preset, margin + 5, currentY);
-    currentY += 6;
-
-    // Worksheet Title
+    // Worksheet Title + Badge on same line / lockup
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
+    doc.setFontSize(11);
     doc.setTextColor(17, 24, 39);
-    doc.text(worksheet.title, margin + 5, currentY);
-    currentY += 5;
+    const maxTitleWidth = qrX - margin - 10 - 36;
+    let displayTitle = worksheet.title || 'Untitled Math Worksheet';
+    if (doc.getTextWidth(displayTitle) > maxTitleWidth) {
+      displayTitle = doc.splitTextToSize(displayTitle, maxTitleWidth)[0] + '...';
+    }
+    doc.text(displayTitle, margin + 5, currentY + 3);
+    const titleWidth = doc.getTextWidth(displayTitle);
+    renderThemeBadge(doc, worksheet.style_preset, margin + 8 + titleWidth, currentY + 3);
+    currentY += 4.5;
 
     // Subject & Grade Level Subtitle
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(7.5);
     doc.setTextColor(107, 114, 128);
-    doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin + 5, currentY);
-    currentY += 5;
+    doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin + 5, currentY + 2.5);
+    currentY += 4;
 
     // Student Info Bar & 3-Digit ID Grid
     renderStudentHeader(doc, worksheet, margin + 5, currentY, pageWidth);
-    currentY += 16;
+    currentY += 10.5;
 
     // Decorative Separator Line
     doc.setDrawColor(209, 213, 219);
-    doc.setLineWidth(0.5);
+    doc.setLineWidth(0.4);
     if (worksheet.style_preset === 'pod') {
       doc.setLineDashPattern([2, 2], 0);
     } else {
@@ -112,7 +115,7 @@ export async function generateWorksheetPDF(
     }
     doc.line(margin + 5, currentY, pageWidth - margin - 5, currentY);
     doc.setLineDashPattern([], 0); // reset
-    currentY += 4;
+    currentY += 3;
 
     // 4. DRAW QUESTIONS GRID (Dynamically fills entire page height in 1 or 2 columns)
     const columns = worksheet.columns || 1;
@@ -172,37 +175,37 @@ export async function generateWorksheetPDF(
 // ----------------------------------------------------------------------------
 function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number) {
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.5);
 
   if (preset === 'pod') {
     doc.setFillColor(243, 244, 246);
     doc.setDrawColor(156, 163, 175);
     doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3, 38, 5, 1, 1, 'FD');
+    doc.roundedRect(x, y - 3.2, 32, 4.2, 0.8, 0.8, 'FD');
     doc.setTextColor(55, 65, 81);
-    doc.text('★ PROBLEM OF THE DAY', x + 2, y + 0.5);
+    doc.text('★ PROBLEM OF DAY', x + 1.5, y - 0.2);
   } else if (preset === 'quiz') {
     doc.setFillColor(254, 242, 242);
     doc.setDrawColor(239, 68, 68);
-    doc.setLineWidth(0.4);
-    doc.roundedRect(x, y - 3, 34, 5, 1, 1, 'FD');
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y - 3.2, 16, 4.2, 0.8, 0.8, 'FD');
     doc.setTextColor(185, 28, 28);
-    doc.text('ASSESSMENT / QUIZ', x + 2, y + 0.5);
+    doc.text('QUIZ', x + 1.5, y - 0.2);
   } else if (preset === 'exit_ticket') {
     doc.setFillColor(240, 253, 244);
     doc.setDrawColor(34, 197, 94);
-    doc.setLineWidth(0.4);
-    doc.roundedRect(x, y - 3, 26, 5, 1, 1, 'FD');
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y - 3.2, 22, 4.2, 0.8, 0.8, 'FD');
     doc.setTextColor(21, 128, 61);
-    doc.text('EXIT TICKET', x + 2, y + 0.5);
+    doc.text('EXIT TICKET', x + 1.5, y - 0.2);
   } else {
     // Homework (clean solid)
     doc.setFillColor(249, 250, 251);
     doc.setDrawColor(209, 213, 219);
     doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3, 36, 5, 1, 1, 'FD');
+    doc.roundedRect(x, y - 3.2, 22, 4.2, 0.8, 0.8, 'FD');
     doc.setTextColor(75, 85, 99);
-    doc.text('HOMEWORK PRACTICE', x + 2, y + 0.5);
+    doc.text('HOMEWORK', x + 1.5, y - 0.2);
   }
 }
 
@@ -217,41 +220,41 @@ function renderStudentHeader(
   pageWidth: number
 ) {
   const idDigits = worksheet.student_id_digits || 3;
-  const boxWidth = 9;
-  const boxHeight = 11;
+  const boxWidth = 7;
+  const boxHeight = 7.5;
 
   // Name, Date, Period blanks
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(75, 85, 99);
 
-  doc.text('Name: _______________________________', x, y + 5);
-  doc.text('Period: _____', x + 68, y + 5);
-  doc.text('Date: _________', x + 92, y + 5);
+  doc.text('Name: _______________________________', x, y + 4.5);
+  doc.text('Period: _____', x + 64, y + 4.5);
+  doc.text('Date: _________', x + 86, y + 4.5);
 
   // Student ID Block at Right (before QR code)
-  const idStartX = pageWidth - 42 - (idDigits * boxWidth);
+  const idStartX = pageWidth - 36 - (idDigits * boxWidth);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.8);
   doc.setTextColor(31, 41, 55);
-  doc.text('STUDENT ID #:', idStartX, y + 1);
+  doc.text('STUDENT ID:', idStartX, y + 1.5);
 
   // Draw 3 distinct digit boxes
   doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.5);
+  doc.setLineWidth(0.4);
   doc.setFillColor(255, 255, 255);
 
   for (let i = 0; i < idDigits; i++) {
     const curBoxX = idStartX + i * boxWidth;
-    doc.rect(curBoxX, y + 3, boxWidth - 1, boxHeight, 'S');
+    doc.rect(curBoxX, y + 2.5, boxWidth - 1, boxHeight, 'S');
 
-    // Light guideline cross or dashed center in box
+    // Light guideline dashed/solid center in box
     doc.setDrawColor(229, 231, 235);
     doc.setLineWidth(0.2);
-    doc.line(curBoxX + 1, y + 3 + (boxHeight / 2), curBoxX + boxWidth - 2, y + 3 + (boxHeight / 2));
+    doc.line(curBoxX + 0.5, y + 2.5 + (boxHeight / 2), curBoxX + boxWidth - 1.5, y + 2.5 + (boxHeight / 2));
     doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.5);
+    doc.setLineWidth(0.4);
   }
 }
 

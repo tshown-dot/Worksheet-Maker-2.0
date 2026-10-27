@@ -55,66 +55,63 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
       <div className="absolute bottom-[8mm] left-[8mm] w-[6mm] h-[6mm] bg-black" />
       <div className="absolute bottom-[8mm] right-[8mm] w-[6mm] h-[6mm] bg-black" />
 
-      {/* TOP HEADER SECTION */}
+      {/* TOP HEADER SECTION (Compact & Space-Saving) */}
       <div className="w-full">
         {/* Answer Key Alert Banner */}
         {isAnswerKey && (
-          <div className="mb-2 bg-blue-50 border border-blue-400 text-blue-800 text-[11px] font-bold px-3 py-1 rounded-sm uppercase tracking-wide inline-block">
+          <div className="mb-1 bg-blue-50 border border-blue-400 text-blue-800 text-[9.5px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wide inline-block">
             ★ Teacher Master / Answer Key
           </div>
         )}
 
-        <div className="flex items-start justify-between">
-          <div className="flex-1 pr-4">
-            {/* Theme Badge */}
-            <div className="mb-1">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 pr-3">
+            <div className="flex items-center space-x-2 flex-wrap">
+              <h1 className="text-base font-extrabold text-slate-900 tracking-tight leading-none">
+                {worksheet.title || 'Untitled Math Worksheet'}
+              </h1>
               {worksheet.style_preset === 'pod' && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 rounded-sm">
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-300 rounded-sm">
                   ★ Problem of the Day
                 </span>
               )}
               {worksheet.style_preset === 'quiz' && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded-sm">
-                  Assessment / Quiz
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 bg-red-50 text-red-700 border border-red-200 rounded-sm">
+                  Quiz
                 </span>
               )}
               {worksheet.style_preset === 'exit_ticket' && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-sm">
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-sm">
                   Exit Ticket
                 </span>
               )}
-              {worksheet.style_preset === 'homework' && (
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-sm">
-                  Homework Practice
-                </span>
-              )}
             </div>
-
-            {/* Title & Subject */}
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              {worksheet.title || 'Untitled Math Worksheet'}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">
               {worksheet.subject} • {worksheet.grade_level}
             </p>
           </div>
 
-          {/* QR Code Block */}
-          <div className="flex flex-col items-center shrink-0">
+          {/* QR Code Block (Compact) */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <div className="text-right">
+              <span className="text-[9px] font-mono font-bold text-slate-700 block leading-tight">
+                {worksheet.short_code}
+              </span>
+              <span className="text-[8px] font-mono text-slate-400 block leading-tight">
+                P{pageNum} of {worksheet.total_pages || 1}
+              </span>
+            </div>
             {qrUrl ? (
-              <img src={qrUrl} alt="QR Code" className="w-14 h-14" />
+              <img src={qrUrl} alt="QR Code" className="w-9 h-9" />
             ) : (
-              <div className="w-14 h-14 bg-slate-100 border border-slate-300" />
+              <div className="w-9 h-9 bg-slate-100 border border-slate-300" />
             )}
-            <span className="text-[9px] font-mono font-bold text-slate-600 mt-0.5">
-              {worksheet.short_code} • P{pageNum}
-            </span>
           </div>
         </div>
 
-        {/* Student Name / Period / Date / 3-Digit ID Bar */}
-        <div className="mt-3 pt-2 border-t border-slate-300 flex items-center justify-between text-xs text-slate-800">
-          <div className="flex items-center space-x-5">
+        {/* Compact Student Name / Period / Date / 3-Digit ID Bar */}
+        <div className="mt-1 pt-1 border-t border-slate-300 flex items-center justify-between text-[11px] text-slate-800">
+          <div className="flex items-center space-x-4">
             <span>Name: _______________________________</span>
             <span>Period: _____</span>
             <span>Date: _________</span>
@@ -122,31 +119,21 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
 
           {/* Standardized 3-Digit Student ID Box */}
           <div className="flex items-center space-x-1.5">
-            <span className="text-[10px] font-bold text-slate-900 uppercase tracking-wider">
-              Student ID:
+            <span className="text-[9.5px] font-bold text-slate-900 uppercase tracking-wider">
+              ID:
             </span>
             <div className="flex space-x-1">
               {Array.from({ length: worksheet.student_id_digits || 3 }).map((_, i) => (
                 <div
                   key={i}
-                  className="w-5 h-6 border-2 border-black bg-white flex items-center justify-center relative"
+                  className="w-4.5 h-5 border-2 border-black bg-white flex items-center justify-center relative"
                 >
-                  {/* Faint middle guideline for student digit alignment */}
                   <div className="w-full border-t border-dashed border-slate-200 pointer-events-none" />
                 </div>
               ))}
             </div>
           </div>
         </div>
-
-        {/* Decorative Divider */}
-        <div
-          className={`mt-2 border-b ${
-            worksheet.style_preset === 'pod'
-              ? 'border-dashed border-slate-300'
-              : 'border-slate-300'
-          }`}
-        />
       </div>
 
       {/* QUESTIONS GRID (Fills 100% of vertical page space with auto-stretching cards) */}
