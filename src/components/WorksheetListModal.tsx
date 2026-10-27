@@ -17,6 +17,7 @@ interface WorksheetListModalProps {
   onClose: () => void;
   onSelectWorksheet: (ws: Worksheet) => void;
   onNew: () => void;
+  teacherId?: string | null;
 }
 
 export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
@@ -24,6 +25,7 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
   onClose,
   onSelectWorksheet,
   onNew,
+  teacherId,
 }) => {
   const [worksheets, setWorksheets] = useState<any[]>([]);
   const [folders, setFolders] = useState<string[]>([]);
@@ -38,22 +40,32 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
     if (isOpen) {
       loadData();
     }
-  }, [isOpen]);
+  }, [isOpen, teacherId]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
       // 1. Fetch folders
-      const { data: folderData } = await supabase.from('folders').select('name').order('name');
+      let folderQuery = supabase.from('folders').select('name').order('name');
+      if (teacherId) {
+        folderQuery = folderQuery.or(`teacher_id.eq.${teacherId},teacher_id.is.null`);
+      }
+      const { data: folderData } = await folderQuery;
       const folderList = folderData?.map((f: any) => f.name) || [];
       setFolders(folderList);
 
       // 2. Fetch worksheets
-      const { data: wsData, error: wsError } = await supabase
+      let wsQuery = supabase
         .from('worksheets')
-        .select('id, short_code, title, subject, grade_level, folder_name, style_preset, total_pages, student_id_digits, layout_config, created_at')
+        .select('id, short_code, title, subject, grade_level, folder_name, style_preset, total_pages, student_id_digits, layout_config, created_at, teacher_id')
         .order('created_at', { ascending: false });
+
+      if (teacherId) {
+        wsQuery = wsQuery.or(`teacher_id.eq.${teacherId},teacher_id.is.null`);
+      }
+
+      const { data: wsData, error: wsError } = await wsQuery;
 
       if (wsError) throw wsError;
       setWorksheets(wsData || []);
@@ -69,7 +81,7 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
     if (!newFolderName.trim()) return;
     const name = newFolderName.trim();
     try {
-      await supabase.from('folders').insert({ name });
+      await supabase.from('folders').insert({ name, teacher_id: teacherId || null });
       setFolders((prev) => [...prev, name].sort());
       setSelectedFolder(name);
       setNewFolderName('');

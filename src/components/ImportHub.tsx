@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Question, StylePreset } from '../types/worksheet';
 import { supabase } from '../lib/supabase';
+import { generateWorksheetPDF } from '../utils/pdfGenerator';
+import { saveWorksheetToDrive } from '../utils/googleDrive';
 import { 
   Sparkles, 
   FileText, 
@@ -16,6 +18,11 @@ import {
   Plus
 } from 'lucide-react';
 
+interface AssignmentGroup {
+  name: string;
+  items: any[];
+}
+
 interface ImportHubProps {
   onImportQuestions: (
     questions: Question[],
@@ -23,17 +30,16 @@ interface ImportHubProps {
   ) => void;
   onOpenBlank: () => void;
   onOpenSavedList: () => void;
-}
-
-interface AssignmentGroup {
-  name: string;
-  items: any[];
+  teacherId?: string | null;
+  providerToken?: string | null;
 }
 
 export const ImportHub: React.FC<ImportHubProps> = ({
   onImportQuestions,
   onOpenBlank,
   onOpenSavedList,
+  teacherId,
+  providerToken,
 }) => {
   const [inputText, setInputText] = useState('');
   const [copiedType, setCopiedType] = useState<'convert' | 'generate' | null>(null);
@@ -74,7 +80,7 @@ export const ImportHub: React.FC<ImportHubProps> = ({
     const trimmed = newFolderName.trim();
     if (!trimmed) return;
     try {
-      await supabase.from('folders').insert({ name: trimmed });
+      await supabase.from('folders').insert({ name: trimmed, teacher_id: teacherId || null });
     } catch {}
     if (!folders.includes(trimmed)) {
       setFolders((prev) => [...prev, trimmed].sort());
@@ -341,6 +347,7 @@ RULES:
             subject: 'Mathematics',
             grade_level: '6th Grade',
             folder_name: selectedFolder,
+            teacher_id: teacherId || null,
             style_preset: isPod ? 'pod' : 'homework',
             total_pages: totalPages,
             columns: 2,
@@ -370,9 +377,43 @@ RULES:
           }));
           await supabase.from('questions').insert(qPayload);
         }
+
+        // Upload to Google Drive if OAuth session is present
+        if (providerToken) {
+          try {
+            const tempWs: any = {
+              id: wsData?.id || '',
+              short_code: code,
+              title: group.name,
+              subject: 'Mathematics',
+              grade_level: '6th Grade',
+              folder_name: selectedFolder,
+              style_preset: isPod ? 'pod' : 'homework',
+              total_pages: totalPages,
+              columns: 2,
+              spacing: 'balanced',
+              student_id_digits: 3,
+              track_standards: true,
+              layout_config: { border_style: 'solid', header_style: 'clean', show_dot_grid: false, columns: 2, spacing: 'balanced', show_honor_pledge: false, track_standards: true },
+              questions,
+            };
+            const sDoc = await generateWorksheetPDF(tempWs, { isAnswerKey: false });
+            const kDoc = await generateWorksheetPDF(tempWs, { isAnswerKey: true });
+            const baseName = `${code}_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            await saveWorksheetToDrive(
+              providerToken,
+              selectedFolder,
+              sDoc.output('blob'),
+              kDoc.output('blob'),
+              baseName
+            );
+          } catch (dErr) {
+            console.warn('Batch Drive upload warning:', dErr);
+          }
+        }
       }
 
-      setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments successfully saved to "${selectedFolder}"!`);
+      setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments successfully saved to "${selectedFolder}"${providerToken ? ' and Google Drive' : ''}!`);
       setTimeout(() => {
         setIsSavingAll(false);
         // Load the first one

@@ -10,6 +10,7 @@ import { ImportHub } from './components/ImportHub';
 import { AIImportModal } from './components/AIImportModal';
 import { WorksheetListModal } from './components/WorksheetListModal';
 import { generateWorksheetPDF } from './utils/pdfGenerator';
+import { saveWorksheetToDrive } from './utils/googleDrive';
 import { Plus, Eye, Edit3, Sparkles, ArrowLeft } from 'lucide-react';
 
 const INITIAL_WORKSHEET: Worksheet = {
@@ -47,12 +48,57 @@ export function App() {
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [printIsAnswerKey, setPrintIsAnswerKey] = useState<boolean>(false);
 
+  // Authentication & Google Drive OAuth session
+  const [user, setUser] = useState<any | null>(null);
+  const [session, setSession] = useState<any | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   useEffect(() => {
     if (!worksheet.short_code) {
       const code = 'M' + Math.floor(1000 + Math.random() * 9000);
       setWorksheet((prev) => ({ ...prev, short_code: code }));
     }
   }, []);
+
+  const handleSignInWithGoogle = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + window.location.pathname,
+          scopes: 'https://www.googleapis.com/auth/drive.file',
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      alert('Google Sign-in failed: ' + err.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+  };
 
   const handleUpdateWorksheet = (updated: Partial<Worksheet>) => {
     setWorksheet((prev) => ({ ...prev, ...updated }));
@@ -173,6 +219,7 @@ export function App() {
         subject: worksheet.subject,
         grade_level: worksheet.grade_level,
         folder_name: worksheet.folder_name || 'General',
+        teacher_id: user?.id || null,
         style_preset: worksheet.style_preset,
         total_pages: worksheet.total_pages,
         columns: worksheet.columns || 2,
@@ -226,7 +273,31 @@ export function App() {
         if (qError) throw qError;
       }
 
-      setSaveStatusText('Saved to Supabase!');
+      // Auto-save to Google Drive if signed in with Google OAuth
+      let driveSaved = false;
+      if (session?.provider_token) {
+        try {
+          setSaveStatusText('Saving PDFs to Google Drive...');
+          const studentDoc = await generateWorksheetPDF(worksheet, { isAnswerKey: false });
+          const keyDoc = await generateWorksheetPDF(worksheet, { isAnswerKey: true });
+          const studentBlob = studentDoc.output('blob');
+          const keyBlob = keyDoc.output('blob');
+          const baseName = `${worksheet.short_code}_${worksheet.title.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+          await saveWorksheetToDrive(
+            session.provider_token,
+            worksheet.folder_name || 'General',
+            studentBlob,
+            keyBlob,
+            baseName
+          );
+          driveSaved = true;
+        } catch (driveErr: any) {
+          console.warn('Google Drive auto-save error:', driveErr);
+        }
+      }
+
+      setSaveStatusText(driveSaved ? 'Saved to Supabase & Google Drive!' : 'Saved to Supabase!');
       setTimeout(() => setSaveStatusText(''), 3000);
     } catch (err: any) {
       console.error(err);
@@ -291,6 +362,9 @@ export function App() {
         onDownloadKeyPDF={handleDownloadKeyPDF}
         isSaving={isSaving}
         saveStatusText={saveStatusText}
+        user={user}
+        onSignInWithGoogle={handleSignInWithGoogle}
+        onSignOut={handleSignOut}
       />
 
       {/* VIEW MODE 1: THE LEADING IMPORT & CONVERSION HUB */}
@@ -300,6 +374,8 @@ export function App() {
             onImportQuestions={handleHubImport}
             onOpenBlank={() => setViewMode('editor')}
             onOpenSavedList={() => setIsListModalOpen(true)}
+            teacherId={user?.id}
+            providerToken={session?.provider_token}
           />
         </main>
       ) : (
@@ -463,6 +539,7 @@ export function App() {
       <WorksheetListModal
         isOpen={isListModalOpen}
         onClose={() => setIsListModalOpen(false)}
+        teacherId={user?.id}
         onSelectWorksheet={(ws) => {
           setWorksheet(ws);
           setViewMode('editor');
