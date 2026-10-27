@@ -171,6 +171,17 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
     }
   };
 
+  const handleMoveWorksheetFolder = async (wsId: string, targetFolder: string, e: React.ChangeEvent<HTMLSelectElement>) => {
+    e.stopPropagation();
+    try {
+      const { error } = await supabase.from('worksheets').update({ folder_name: targetFolder }).eq('id', wsId);
+      if (error) throw error;
+      setWorksheets((prev) => prev.map((w) => (w.id === wsId ? { ...w, folder_name: targetFolder } : w)));
+    } catch (err: any) {
+      alert('Move failed: ' + err.message);
+    }
+  };
+
   // Filter worksheets by folder and search
   const filteredWorksheets = worksheets.filter((ws) => {
     const matchesFolder = selectedFolder === 'ALL' || (ws.folder_name || 'General') === selectedFolder;
@@ -336,21 +347,37 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
 
           {/* WORKSHEETS LIST */}
           <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-3 bg-white">
-            {/* Mobile Folder Selector */}
-            <div className="sm:hidden mb-3">
-              <label className="text-xs font-bold text-slate-600 block mb-1">Filter by Folder:</label>
-              <select
-                value={selectedFolder}
-                onChange={(e) => setSelectedFolder(e.target.value)}
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-300 rounded-lg"
+            {/* Quick Folder Navigation Pills */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-2 border-b border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedFolder('ALL')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition ${
+                  selectedFolder === 'ALL'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
               >
-                <option value="ALL">All Worksheets ({worksheets.length})</option>
-                {folders.map((f) => (
-                  <option key={f} value={f}>
-                    📁 {f}
-                  </option>
-                ))}
-              </select>
+                All ({worksheets.length})
+              </button>
+              {folders.map((f) => {
+                const count = worksheets.filter((w) => (w.folder_name || 'General') === f).length;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setSelectedFolder(f)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition flex items-center space-x-1.5 ${
+                      selectedFolder === f
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>📁 {f}</span>
+                    <span className="text-[10px] opacity-80 font-bold">({count})</span>
+                  </button>
+                );
+              })}
             </div>
 
             {loading && worksheets.length === 0 ? (
@@ -372,16 +399,16 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
                 <div
                   key={ws.id}
                   onClick={() => handleLoad(ws.id)}
-                  className="group p-4 bg-slate-50 hover:bg-blue-50/40 border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer transition flex items-center justify-between shadow-xs"
+                  className="group p-4 bg-slate-50 hover:bg-blue-50/40 border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
                 >
-                  <div>
+                  <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1.5 flex-wrap gap-1">
                       <span className="font-mono text-xs font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
                         {ws.short_code}
                       </span>
                       {ws.folder_name && (
                         <span className="text-xs font-medium px-2 py-0.5 bg-amber-100/70 text-amber-900 border border-amber-200 rounded-md flex items-center space-x-1">
-                          <Folder className="w-3 h-3 text-amber-600 inline" />
+                          <Folder className="w-3 h-3 text-amber-600 inline shrink-0" />
                           <span>{ws.folder_name}</span>
                         </span>
                       )}
@@ -405,18 +432,41 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  {/* Actions: Move to Folder + Delete + Open */}
+                  <div className="flex items-center space-x-2 self-end sm:self-center" onClick={(e) => e.stopPropagation()}>
+                    {/* Move to Folder Dropdown */}
+                    <div className="flex items-center space-x-1">
+                      <select
+                        value={ws.folder_name || 'General'}
+                        onChange={(e) => handleMoveWorksheetFolder(ws.id, e.target.value, e)}
+                        className="text-xs bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-700 font-medium hover:border-amber-400 focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                        title="Move to another folder"
+                      >
+                        {folders.map((f) => (
+                          <option key={f} value={f}>
+                            📁 {f}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     <button
                       type="button"
                       onClick={(e) => handleDelete(ws.id, e)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                       title="Delete worksheet"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 flex items-center justify-center text-slate-500 transition">
+
+                    <button
+                      type="button"
+                      onClick={() => handleLoad(ws.id)}
+                      className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 flex items-center justify-center text-slate-500 transition shadow-2xs"
+                      title="Open worksheet"
+                    >
                       <ArrowRight className="w-4 h-4" />
-                    </div>
+                    </button>
                   </div>
                 </div>
               ))

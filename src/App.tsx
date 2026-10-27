@@ -123,12 +123,13 @@ export function App() {
   // When questions are imported from the leading ImportHub
   const handleHubImport = (
     imported: Question[],
-    metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2 }
+    metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2; folderName?: string }
   ) => {
     setWorksheet((prev) => ({
       ...prev,
       title: metadata?.title || prev.title,
       style_preset: metadata?.stylePreset || prev.style_preset,
+      folder_name: metadata?.folderName || prev.folder_name,
       total_pages: metadata?.totalPages || (imported.length > 6 ? 2 : 1),
       questions: imported,
     }));

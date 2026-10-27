@@ -35,32 +35,7 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
     .sort((a, b) => a.order_index - b.order_index);
 
   const columns = worksheet.columns || 1;
-  const spacing = worksheet.spacing || 'balanced';
-
-  // Height calculations based on spacing mode
-  const getCardHeightClass = () => {
-    if (columns === 2) {
-      if (spacing === 'compact') return 'min-h-[145px]';
-      if (spacing === 'spacious') return 'min-h-[210px]';
-      return 'min-h-[175px]';
-    } else {
-      if (spacing === 'compact') return 'min-h-[105px]';
-      if (spacing === 'spacious') return 'min-h-[170px]';
-      return 'min-h-[135px]';
-    }
-  };
-
-  const getWorkAreaHeightClass = () => {
-    if (columns === 2) {
-      if (spacing === 'compact') return 'h-16';
-      if (spacing === 'spacious') return 'h-28';
-      return 'h-20';
-    } else {
-      if (spacing === 'compact') return 'h-14';
-      if (spacing === 'spacious') return 'h-28';
-      return 'h-20';
-    }
-  };
+  const rowCount = columns === 2 ? Math.max(Math.ceil(pageQuestions.length / 2), 1) : Math.max(pageQuestions.length, 1);
 
   return (
     <div
@@ -174,28 +149,31 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
         />
       </div>
 
-      {/* QUESTIONS GRID (Supports 1 Column or 2 Columns) */}
-      <div className="flex-1 my-3 flex flex-col justify-between">
+      {/* QUESTIONS GRID (Fills 100% of vertical page space with auto-stretching cards) */}
+      <div className="flex-1 my-2 overflow-hidden flex flex-col">
         {pageQuestions.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm italic">
             No questions assigned to Page {pageNum}.
           </div>
         ) : (
           <div
-            className={`grid gap-3 ${
+            className={`grid gap-2.5 flex-1 h-full ${
               columns === 2 ? 'grid-cols-2' : 'grid-cols-1'
             }`}
+            style={{
+              gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))`,
+            }}
           >
             {pageQuestions.map((q) => (
               <div
                 key={q.id}
-                className={`rounded border p-2.5 flex flex-col justify-between bg-white ${getCardHeightClass()} ${
+                className={`rounded border p-2 flex flex-col justify-between bg-white h-full overflow-hidden ${
                   worksheet.style_preset === 'pod'
                     ? 'border-dashed border-slate-300'
                     : 'border-slate-300'
                 }`}
               >
-                {/* Question Header & Rendered Math Prompt */}
+                {/* Question Header, Rendered Prompt & Multiple Choice Options */}
                 <div>
                   <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-100">
                     <div className="flex items-center space-x-1.5 flex-wrap">
@@ -216,23 +194,33 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                   </div>
 
                   {/* Math text rendered via KaTeX */}
-                  <div className="text-xs text-slate-900 leading-relaxed font-sans mt-1">
+                  <div className="text-xs text-slate-900 leading-relaxed font-sans mt-0.5">
                     <MathText text={q.prompt} />
                   </div>
+
+                  {/* MULTIPLE CHOICE OPTIONS: Rendered in the problem body */}
+                  {q.question_type === 'multiple_choice' && q.options && q.options.length > 0 && (
+                    <div className="grid grid-cols-2 gap-x-2.5 gap-y-1 my-1.5 pt-0.5 text-xs text-slate-800">
+                      {q.options.map((opt) => (
+                        <div key={opt.label} className="flex items-baseline space-x-1 bg-slate-50/70 px-1.5 py-0.5 rounded border border-slate-150">
+                          <span className="font-bold text-slate-900 text-xs shrink-0">({opt.label})</span>
+                          <div className="text-xs leading-snug">
+                            <MathText text={opt.text} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Bottom Row: Work Area + Final Answer Box */}
+                {/* Bottom Row: Scratch Work Area + Final Answer Box */}
                 <div
-                  className={`flex mt-2 gap-2 ${
+                  className={`flex mt-1.5 gap-2 flex-1 min-h-0 ${
                     columns === 2 ? 'flex-col' : 'flex-row items-stretch'
                   }`}
                 >
-                  {/* Scratch Work Area */}
-                  <div
-                    className={`border border-slate-200 rounded-sm p-1 relative bg-white ${
-                      columns === 2 ? getWorkAreaHeightClass() : 'flex-1 ' + getWorkAreaHeightClass()
-                    }`}
-                  >
+                  {/* Scratch Work Area (flex-1 so it expands to absorb ALL page height) */}
+                  <div className="border border-slate-200 rounded-sm p-1.5 relative bg-white flex-1 min-h-[42px] flex flex-col justify-between">
                     <span className="text-[8px] text-slate-400 italic block">
                       Show your work:
                     </span>
@@ -255,7 +243,7 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                   {/* FINAL ANSWER BOX (High Contrast for OCR Scanner) */}
                   <div
                     className={`border-2 border-black rounded-sm bg-white flex flex-col justify-between overflow-hidden shadow-xs shrink-0 ${
-                      columns === 2 ? 'h-12 w-full' : 'w-44 ' + getWorkAreaHeightClass()
+                      columns === 2 ? 'h-13 w-full' : 'w-48 h-full min-h-[50px]'
                     }`}
                   >
                     <div className="bg-slate-100 border-b border-slate-300 px-1.5 py-0.5 text-[8.5px] font-bold uppercase tracking-wider text-black flex justify-between items-center">
@@ -264,14 +252,25 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
 
                     <div className="flex-1 flex items-center justify-center p-1">
                       {isAnswerKey ? (
-                        <div className="text-sm font-bold text-blue-700 font-sans">
-                          <MathText text={q.correct_answer || '—'} />
+                        <div className="text-sm font-bold text-blue-700 font-sans flex items-center space-x-1.5">
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded font-mono text-sm font-extrabold border border-blue-300">
+                            {q.correct_answer || '—'}
+                          </span>
+                          {q.question_type === 'multiple_choice' &&
+                            q.options?.find((o) => o.label.toUpperCase() === q.correct_answer?.trim().toUpperCase()) && (
+                              <span className="text-[10px] text-blue-800 font-medium truncate max-w-[130px]">
+                                {q.options.find((o) => o.label.toUpperCase() === q.correct_answer?.trim().toUpperCase())?.text}
+                              </span>
+                            )}
                         </div>
-                      ) : q.question_type === 'multiple_choice' && q.options?.length ? (
-                        <div className="text-[8.5px] text-slate-700 space-y-0.5 w-full font-medium">
-                          {q.options.slice(0, 4).map((opt) => (
-                            <div key={opt.label}>
-                              [{opt.label}] {opt.text}
+                      ) : q.question_type === 'multiple_choice' ? (
+                        /* Clean Bubble Letter Choices for Student to Circle / Fill */
+                        <div className="flex items-center justify-around w-full px-2 py-0.5">
+                          {['A', 'B', 'C', 'D'].map((letter) => (
+                            <div key={letter} className="flex flex-col items-center">
+                              <div className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center font-bold text-[11px] text-slate-800 bg-slate-50">
+                                {letter}
+                              </div>
                             </div>
                           ))}
                         </div>

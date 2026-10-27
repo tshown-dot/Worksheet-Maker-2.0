@@ -114,20 +114,38 @@ export async function generateWorksheetPDF(
     doc.setLineDashPattern([], 0); // reset
     currentY += 4;
 
-    // 4. DRAW QUESTIONS GRID
-    const availableHeight = pageHeight - currentY - margin - 10;
-    const qCount = Math.max(pageQuestions.length, 1);
-    const questionCardHeight = Math.min(Math.floor(availableHeight / qCount) - 3, 58);
+    // 4. DRAW QUESTIONS GRID (Dynamically fills entire page height in 1 or 2 columns)
+    const columns = worksheet.columns || 1;
+    const availableHeight = pageHeight - currentY - margin - 8;
+    const totalQ = pageQuestions.length;
+    const rowCount = columns === 2 ? Math.max(Math.ceil(totalQ / 2), 1) : Math.max(totalQ, 1);
+    const cardGap = 3;
+    const questionCardHeight = (availableHeight - (rowCount - 1) * cardGap) / rowCount;
+
+    const usableWidth = pageWidth - (margin * 2) - 10;
+    const colGap = 4;
+    const cardWidth = columns === 2 ? (usableWidth - colGap) / 2 : usableWidth;
 
     pageQuestions.forEach((q, idx) => {
-      const qY = currentY + idx * (questionCardHeight + 3);
+      let qX = margin + 5;
+      let qY = currentY;
+
+      if (columns === 2) {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        qX = margin + 5 + col * (cardWidth + colGap);
+        qY = currentY + row * (questionCardHeight + cardGap);
+      } else {
+        qY = currentY + idx * (questionCardHeight + cardGap);
+      }
+
       renderQuestionCard(
         doc,
         q,
         qY,
         questionCardHeight,
-        margin + 5,
-        pageWidth - (margin * 2) - 10,
+        qX,
+        cardWidth,
         worksheet.style_preset,
         isAnswerKey,
         worksheet.track_standards !== false
@@ -304,21 +322,64 @@ function renderQuestionCard(
   doc.setFontSize(9);
   doc.setTextColor(31, 41, 55);
 
+  const is2Col = width < 120;
+
   // Wrap prompt text cleanly
   const promptMaxWidth = width - 8;
   const promptLines = doc.splitTextToSize(q.prompt, promptMaxWidth);
-  doc.text(promptLines, x + 3, y + headerHeight + 4.5);
+  doc.text(promptLines, x + 3, y + headerHeight + 4.2);
 
-  // 4. Calculate Zones: Scratch Work Area (Left) vs Final Answer Box (Right)
-  const workAreaY = y + headerHeight + 3 + (promptLines.length * 4) + 1;
-  const workAreaHeight = Math.max(y + height - workAreaY - 2, 14);
+  let promptBottomY = y + headerHeight + 3.2 + (promptLines.length * 3.8);
 
-  const answerBoxWidth = 52;
-  const answerBoxHeight = Math.min(workAreaHeight - 1, 26);
-  const answerBoxX = x + width - answerBoxWidth - 3;
-  const answerBoxY = y + height - answerBoxHeight - 2.5;
+  // MULTIPLE CHOICE OPTIONS: Rendered in body under prompt
+  if (q.question_type === 'multiple_choice' && q.options && q.options.length > 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(31, 41, 55);
+    const halfWidth = (width - 8) / 2;
+    q.options.forEach((opt, oIdx) => {
+      const col = oIdx % 2;
+      const row = Math.floor(oIdx / 2);
+      const optX = x + 4 + col * halfWidth;
+      const optY = promptBottomY + 2 + (row * 3.8);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`(${opt.label}) `, optX, optY);
+      const labelW = doc.getTextWidth(`(${opt.label}) `);
+      doc.setFont('helvetica', 'normal');
+      const textLine = doc.splitTextToSize(opt.text, halfWidth - labelW - 2)[0] || '';
+      doc.text(textLine, optX + labelW, optY);
+    });
+    const totalOptionRows = Math.ceil(q.options.length / 2);
+    promptBottomY += (totalOptionRows * 3.8) + 1.5;
+  }
 
-  const workBoxWidth = answerBoxX - x - 5;
+  // 4. Calculate Zones: Scratch Work Area vs Final Answer Box
+  const workAreaY = promptBottomY + 1;
+  let workAreaHeight: number;
+  let answerBoxWidth: number;
+  let answerBoxHeight: number;
+  let answerBoxX: number;
+  let answerBoxY: number;
+  let workBoxWidth: number;
+
+  if (is2Col) {
+    // 2-Column: Final Answer Box is a bar across the bottom
+    answerBoxWidth = width - 6;
+    answerBoxHeight = 12;
+    answerBoxX = x + 3;
+    answerBoxY = y + height - answerBoxHeight - 2;
+
+    workBoxWidth = width - 6;
+    workAreaHeight = Math.max(answerBoxY - workAreaY - 1.5, 12);
+  } else {
+    // 1-Column: Work on Left, Answer on Right
+    answerBoxWidth = 50;
+    workAreaHeight = Math.max(y + height - workAreaY - 2.5, 16);
+    answerBoxHeight = workAreaHeight;
+    answerBoxX = x + width - answerBoxWidth - 3;
+    answerBoxY = workAreaY;
+    workBoxWidth = answerBoxX - x - 5;
+  }
 
   // A. WORK SPACE (SCRATCH WORK)
   doc.setDrawColor(220, 225, 232);
@@ -351,33 +412,40 @@ function renderQuestionCard(
 
   // Final Answer Header inside box
   doc.setFillColor(243, 244, 246);
-  doc.rect(answerBoxX, answerBoxY, answerBoxWidth, 5, 'F');
+  doc.rect(answerBoxX, answerBoxY, answerBoxWidth, 4.5, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(0, 0, 0);
-  doc.text('FINAL ANSWER:', answerBoxX + 2, answerBoxY + 3.8);
+  doc.text('FINAL ANSWER:', answerBoxX + 2, answerBoxY + 3.4);
 
-  // Multiple Choice Options (if applicable)
-  if (q.question_type === 'multiple_choice' && q.options && q.options.length > 0) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(55, 65, 81);
-    q.options.forEach((opt, oIdx) => {
-      const optY = answerBoxY + 9 + (oIdx * 4);
-      if (optY < answerBoxY + answerBoxHeight - 1) {
-        doc.text(`[  ] ${opt.label}. ${opt.text}`, answerBoxX + 3, optY);
-      }
-    });
-  }
-
-  // IF ANSWER KEY: Print correct answer in Answer Box in Bold Blue
-  if (isAnswerKey) {
+  // Answer Box Content: Multiple Choice vs Text / Numeric
+  if (q.question_type === 'multiple_choice') {
+    if (isAnswerKey) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(29, 78, 216);
+      doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
+    } else {
+      // 4 clean bubbles for student to bubble/circle
+      const letters = ['A', 'B', 'C', 'D'];
+      const bubbleSpacing = answerBoxWidth / 5;
+      const bubbleY = answerBoxY + (answerBoxHeight / 2) + 2;
+      letters.forEach((letter, bIdx) => {
+        const bx = answerBoxX + (bIdx + 1) * bubbleSpacing;
+        doc.setDrawColor(156, 163, 175);
+        doc.setLineWidth(0.3);
+        doc.circle(bx, bubbleY - 0.5, 2.5, 'S');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        doc.setTextColor(55, 65, 81);
+        doc.text(letter, bx, bubbleY + 0.5, { align: 'center' });
+      });
+    }
+  } else if (isAnswerKey) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(29, 78, 216);
-    doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 3, {
-      align: 'center',
-    });
+    doc.text(q.correct_answer || '', answerBoxX + (answerBoxWidth / 2), answerBoxY + (answerBoxHeight / 2) + 2.5, { align: 'center' });
   }
 
   // Update question's bounding_box coordinates for the autograder manifest

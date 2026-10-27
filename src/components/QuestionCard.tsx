@@ -251,13 +251,32 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               <Check className="w-3.5 h-3.5 text-emerald-600" />
               <span>Correct Answer (Key)</span>
             </label>
-            <input
-              type="text"
-              value={question.correct_answer}
-              onChange={(e) => onUpdate({ correct_answer: e.target.value })}
-              placeholder="e.g. 5, -3/4, or C"
-              className="w-full px-3 py-2 bg-emerald-50/50 border border-emerald-300 rounded-lg text-sm font-bold text-emerald-950 focus:ring-2 focus:ring-emerald-500 transition"
-            />
+            {question.question_type === 'multiple_choice' ? (
+              <div className="flex items-center space-x-1.5">
+                {['A', 'B', 'C', 'D'].map((lbl) => (
+                  <button
+                    key={lbl}
+                    type="button"
+                    onClick={() => onUpdate({ correct_answer: lbl })}
+                    className={`flex-1 py-1.5 rounded-lg font-bold text-xs border transition ${
+                      question.correct_answer?.trim().toUpperCase() === lbl
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                        : 'bg-emerald-50/60 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                    }`}
+                  >
+                    Choice {lbl}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={question.correct_answer}
+                onChange={(e) => onUpdate({ correct_answer: e.target.value })}
+                placeholder="e.g. 5, -3/4, or C"
+                className="w-full px-3 py-2 bg-emerald-50/50 border border-emerald-300 rounded-lg text-sm font-bold text-emerald-950 focus:ring-2 focus:ring-emerald-500 transition"
+              />
+            )}
           </div>
 
           {/* Alternative Valid Answers */}

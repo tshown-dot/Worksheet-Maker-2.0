@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Question, StylePreset } from '../types/worksheet';
 import { supabase } from '../lib/supabase';
 import { 
@@ -11,11 +11,16 @@ import {
   PlusCircle, 
   AlertCircle,
   Calendar,
-  Layers
+  Layers,
+  Folder,
+  Plus
 } from 'lucide-react';
 
 interface ImportHubProps {
-  onImportQuestions: (questions: Question[], metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2 }) => void;
+  onImportQuestions: (
+    questions: Question[],
+    metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2; folderName?: string }
+  ) => void;
   onOpenBlank: () => void;
   onOpenSavedList: () => void;
 }
@@ -36,6 +41,48 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   const [detectedGroups, setDetectedGroups] = useState<AssignmentGroup[] | null>(null);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [saveAllMessage, setSaveAllMessage] = useState('');
+
+  // Folder selection state
+  const [folders, setFolders] = useState<string[]>([
+    'Daily Warm-Ups (POD)',
+    'Unit 1: Number Systems',
+    'Unit 2: Expressions & Equations',
+    'General',
+  ]);
+  const [selectedFolder, setSelectedFolder] = useState<string>('Daily Warm-Ups (POD)');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  useEffect(() => {
+    fetchFolders();
+  }, []);
+
+  const fetchFolders = async () => {
+    try {
+      const { data } = await supabase.from('folders').select('name').order('name');
+      if (data && data.length > 0) {
+        const names = data.map((f: any) => f.name);
+        setFolders(names);
+        if (!names.includes(selectedFolder)) {
+          setSelectedFolder(names[0] || 'General');
+        }
+      }
+    } catch {}
+  };
+
+  const handleCreateFolder = async () => {
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+    try {
+      await supabase.from('folders').insert({ name: trimmed });
+    } catch {}
+    if (!folders.includes(trimmed)) {
+      setFolders((prev) => [...prev, trimmed].sort());
+    }
+    setSelectedFolder(trimmed);
+    setNewFolderName('');
+    setIsCreatingFolder(false);
+  };
 
   // 1. Prompt for Converting Existing Docs / Tests / PDFs
   const convertDocPrompt = `You are a middle school math curriculum assistant for Worksheet Maker 2.0. 
@@ -256,7 +303,7 @@ RULES:
     }
 
     if (questions.length > 0) {
-      onImportQuestions(questions);
+      onImportQuestions(questions, { folderName: selectedFolder });
     } else {
       setError('Could not parse the pasted text. Please verify the format or copy the AI prompt above.');
     }
@@ -270,6 +317,7 @@ RULES:
       title: group.name,
       stylePreset: isPod ? 'pod' : 'homework',
       totalPages,
+      folderName: selectedFolder,
     });
   };
 
@@ -277,7 +325,7 @@ RULES:
   const handleSaveAllGroups = async () => {
     if (!detectedGroups || detectedGroups.length === 0) return;
     setIsSavingAll(true);
-    setSaveAllMessage('Saving assignments to your Supabase folder...');
+    setSaveAllMessage(`Saving assignments to "${selectedFolder}"...`);
 
     try {
       for (const group of detectedGroups) {
@@ -292,7 +340,7 @@ RULES:
             title: group.name,
             subject: 'Mathematics',
             grade_level: '6th Grade',
-            folder_name: 'Daily Warm-Ups (POD)',
+            folder_name: selectedFolder,
             style_preset: isPod ? 'pod' : 'homework',
             total_pages: totalPages,
             columns: 2,
@@ -324,7 +372,7 @@ RULES:
         }
       }
 
-      setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments successfully saved to "Daily Warm-Ups (POD)"!`);
+      setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments successfully saved to "${selectedFolder}"!`);
       setTimeout(() => {
         setIsSavingAll(false);
         // Load the first one
@@ -368,21 +416,38 @@ RULES:
       {/* MULTI-ASSIGNMENT BATCH DETECTOR MODAL / BANNER */}
       {detectedGroups && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-400 rounded-2xl p-6 shadow-md mb-6 space-y-4 animate-in fade-in">
-          <div className="flex items-center justify-between border-b border-blue-200 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-blue-200 pb-3 gap-3">
             <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-blue-700" />
+              <Calendar className="w-5 h-5 text-blue-700 shrink-0" />
               <h3 className="font-extrabold text-slate-900 text-base">
                 Found {detectedGroups.length} Daily Assignments in Your Paste!
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={handleSaveAllGroups}
-              disabled={isSavingAll}
-              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer"
-            >
-              {isSavingAll ? 'Saving to Cloud...' : '💾 Save All 5 to Folder'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center space-x-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-blue-200 shadow-2xs">
+                <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span className="text-xs font-medium text-slate-600 hidden sm:inline">Save to:</span>
+                <select
+                  value={selectedFolder}
+                  onChange={(e) => setSelectedFolder(e.target.value)}
+                  className="text-xs font-bold text-slate-900 bg-transparent focus:outline-hidden cursor-pointer"
+                >
+                  {folders.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveAllGroups}
+                disabled={isSavingAll}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer flex items-center space-x-1"
+              >
+                <span>{isSavingAll ? 'Saving to Cloud...' : `💾 Save All ${detectedGroups.length} to Folder`}</span>
+              </button>
+            </div>
           </div>
 
           <p className="text-xs text-slate-600">
@@ -491,6 +556,65 @@ RULES:
             </h3>
           </div>
           <span className="text-xs text-slate-400">Accepts Gemini/ChatGPT JSON or standard text</span>
+        </div>
+
+        {/* Folder Destination Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="flex items-center space-x-2">
+            <Folder className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="text-xs font-bold text-slate-700">Save to Folder:</span>
+            <select
+              value={selectedFolder}
+              onChange={(e) => setSelectedFolder(e.target.value)}
+              className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
+            >
+              {folders.map((f) => (
+                <option key={f} value={f}>
+                  📁 {f}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {!isCreatingFolder ? (
+            <button
+              type="button"
+              onClick={() => setIsCreatingFolder(true)}
+              className="text-xs text-blue-700 hover:text-blue-900 font-semibold flex items-center space-x-1 transition"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Folder</span>
+            </button>
+          ) : (
+            <div className="flex items-center space-x-1.5">
+              <input
+                type="text"
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolder();
+                  if (e.key === 'Escape') setIsCreatingFolder(false);
+                }}
+                placeholder="New folder name..."
+                className="px-2.5 py-1 bg-white text-xs border border-blue-400 rounded-lg focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleCreateFolder}
+                className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold"
+              >
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreatingFolder(false)}
+                className="px-1 text-slate-400 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
 
         <textarea
