@@ -243,32 +243,32 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                   {/* FINAL ANSWER BOX (High Contrast for OCR Scanner) */}
                   <div
                     className={`border-2 border-black rounded-sm bg-white flex flex-col justify-between overflow-hidden shadow-xs shrink-0 ${
-                      columns === 2 ? 'h-13 w-full' : 'w-48 h-full min-h-[50px]'
+                      columns === 2 ? 'h-[74px] w-full' : 'w-52 h-full min-h-[64px]'
                     }`}
                   >
-                    <div className="bg-slate-100 border-b border-slate-300 px-1.5 py-0.5 text-[8.5px] font-bold uppercase tracking-wider text-black flex justify-between items-center">
+                    <div className="bg-slate-100 border-b border-slate-300 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-black flex justify-between items-center">
                       <span>FINAL ANSWER:</span>
                     </div>
 
-                    <div className="flex-1 flex items-center justify-center p-1">
+                    <div className="flex-1 flex items-center justify-center p-1.5">
                       {isAnswerKey ? (
-                        <div className="text-sm font-bold text-blue-700 font-sans flex items-center space-x-1.5">
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded font-mono text-sm font-extrabold border border-blue-300">
+                        <div className="text-base font-bold text-blue-700 font-sans flex items-center space-x-2">
+                          <span className="px-2.5 py-1 bg-blue-100 text-blue-900 rounded font-mono text-base font-extrabold border border-blue-300">
                             {q.correct_answer || '—'}
                           </span>
                           {q.question_type === 'multiple_choice' &&
                             q.options?.find((o) => o.label.toUpperCase() === q.correct_answer?.trim().toUpperCase()) && (
-                              <span className="text-[10px] text-blue-800 font-medium truncate max-w-[130px]">
+                              <span className="text-xs text-blue-800 font-medium truncate max-w-[150px]">
                                 {q.options.find((o) => o.label.toUpperCase() === q.correct_answer?.trim().toUpperCase())?.text}
                               </span>
                             )}
                         </div>
                       ) : q.question_type === 'multiple_choice' ? (
                         /* Clean Bubble Letter Choices for Student to Circle / Fill */
-                        <div className="flex items-center justify-around w-full px-2 py-0.5">
+                        <div className="flex items-center justify-around w-full px-3 py-1">
                           {['A', 'B', 'C', 'D'].map((letter) => (
                             <div key={letter} className="flex flex-col items-center">
-                              <div className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center font-bold text-[11px] text-slate-800 bg-slate-50">
+                              <div className="w-6 h-6 rounded-full border-2 border-slate-500 flex items-center justify-center font-bold text-xs text-slate-800 bg-slate-50 shadow-2xs">
                                 {letter}
                               </div>
                             </div>

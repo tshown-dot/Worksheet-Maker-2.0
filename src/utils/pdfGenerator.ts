@@ -363,9 +363,9 @@ function renderQuestionCard(
   let workBoxWidth: number;
 
   if (is2Col) {
-    // 2-Column: Final Answer Box is a bar across the bottom
+    // 2-Column: Final Answer Box is a bar across the bottom (Taller for student handwriting)
     answerBoxWidth = width - 6;
-    answerBoxHeight = 12;
+    answerBoxHeight = Math.min(Math.max(height * 0.32, 18), 22);
     answerBoxX = x + 3;
     answerBoxY = y + height - answerBoxHeight - 2;
 
@@ -373,8 +373,8 @@ function renderQuestionCard(
     workAreaHeight = Math.max(answerBoxY - workAreaY - 1.5, 12);
   } else {
     // 1-Column: Work on Left, Answer on Right
-    answerBoxWidth = 50;
-    workAreaHeight = Math.max(y + height - workAreaY - 2.5, 16);
+    answerBoxWidth = 54;
+    workAreaHeight = Math.max(y + height - workAreaY - 2.5, 18);
     answerBoxHeight = workAreaHeight;
     answerBoxX = x + width - answerBoxWidth - 3;
     answerBoxY = workAreaY;
