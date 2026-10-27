@@ -7,7 +7,9 @@ import {
   Trash2, 
   ArrowRight, 
   Loader2, 
-  Plus 
+  Plus,
+  Folder,
+  Search
 } from 'lucide-react';
 
 interface WorksheetListModalProps {
@@ -24,26 +26,37 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
   onNew,
 }) => {
   const [worksheets, setWorksheets] = useState<any[]>([]);
+  const [folders, setFolders] = useState<string[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      fetchWorksheets();
+      loadData();
     }
   }, [isOpen]);
 
-  const fetchWorksheets = async () => {
+  const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase
+      // 1. Fetch folders
+      const { data: folderData } = await supabase.from('folders').select('name').order('name');
+      const folderList = folderData?.map((f: any) => f.name) || [];
+      setFolders(folderList);
+
+      // 2. Fetch worksheets
+      const { data: wsData, error: wsError } = await supabase
         .from('worksheets')
-        .select('id, short_code, title, subject, grade_level, style_preset, total_pages, student_id_digits, layout_config, created_at')
+        .select('id, short_code, title, subject, grade_level, folder_name, style_preset, total_pages, student_id_digits, layout_config, created_at')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setWorksheets(data || []);
+      if (wsError) throw wsError;
+      setWorksheets(wsData || []);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to fetch worksheets');
@@ -52,10 +65,39 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
     }
   };
 
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    const name = newFolderName.trim();
+    try {
+      await supabase.from('folders').insert({ name });
+      setFolders((prev) => [...prev, name].sort());
+      setSelectedFolder(name);
+      setNewFolderName('');
+      setIsCreatingFolder(false);
+    } catch (err: any) {
+      alert('Could not create folder: ' + err.message);
+    }
+  };
+
+  const handleDeleteFolder = async (folderName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete the folder "${folderName}"? Worksheets inside will move to General.`)) return;
+    try {
+      await supabase.from('folders').delete().eq('name', folderName);
+      await supabase.from('worksheets').update({ folder_name: 'General' }).eq('folder_name', folderName);
+      setFolders((prev) => prev.filter((f) => f !== folderName));
+      if (selectedFolder === folderName) setSelectedFolder('ALL');
+      setWorksheets((prev) =>
+        prev.map((w) => (w.folder_name === folderName ? { ...w, folder_name: 'General' } : w))
+      );
+    } catch (err: any) {
+      alert('Delete folder failed: ' + err.message);
+    }
+  };
+
   const handleLoad = async (wsId: string) => {
     setLoading(true);
     try {
-      // Fetch worksheet metadata + questions
       const { data: wsData, error: wsError } = await supabase
         .from('worksheets')
         .select('*')
@@ -77,6 +119,7 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
         title: wsData.title,
         subject: wsData.subject,
         grade_level: wsData.grade_level,
+        folder_name: wsData.folder_name || 'General',
         style_preset: wsData.style_preset,
         total_pages: wsData.total_pages || 1,
         student_id_digits: wsData.student_id_digits || 3,
@@ -124,92 +167,257 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
     }
   };
 
+  // Filter worksheets by folder and search
+  const filteredWorksheets = worksheets.filter((ws) => {
+    const matchesFolder = selectedFolder === 'ALL' || (ws.folder_name || 'General') === selectedFolder;
+    const matchesSearch =
+      !searchQuery.trim() ||
+      ws.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ws.short_code.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFolder && matchesSearch;
+  });
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+      <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[85vh]">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <FolderOpen className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shadow-xs">
+              <FolderOpen className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900">My Saved Worksheets</h3>
-              <p className="text-xs text-slate-500">Stored in Supabase Cloud</p>
+              <h3 className="font-bold text-base text-slate-900">Worksheet File Manager</h3>
+              <p className="text-xs text-slate-500">Organized into folders & curriculum units</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content list */}
-        <div className="p-6 overflow-y-auto space-y-3">
-          {loading && worksheets.length === 0 ? (
-            <div className="py-12 flex flex-col items-center justify-center text-slate-400 text-sm">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mb-2" />
-              <span>Loading saved worksheets...</span>
-            </div>
-          ) : error ? (
-            <div className="p-4 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200">
-              {error}
-            </div>
-          ) : worksheets.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 text-sm">
-              No saved worksheets found. Create your first one!
-            </div>
-          ) : (
-            worksheets.map((ws) => (
-              <div
-                key={ws.id}
-                onClick={() => handleLoad(ws.id)}
-                className="group p-4 bg-slate-50 hover:bg-blue-50/40 border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer transition flex items-center justify-between"
-              >
-                <div>
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
-                      {ws.short_code}
-                    </span>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      {ws.style_preset === 'pod'
-                        ? '★ Problem of the Day'
-                        : ws.style_preset === 'quiz'
-                        ? 'Quiz / Test'
-                        : ws.style_preset === 'exit_ticket'
-                        ? 'Exit Ticket'
-                        : 'Homework'}
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-700 transition">
-                    {ws.title}
-                  </h4>
-                  <div className="text-xs text-slate-500 flex items-center space-x-3 mt-1">
-                    <span>{ws.subject} • {ws.grade_level}</span>
-                    <span>• {ws.total_pages || 1} Page{(ws.total_pages || 1) > 1 ? 's' : ''}</span>
-                  </div>
-                </div>
+        {/* Search & Top Action Bar */}
+        <div className="px-6 py-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          {/* Search box */}
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search worksheets by title or code..."
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={(e) => handleDelete(ws.id, e)}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                    title="Delete worksheet"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 flex items-center justify-center text-slate-500 transition">
-                    <ArrowRight className="w-4 h-4" />
+          {/* New Folder Button */}
+          {!isCreatingFolder ? (
+            <button
+              type="button"
+              onClick={() => setIsCreatingFolder(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Folder</span>
+            </button>
+          ) : (
+            <div className="flex items-center space-x-1.5">
+              <input
+                type="text"
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolder();
+                  if (e.key === 'Escape') setIsCreatingFolder(false);
+                }}
+                placeholder="Folder name..."
+                className="px-2.5 py-1 text-xs border border-amber-400 rounded-lg focus:ring-1 focus:ring-amber-500"
+              />
+              <button
+                type="button"
+                onClick={handleCreateFolder}
+                className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-xs font-bold"
+              >
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreatingFolder(false)}
+                className="px-1.5 py-1 text-slate-400 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Main Body (Folder Sidebar + Worksheet List) */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* FOLDERS SIDEBAR */}
+          <div className="w-56 bg-slate-50 border-r border-slate-200 p-3 overflow-y-auto space-y-1 shrink-0 hidden sm:block">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 block mb-2">
+              Folders
+            </span>
+
+            {/* All Worksheets tab */}
+            <button
+              type="button"
+              onClick={() => setSelectedFolder('ALL')}
+              className={`w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                selectedFolder === 'ALL'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-slate-200/60'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <FolderOpen className="w-4 h-4" />
+                <span>All Worksheets</span>
+              </div>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  selectedFolder === 'ALL' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-600'
+                }`}
+              >
+                {worksheets.length}
+              </span>
+            </button>
+
+            {/* Individual Folders */}
+            {folders.map((folder) => {
+              const count = worksheets.filter((w) => (w.folder_name || 'General') === folder).length;
+              const isSelected = selectedFolder === folder;
+              return (
+                <div
+                  key={folder}
+                  onClick={() => setSelectedFolder(folder)}
+                  className={`group w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-between cursor-pointer transition ${
+                    isSelected
+                      ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                      : 'text-slate-700 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2 truncate">
+                    <Folder className={`w-4 h-4 shrink-0 ${isSelected ? 'text-amber-700' : 'text-amber-500'}`} />
+                    <span className="truncate">{folder}</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isSelected ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                    {folder !== 'General' && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteFolder(folder, e)}
+                        title="Delete folder"
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition p-0.5"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* WORKSHEETS LIST */}
+          <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-3 bg-white">
+            {/* Mobile Folder Selector */}
+            <div className="sm:hidden mb-3">
+              <label className="text-xs font-bold text-slate-600 block mb-1">Filter by Folder:</label>
+              <select
+                value={selectedFolder}
+                onChange={(e) => setSelectedFolder(e.target.value)}
+                className="w-full text-xs p-2 bg-slate-50 border border-slate-300 rounded-lg"
+              >
+                <option value="ALL">All Worksheets ({worksheets.length})</option>
+                {folders.map((f) => (
+                  <option key={f} value={f}>
+                    📁 {f}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {loading && worksheets.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-slate-400 text-sm">
+                <Loader2 className="w-7 h-7 animate-spin text-blue-600 mb-2" />
+                <span>Loading worksheets...</span>
               </div>
-            ))
-          )}
+            ) : error ? (
+              <div className="p-4 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200">
+                {error}
+              </div>
+            ) : filteredWorksheets.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 text-sm flex flex-col items-center">
+                <FolderOpen className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
+                <span>No worksheets found in this folder.</span>
+              </div>
+            ) : (
+              filteredWorksheets.map((ws) => (
+                <div
+                  key={ws.id}
+                  onClick={() => handleLoad(ws.id)}
+                  className="group p-4 bg-slate-50 hover:bg-blue-50/40 border border-slate-200 hover:border-blue-300 rounded-xl cursor-pointer transition flex items-center justify-between shadow-xs"
+                >
+                  <div>
+                    <div className="flex items-center space-x-2 mb-1.5 flex-wrap gap-1">
+                      <span className="font-mono text-xs font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
+                        {ws.short_code}
+                      </span>
+                      {ws.folder_name && (
+                        <span className="text-xs font-medium px-2 py-0.5 bg-amber-100/70 text-amber-900 border border-amber-200 rounded-md flex items-center space-x-1">
+                          <Folder className="w-3 h-3 text-amber-600 inline" />
+                          <span>{ws.folder_name}</span>
+                        </span>
+                      )}
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                        {ws.style_preset === 'pod'
+                          ? '★ Problem of the Day'
+                          : ws.style_preset === 'quiz'
+                          ? 'Quiz / Test'
+                          : ws.style_preset === 'exit_ticket'
+                          ? 'Exit Ticket'
+                          : 'Homework'}
+                      </span>
+                    </div>
+
+                    <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-700 transition">
+                      {ws.title}
+                    </h4>
+                    <div className="text-xs text-slate-500 flex items-center space-x-3 mt-1">
+                      <span>{ws.subject} • {ws.grade_level}</span>
+                      <span>• {ws.total_pages || 1} Page{(ws.total_pages || 1) > 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleDelete(ws.id, e)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                      title="Delete worksheet"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 flex items-center justify-center text-slate-500 transition">
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {/* Footer */}
@@ -223,7 +431,7 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
             className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Create New Blank</span>
+            <span>Create New Blank Worksheet</span>
           </button>
           <button
             type="button"

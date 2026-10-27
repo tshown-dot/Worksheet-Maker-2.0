@@ -4,8 +4,12 @@ import {
   GraduationCap, 
   Layers, 
   Hash, 
-  QrCode 
+  QrCode,
+  Folder,
+  Plus
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface WorksheetSettingsProps {
   worksheet: Worksheet;
@@ -16,6 +20,40 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
   worksheet,
   onChange,
 }) => {
+  const [folders, setFolders] = useState<string[]>([]);
+  const [isAddingFolder, setIsAddingFolder] = useState(false);
+  const [newFolderInput, setNewFolderInput] = useState('');
+
+  useEffect(() => {
+    fetchFolders();
+  }, []);
+
+  const fetchFolders = async () => {
+    try {
+      const { data } = await supabase.from('folders').select('name').order('name');
+      if (data && data.length > 0) {
+        setFolders(data.map((f: any) => f.name));
+      } else {
+        setFolders(['General', 'Unit 1: Number Systems', 'Unit 2: Expressions & Equations', 'Daily Warm-Ups (POD)']);
+      }
+    } catch {
+      setFolders(['General', 'Unit 1: Number Systems', 'Unit 2: Expressions & Equations', 'Daily Warm-Ups (POD)']);
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!newFolderInput.trim()) return;
+    const folderName = newFolderInput.trim();
+    try {
+      await supabase.from('folders').insert({ name: folderName });
+    } catch {}
+    if (!folders.includes(folderName)) {
+      setFolders((prev) => [...prev, folderName].sort());
+    }
+    onChange({ folder_name: folderName });
+    setNewFolderInput('');
+    setIsAddingFolder(false);
+  };
   const presets: { id: StylePreset; label: string; desc: string; icon: string }[] = [
     {
       id: 'homework',
@@ -48,7 +86,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
       {/* Title & Metadata Row */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4 items-center">
         {/* Title */}
-        <div className="md:col-span-6">
+        <div className="md:col-span-5">
           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
             Worksheet Title
           </label>
@@ -61,8 +99,70 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
           />
         </div>
 
-        {/* Grade Level */}
+        {/* Folder Selector */}
         <div className="md:col-span-3">
+          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span className="flex items-center space-x-1">
+              <Folder className="w-3.5 h-3.5 text-amber-500" />
+              <span>Folder / Unit</span>
+            </span>
+            {!isAddingFolder && (
+              <button
+                type="button"
+                onClick={() => setIsAddingFolder(true)}
+                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold"
+              >
+                + New
+              </button>
+            )}
+          </label>
+
+          {isAddingFolder ? (
+            <div className="flex space-x-1">
+              <input
+                type="text"
+                autoFocus
+                value={newFolderInput}
+                onChange={(e) => setNewFolderInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolder();
+                  if (e.key === 'Escape') setIsAddingFolder(false);
+                }}
+                placeholder="Folder name..."
+                className="w-full px-2.5 py-1.5 text-xs bg-white border border-blue-400 rounded-lg focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleCreateFolder}
+                className="px-2 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAddingFolder(false)}
+                className="px-1.5 py-1 text-slate-400 hover:text-slate-600 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <select
+              value={worksheet.folder_name || 'General'}
+              onChange={(e) => onChange({ folder_name: e.target.value })}
+              className="w-full px-3 py-2 bg-amber-50/50 border border-amber-200/80 rounded-lg text-sm font-medium text-slate-850 focus:ring-2 focus:ring-amber-500 focus:bg-white transition"
+            >
+              {folders.map((f) => (
+                <option key={f} value={f}>
+                  📁 {f}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Grade Level */}
+        <div className="md:col-span-2">
           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1 flex items-center space-x-1">
             <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
             <span>Grade Level</span>
@@ -72,30 +172,27 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
             onChange={(e) => onChange({ grade_level: e.target.value })}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
           >
-            <option value="6th Grade">6th Grade Math</option>
-            <option value="7th Grade">7th Grade Math</option>
-            <option value="8th Grade">8th Grade Math</option>
+            <option value="6th Grade">6th Grade</option>
+            <option value="7th Grade">7th Grade</option>
+            <option value="8th Grade">8th Grade</option>
             <option value="Algebra 1">Algebra 1</option>
             <option value="Geometry">Geometry</option>
-            <option value="Middle School">Middle School Math</option>
           </select>
         </div>
 
         {/* Short Code & QR Badge */}
-        <div className="md:col-span-3">
+        <div className="md:col-span-2">
           <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1 flex items-center space-x-1">
             <QrCode className="w-3.5 h-3.5 text-blue-600" />
-            <span>Assignment Code</span>
+            <span>Code</span>
           </label>
-          <div className="flex items-center space-x-2">
-            <input
-              type="text"
-              value={worksheet.short_code}
-              onChange={(e) => onChange({ short_code: e.target.value.toUpperCase() })}
-              maxLength={10}
-              className="w-full px-3 py-2 bg-blue-50/50 border border-blue-200 text-blue-800 font-mono font-bold text-sm rounded-lg uppercase tracking-wider focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <input
+            type="text"
+            value={worksheet.short_code}
+            onChange={(e) => onChange({ short_code: e.target.value.toUpperCase() })}
+            maxLength={10}
+            className="w-full px-3 py-2 bg-blue-50/50 border border-blue-200 text-blue-800 font-mono font-bold text-sm rounded-lg uppercase tracking-wider focus:ring-2 focus:ring-blue-500"
+          />
         </div>
       </div>
 

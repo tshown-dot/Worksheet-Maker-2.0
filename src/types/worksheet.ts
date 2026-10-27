@@ -49,6 +49,7 @@ export interface Worksheet {
   id: string;
   short_code: string;
   teacher_id?: string | null;
+  folder_name?: string;
   title: string;
   subject: string;
   grade_level: string;

@@ -13,6 +13,7 @@ import { Plus, Eye, Edit3, Sparkles } from 'lucide-react';
 const INITIAL_WORKSHEET: Worksheet = {
   id: '',
   short_code: 'ALG-701',
+  folder_name: 'Unit 2: Expressions & Equations',
   title: 'Unit 3: Two-Step & Multi-Step Equations',
   subject: 'Mathematics',
   grade_level: '7th Grade',
@@ -198,6 +199,7 @@ export function App() {
         title: worksheet.title,
         subject: worksheet.subject,
         grade_level: worksheet.grade_level,
+        folder_name: worksheet.folder_name || 'General',
         style_preset: worksheet.style_preset,
         total_pages: worksheet.total_pages,
         student_id_digits: worksheet.student_id_digits,
