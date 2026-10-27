@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <!-- Tailwind CSS via CDN for modern clean teacher interface -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-4 space-y-4 text-xs">
+
+  <!-- TOP HEADER / BRANDING -->
+  <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+    <div class="flex items-center space-x-2.5">
+      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+        📐
+      </div>
+      <div>
+        <h1 class="font-bold text-slate-900 text-sm">Autograder Panel</h1>
+        <p class="text-[10px] text-slate-500 font-medium">Worksheet Maker 2.0 • Vision AI</p>
+      </div>
+    </div>
+    <button 
+      onclick="refreshData()" 
+      title="Refresh analytics from sheet"
+      class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+    >
+      🔄
+    </button>
+  </div>
+
+  <!-- ACTION: GRADE SCANS BUTTON -->
+  <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+    <div class="flex items-center justify-between">
+      <span class="font-bold text-slate-800 text-xs uppercase tracking-wide">Copier Scanner Ingestion</span>
+      <span class="text-[10px] text-slate-400">Folder: <code class="bg-slate-100 px-1 py-0.5 rounded text-blue-700 font-mono">Worksheet Scans</code></span>
+    </div>
+
+    <button 
+      id="gradeBtn" 
+      onclick="startGrading()"
+      class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg shadow-sm transition flex items-center justify-center space-x-1.5 cursor-pointer"
+    >
+      <span>🚀</span>
+      <span id="gradeBtnText">Grade Scanned Worksheets</span>
+    </button>
+
+    <!-- Progress / Status Indicator -->
+    <div id="statusBox" class="hidden p-2 rounded-lg text-[11px] leading-relaxed"></div>
+  </div>
+
+  <!-- CLASS ANALYTICS CARD -->
+  <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <span class="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center space-x-1">
+        <span>📊</span>
+        <span>Class Analytics</span>
+      </span>
+      <span id="submissionCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+        0 graded
+      </span>
+    </div>
+
+    <!-- Metric Badges -->
+    <div class="grid grid-cols-2 gap-2">
+      <div class="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg text-center">
+        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Class Average</span>
+        <span id="classAverageScore" class="text-xl font-extrabold text-slate-900 block mt-0.5">—</span>
+      </div>
+      <div class="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg text-center">
+        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Passing Rate</span>
+        <span id="passRateScore" class="text-xl font-extrabold text-slate-900 block mt-0.5">—</span>
+      </div>
+    </div>
+
+    <!-- Most Missed Problem Alert Box -->
+    <div id="mostMissedAlert" class="hidden p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 space-y-1">
+      <div class="font-bold text-[11px] flex items-center space-x-1">
+        <span>⚠️</span>
+        <span id="mostMissedTitle">Most Missed: Question 4</span>
+      </div>
+      <p id="mostMissedNote" class="text-[10px] text-amber-800 leading-tight">
+        Class accuracy was lowest on this concept. Recommended for tomorrow's warm-up!
+      </p>
+    </div>
+
+    <!-- Question Accuracy Breakdown Bar -->
+    <div class="space-y-1.5 pt-1">
+      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Accuracy by Question:</span>
+      <div id="questionsBreakdown" class="space-y-1">
+        <div class="text-[10px] text-slate-400 italic">No submissions graded yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUDENT LOOKUP & CONFERENCING -->
+  <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <span class="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center space-x-1">
+        <span>🔍</span>
+        <span>Student Lookup</span>
+      </span>
+    </div>
+
+    <div>
+      <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Select Student ID:</label>
+      <select 
+        id="studentSelect" 
+        onchange="onSelectStudent()"
+        class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">-- Choose a Student ID --</option>
+      </select>
+    </div>
+
+    <!-- Individual Student Results Card -->
+    <div id="studentDetailsCard" class="hidden space-y-2.5 pt-1">
+      <div class="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold text-blue-600 uppercase">Student ID:</span>
+          <span id="detailStudentId" class="font-extrabold text-sm text-slate-900 ml-1">#104</span>
+        </div>
+        <div id="detailScoreBadge" class="px-2.5 py-1 rounded-md text-xs font-extrabold bg-blue-600 text-white">
+          83% (5/6 pts)
+        </div>
+      </div>
+
+      <!-- Problem-by-problem diagnostic cards -->
+      <div id="detailQuestionsList" class="space-y-2 max-h-64 overflow-y-auto custom-scroll pr-1">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER QUICK LINKS -->
+  <div class="pt-2 flex items-center justify-between text-[10px] text-slate-400">
+    <button onclick="google.script.run.setGeminiApiKeyPrompt()" class="hover:text-blue-600 underline">
+      ⚙️ Set Gemini Key
+    </button>
+    <span>•</span>
+    <button onclick="google.script.run.testSupabaseConnection()" class="hover:text-blue-600 underline">
+      🔗 Test Supabase
+    </button>
+    <span>•</span>
+    <button onclick="google.script.run.setupGradebookSheet()" class="hover:text-blue-600 underline">
+      📊 Reset Sheet
+    </button>
+  </div>
+
+  <script>
+    // Global data cache
+    let currentAnalytics = null;
+
+    // Load initial analytics on sidebar launch
+    window.onload = function() {
+      refreshData();
+    };
+
+    function refreshData() {
+      google.script.run
+        .withSuccessHandler(renderAnalytics)
+        .withFailureHandler(function(err) {
+          console.error(err);
+        })
+        .getGradebookAnalytics();
+    }
+
+    function renderAnalytics(data) {
+      currentAnalytics = data;
+      if (!data) return;
+
+      // Update counters
+      document.getElementById('submissionCountBadge').innerText = data.totalSubmissions + ' graded';
+      document.getElementById('classAverageScore').innerText = data.classAverage ? data.classAverage + '%' : '—';
+      document.getElementById('passRateScore').innerText = data.passRate ? data.passRate + '%' : '—';
+
+      // Most Missed Question
+      const alertBox = document.getElementById('mostMissedAlert');
+      if (data.mostMissedQuestion) {
+        alertBox.classList.remove('hidden');
+        document.getElementById('mostMissedTitle').innerText = 'Most Missed: Question ' + data.mostMissedQuestion.orderIndex + ' (' + data.mostMissedQuestion.accuracy + '% accuracy)';
+        document.getElementById('mostMissedNote').innerText = data.mostMissedQuestion.commonFeedback || 'Check students on this standard for tomorrow\'s warm-up!';
+      } else {
+        alertBox.classList.add('hidden');
+      }
+
+      // Render Question Accuracy Bars
+      const qContainer = document.getElementById('questionsBreakdown');
+      if (data.questionStats && data.questionStats.length > 0) {
+        qContainer.innerHTML = '';
+        data.questionStats.forEach(function(stat) {
+          const barColor = stat.accuracy >= 80 ? 'bg-emerald-500' : (stat.accuracy >= 60 ? 'bg-amber-500' : 'bg-red-500');
+          const html = 
+            '<div class="space-y-0.5">' +
+              '<div class="flex justify-between text-[10px]">' +
+                '<span class="font-bold text-slate-700">Q' + stat.orderIndex + '</span>' +
+                '<span class="font-semibold text-slate-500">' + stat.accuracy + '%</span>' +
+              '</div>' +
+              '<div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">' +
+                '<div class="' + barColor + ' h-1.5 rounded-full" style="width: ' + stat.accuracy + '%"></div>' +
+              '</div>' +
+            '</div>';
+          qContainer.innerHTML += html;
+        });
+      }
+
+      // Populate Student Dropdown
+      const select = document.getElementById('studentSelect');
+      const prevVal = select.value;
+      select.innerHTML = '<option value="">-- Choose a Student ID --</option>';
+      if (data.students && data.students.length > 0) {
+        data.students.forEach(function(s) {
+          const opt = document.createElement('option');
+          opt.value = s.studentId;
+          opt.innerText = 'Student #' + s.studentId + ' — ' + s.scorePct + '% (' + s.points + ' pts)';
+          select.appendChild(opt);
+        });
+      }
+      if (prevVal) select.value = prevVal;
+    }
+
+    function onSelectStudent() {
+      const select = document.getElementById('studentSelect');
+      const studentId = select.value;
+      const detailsCard = document.getElementById('studentDetailsCard');
+
+      if (!studentId || !currentAnalytics || !currentAnalytics.students) {
+        detailsCard.classList.add('hidden');
+        return;
+      }
+
+      const student = currentAnalytics.students.find(function(s) { return s.studentId === studentId; });
+      if (!student) return;
+
+      detailsCard.classList.remove('hidden');
+      document.getElementById('detailStudentId').innerText = '#' + student.studentId;
+      document.getElementById('detailScoreBadge').innerText = student.scorePct + '% (' + student.points + '/' + student.totalPossible + ' pts)';
+
+      const list = document.getElementById('detailQuestionsList');
+      list.innerHTML = '';
+
+      student.questions.forEach(function(q) {
+        const isCorrect = q.score > 0;
+        const icon = isCorrect ? '✅' : '❌';
+        const borderColor = isCorrect ? 'border-emerald-200 bg-emerald-50/30' : 'border-red-200 bg-red-50/40';
+
+        let html = 
+          '<div class="p-2 rounded-lg border ' + borderColor + ' text-[11px] space-y-1">' +
+            '<div class="flex justify-between items-center font-bold">' +
+              '<span class="text-slate-800">' + icon + ' Question ' + q.orderIndex + '</span>' +
+              '<span class="text-slate-600">' + q.score + ' pt</span>' +
+            '</div>' +
+            '<div class="text-[10px] text-slate-700">' +
+              '<span class="font-semibold text-slate-500">Student Answer: </span>' +
+              '<span class="font-bold">' + (q.studentAnswer || '—') + '</span>' +
+            '</div>';
+
+        if (q.feedback) {
+          html += 
+            '<div class="text-[9.5px] text-blue-800 bg-blue-50/60 p-1 rounded italic leading-tight">' +
+              'Note: ' + q.feedback +
+            '</div>';
+        }
+
+        html += '</div>';
+        list.innerHTML += html;
+      });
+    }
+
+    function startGrading() {
+      const btn = document.getElementById('gradeBtn');
+      const btnText = document.getElementById('gradeBtnText');
+      const statusBox = document.getElementById('statusBox');
+
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+      btnText.innerText = 'Scanning & Grading...';
+
+      statusBox.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-emerald-50', 'text-emerald-700');
+      statusBox.classList.add('bg-blue-50', 'text-blue-800', 'border', 'border-blue-200');
+      statusBox.innerHTML = '⏳ Reading PDF scans from Google Drive... Please wait.';
+
+      google.script.run
+        .withSuccessHandler(function(msg) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-50');
+          btnText.innerText = 'Grade Scanned Worksheets';
+
+          statusBox.classList.remove('bg-blue-50', 'text-blue-800');
+          statusBox.classList.add('bg-emerald-50', 'text-emerald-800', 'border-emerald-200');
+          statusBox.innerHTML = '🎉 ' + msg;
+
+          refreshData();
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-50');
+          btnText.innerText = 'Grade Scanned Worksheets';
+
+          statusBox.classList.remove('bg-blue-50', 'text-blue-800');
+          statusBox.classList.add('bg-red-50', 'text-red-800', 'border-red-200');
+          statusBox.innerHTML = '❌ ' + err.message;
+        })
+        .runGradingFromSidebar();
+    }
+  </script>
+</body>
+</html>

@@ -10,12 +10,26 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('📐 Math Autograder')
-    .addItem('🚀 Grade Scanned Worksheets (from Drive)', 'gradeScannedWorksheets')
+    .addItem('📱 Open Autograder Sidebar', 'showSidebar')
     .addSeparator()
+    .addItem('🚀 Grade Scanned Worksheets (from Drive)', 'gradeScannedWorksheets')
     .addItem('📊 Setup / Format Gradebook Sheet', 'setupGradebookSheet')
     .addItem('🔗 Test Connection to Worksheet Maker', 'testSupabaseConnection')
     .addItem('⚙️ Set Gemini API Key', 'setGeminiApiKeyPrompt')
     .addToUi();
+
+  // Open sidebar automatically for teacher convenience
+  showSidebar();
+}
+
+/**
+ * Opens the interactive teacher sidebar panel on the right of the spreadsheet
+ */
+function showSidebar() {
+  const html = HtmlService.createHtmlOutputFromFile('Sidebar')
+    .setTitle('📐 Math Autograder')
+    .setWidth(360);
+  SpreadsheetApp.getUi().showSidebar(html);
 }
 
 /**
@@ -109,14 +123,128 @@ function setupGradebookSheet() {
 }
 
 /**
- * Main Autograder Function:
- * 1. Reads PDF scans from Google Drive folder
- * 2. Fetches answer key from Supabase
- * 3. Uses Gemini Vision to grade handwriting
- * 4. Populates Gradebook rows in real time
+ * Sidebar API: Computes real-time class analytics and student stats from the sheet
  */
-function gradeScannedWorksheets() {
-  const ui = SpreadsheetApp.getUi();
+function getGradebookAnalytics() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Gradebook');
+
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return {
+      totalSubmissions: 0,
+      classAverage: 0,
+      passRate: 0,
+      mostMissedQuestion: null,
+      questionStats: [],
+      students: []
+    };
+  }
+
+  const data = sheet.getDataRange().getValues();
+  // Row 0 is headers
+  const rows = data.slice(1);
+
+  let totalScoreSum = 0;
+  let passingCount = 0;
+  const students = [];
+
+  // Question stats accumulator for Q1 to Q6
+  const qAccumulator = Array.from({ length: 6 }, () => ({
+    attempts: 0,
+    earnedSum: 0,
+    feedbackSamples: []
+  }));
+
+  for (const row of rows) {
+    const studentId = String(row[1] || '???');
+    const scorePctStr = String(row[4] || '0%').replace('%', '');
+    const scorePct = parseFloat(scorePctStr) || 0;
+    const points = parseFloat(row[5]) || 0;
+    const totalPossible = parseFloat(row[6]) || 0;
+
+    totalScoreSum += scorePct;
+    if (scorePct >= 70) passingCount++;
+
+    const studentQuestions = [];
+    // Q1 starts at col index 8 (col 9 in 1-based index)
+    for (let qIdx = 0; qIdx < 6; qIdx++) {
+      const baseCol = 8 + (qIdx * 3);
+      const qScore = parseFloat(row[baseCol]) || 0;
+      const qAns = String(row[baseCol + 1] || '');
+      const qFeedback = String(row[baseCol + 2] || '');
+
+      studentQuestions.push({
+        orderIndex: qIdx + 1,
+        score: qScore,
+        studentAnswer: qAns,
+        feedback: qFeedback
+      });
+
+      if (row[baseCol] !== '' && !isNaN(parseFloat(row[baseCol]))) {
+        qAccumulator[qIdx].attempts++;
+        if (qScore > 0) qAccumulator[qIdx].earnedSum++;
+        if (qScore === 0 && qFeedback) {
+          qAccumulator[qIdx].feedbackSamples.push(qFeedback);
+        }
+      }
+    }
+
+    students.push({
+      studentId,
+      scorePct,
+      points,
+      totalPossible,
+      questions: studentQuestions
+    });
+  }
+
+  const totalSubmissions = rows.length;
+  const classAverage = Math.round(totalScoreSum / totalSubmissions);
+  const passRate = Math.round((passingCount / totalSubmissions) * 100);
+
+  // Compute per-question accuracy %
+  const questionStats = [];
+  let lowestAccuracy = 101;
+  let mostMissed = null;
+
+  for (let i = 0; i < 6; i++) {
+    const stat = qAccumulator[i];
+    if (stat.attempts > 0) {
+      const accuracy = Math.round((stat.earnedSum / stat.attempts) * 100);
+      questionStats.push({
+        orderIndex: i + 1,
+        accuracy,
+        commonFeedback: stat.feedbackSamples[0] || ''
+      });
+
+      if (accuracy < lowestAccuracy) {
+        lowestAccuracy = accuracy;
+        mostMissed = {
+          orderIndex: i + 1,
+          accuracy,
+          commonFeedback: stat.feedbackSamples[0] || 'Lowest accuracy on this concept.'
+        };
+      }
+    }
+  }
+
+  // Sort students by studentId
+  students.sort((a, b) => a.studentId.localeCompare(b.studentId, undefined, { numeric: true }));
+
+  return {
+    totalSubmissions,
+    classAverage,
+    passRate,
+    mostMissedQuestion: lowestAccuracy < 100 ? mostMissed : null,
+    questionStats,
+    students
+  };
+}
+
+/**
+ * Sidebar API: Runs the autograder directly from the sidebar button
+ */
+function runGradingFromSidebar() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Gradebook');
 
@@ -125,58 +253,32 @@ function gradeScannedWorksheets() {
     sheet = ss.getSheetByName('Gradebook');
   }
 
-  // Verify Gemini API Key exists
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!apiKey) {
-    ui.alert(
-      'Gemini API Key Required',
-      'Please set your Gemini API key first via:\n"📐 Math Autograder ➔ ⚙️ Set Gemini API Key"',
-      ui.ButtonSet.OK
-    );
-    return;
+    throw new Error("Gemini API key is not set. Click '⚙️ Set Gemini Key' at the bottom of the panel.");
   }
 
-  // Ask for Google Drive folder name (default: "Worksheet Scans")
-  const folderPrompt = ui.prompt(
-    'Scan Ingestion Folder',
-    'Enter the Google Drive folder name where your copier scanner places the PDFs:\n(Default is "Worksheet Scans")',
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (folderPrompt.getSelectedButton() !== ui.Button.OK) return;
-
-  const folderName = folderPrompt.getResponseText().trim() || 'Worksheet Scans';
-  const folders = DriveApp.getFoldersByName(folderName);
+  const folderName = 'Worksheet Scans';
+  let folders = DriveApp.getFoldersByName(folderName);
+  let scanFolder;
 
   if (!folders.hasNext()) {
-    // Offer to create the folder
-    const createConfirm = ui.alert(
-      'Folder Not Found',
-      `The folder "${folderName}" does not exist in your Google Drive.\nWould you like me to create it now so you can drop scans into it?`,
-      ui.ButtonSet.YES_NO
-    );
-
-    if (createConfirm === ui.Button.YES) {
-      DriveApp.createFolder(folderName);
-      ui.alert('Folder Created', `Created "${folderName}" in your Google Drive.\nDrop your scanned PDFs into that folder and click Grade again!`, ui.ButtonSet.OK);
-    }
-    return;
+    scanFolder = DriveApp.createFolder(folderName);
+    throw new Error(`Created folder "${folderName}" in your Google Drive. Drop your scanned PDFs there and click Grade again!`);
+  } else {
+    scanFolder = folders.next();
   }
 
-  const scanFolder = folders.next();
   const pdfFiles = scanFolder.getFilesByType(MimeType.PDF);
-
   const filesToGrade = [];
   while (pdfFiles.hasNext()) {
     filesToGrade.push(pdfFiles.next());
   }
 
   if (filesToGrade.length === 0) {
-    ui.alert('No Scans Found', `No PDF files found inside "${folderName}".\nPlease upload your scanner PDFs and try again.`, ui.ButtonSet.OK);
-    return;
+    throw new Error(`No scanned PDFs found in "${folderName}". Upload your copier scans and try again.`);
   }
 
-  // Create an archive folder for processed files so they aren't graded twice
   let processedFolder;
   const processedSubfolders = scanFolder.getFoldersByName('Processed');
   if (processedSubfolders.hasNext()) {
@@ -186,20 +288,14 @@ function gradeScannedWorksheets() {
   }
 
   let gradedCount = 0;
-  let errorCount = 0;
-
-  // Cache manifests so we don't refetch the same assignment key 50 times
   const manifestCache = {};
 
   for (const file of filesToGrade) {
     try {
       const pdfBlob = file.getBlob();
-
-      // Step 1: Run Gemini Vision to detect assignment code & student ID
       const initialGrade = gradeWorksheetWithGemini(pdfBlob, null);
       const assignmentCode = (initialGrade.assignmentCode || 'ALG-701').toUpperCase();
 
-      // Step 2: Fetch manifest from Supabase if not cached
       if (!manifestCache[assignmentCode]) {
         try {
           manifestCache[assignmentCode] = fetchWorksheetManifest(assignmentCode);
@@ -209,14 +305,11 @@ function gradeScannedWorksheets() {
       }
 
       const manifest = manifestCache[assignmentCode];
-
-      // Step 3: Run final grade with official key if we have the manifest
       let finalGrade = initialGrade;
       if (manifest) {
         finalGrade = gradeWorksheetWithGemini(pdfBlob, manifest);
       }
 
-      // Step 4: Write row to Google Sheet Gradebook
       const now = new Date();
       const scorePct = finalGrade.totalPossible > 0 
         ? Math.round((finalGrade.totalScore / finalGrade.totalPossible) * 100) 
@@ -233,7 +326,6 @@ function gradeScannedWorksheets() {
         scorePct >= 70 ? 'Passed' : 'Needs Practice'
       ];
 
-      // Add individual question results (Q1 to Q6)
       if (finalGrade.questions && Array.isArray(finalGrade.questions)) {
         for (let i = 0; i < 6; i++) {
           const q = finalGrade.questions[i];
@@ -249,33 +341,29 @@ function gradeScannedWorksheets() {
 
       sheet.appendRow(row);
 
-      // Colorize the score cell
       const lastRow = sheet.getLastRow();
-      const scoreCell = sheet.getRange(lastRow, 5); // Score % column
+      const scoreCell = sheet.getRange(lastRow, 5);
       if (scorePct >= 80) {
-        scoreCell.setBackground('#dcfce7').setFontColor('#166534').setFontWeight('bold'); // Green
+        scoreCell.setBackground('#dcfce7').setFontColor('#166534').setFontWeight('bold');
       } else if (scorePct >= 60) {
-        scoreCell.setBackground('#fef9c3').setFontColor('#854d0e').setFontWeight('bold'); // Yellow
+        scoreCell.setBackground('#fef9c3').setFontColor('#854d0e').setFontWeight('bold');
       } else {
-        scoreCell.setBackground('#fee2e2').setFontColor('#991b1b').setFontWeight('bold'); // Red
+        scoreCell.setBackground('#fee2e2').setFontColor('#991b1b').setFontWeight('bold');
       }
 
-      // Move processed PDF file to archive folder
       file.moveTo(processedFolder);
       gradedCount++;
-
     } catch (err) {
-      console.error(`Error grading ${file.getName()}:`, err);
-      errorCount++;
+      console.error(`Grading error for ${file.getName()}:`, err);
     }
   }
 
-  ui.alert(
-    'Grading Complete! 🎉',
-    `Successfully graded: ${gradedCount} submissions.\n` +
-    `Errors: ${errorCount}\n` +
-    `Processed files moved to "${folderName}/Processed".\n` +
-    `Check the "Gradebook" sheet for scores and feedback!`,
-    ui.ButtonSet.OK
-  );
+  return `Graded ${gradedCount} submissions! Scores and analytics updated.`;
+}
+
+/**
+ * Menu fallback function
+ */
+function gradeScannedWorksheets() {
+  showSidebar();
 }
