@@ -55,14 +55,16 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
       const folderList = folderData?.map((f: any) => f.name) || [];
       setFolders(folderList);
 
-      // 2. Fetch worksheets
+      // 2. Fetch worksheets (Strictly isolated by teacherId)
       let wsQuery = supabase
         .from('worksheets')
         .select('id, short_code, title, subject, grade_level, folder_name, style_preset, total_pages, student_id_digits, layout_config, created_at, teacher_id')
         .order('created_at', { ascending: false });
 
       if (teacherId) {
-        wsQuery = wsQuery.or(`teacher_id.eq.${teacherId},teacher_id.is.null`);
+        wsQuery = wsQuery.eq('teacher_id', teacherId);
+      } else {
+        wsQuery = wsQuery.is('teacher_id', null);
       }
 
       const { data: wsData, error: wsError } = await wsQuery;
