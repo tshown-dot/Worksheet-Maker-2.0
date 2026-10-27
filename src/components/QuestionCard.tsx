@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Question, QuestionType, StylePreset } from '../types/worksheet';
 import { MathText } from '../utils/mathRenderer';
+import { NJSLS_STANDARDS, getStandardDescription } from '../utils/standards';
 import { 
   Trash2, 
   Copy, 
@@ -9,7 +10,8 @@ import {
   Plus, 
   Check, 
   Sparkles,
-  ListOrdered
+  ListOrdered,
+  Target
 } from 'lucide-react';
 
 interface QuestionCardProps {
@@ -18,6 +20,7 @@ interface QuestionCardProps {
   totalQuestions: number;
   totalPages: number;
   stylePreset: StylePreset;
+  trackStandards?: boolean;
   onUpdate: (updated: Partial<Question>) => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -31,6 +34,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   totalQuestions,
   totalPages,
   stylePreset,
+  trackStandards = true,
   onUpdate,
   onDelete,
   onDuplicate,
@@ -340,6 +344,41 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* NJSLS Standard Tagging (Shown when trackStandards is enabled) */}
+        {trackStandards && (
+          <div className="p-3 bg-purple-50/60 rounded-lg border border-purple-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
+              <label className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center space-x-1.5">
+                <Target className="w-3.5 h-3.5 text-purple-600" />
+                <span>NJSLS Standard Target</span>
+              </label>
+              {question.standard && getStandardDescription(question.standard) && (
+                <span className="text-[11px] font-semibold text-purple-700 bg-white px-2 py-0.5 rounded border border-purple-200 truncate max-w-sm">
+                  {getStandardDescription(question.standard)}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                list={`standards-list-${question.id}`}
+                value={question.standard || ''}
+                onChange={(e) => onUpdate({ standard: e.target.value.trim() })}
+                placeholder="Type or select standard (e.g. 6.NS.C.7a, 6.EE.B.7, 5.NF.B.6)"
+                className="flex-1 px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-mono font-medium text-purple-950 focus:ring-2 focus:ring-purple-500 placeholder-purple-300"
+              />
+              <datalist id={`standards-list-${question.id}`}>
+                {Object.entries(NJSLS_STANDARDS).map(([code, desc]) => (
+                  <option key={code} value={code}>
+                    {code} — {desc}
+                  </option>
+                ))}
+              </datalist>
             </div>
           </div>
         )}

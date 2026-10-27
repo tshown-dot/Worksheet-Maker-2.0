@@ -47,6 +47,7 @@ Return ONLY a valid JSON array in this exact schema (no conversational text or m
     "assignmentName": "Math 6 Quiz: Equations",
     "prompt": "Solve for x: 3x - 5 = 16",
     "question_type": "numeric",
+    "standard": "6.EE.B.7",
     "correct_answer": "7",
     "acceptable_alternatives": ["x = 7", "7"],
     "points": 2,
@@ -56,6 +57,7 @@ Return ONLY a valid JSON array in this exact schema (no conversational text or m
 
 RULES:
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
+- "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
 - Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Output ONLY the raw JSON array.`;
@@ -70,6 +72,7 @@ Return ONLY a valid JSON array in this exact schema (no conversational text or m
     "assignmentName": "Math 6 POD: Ratios",
     "prompt": "Solve for x: \\frac{x}{3} + 4 = 10",
     "question_type": "numeric",
+    "standard": "6.EE.B.7",
     "correct_answer": "18",
     "acceptable_alternatives": ["x = 18", "18"],
     "points": 2,
@@ -79,6 +82,7 @@ Return ONLY a valid JSON array in this exact schema (no conversational text or m
 
 RULES:
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
+- "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
 - Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
 - Output ONLY the raw JSON array.`;
@@ -139,6 +143,13 @@ RULES:
 
       const pageNumber = totalPages === 2 && idx >= perPageLimit ? 2 : 1;
 
+      // Extract or infer standard
+      let standard = item.standard || '';
+      if (!standard && item.rubric_notes) {
+        const stdMatch = String(item.rubric_notes).match(/([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)/i);
+        if (stdMatch) standard = stdMatch[1];
+      }
+
       return {
         id: crypto.randomUUID(),
         order_index: idx + 1,
@@ -150,6 +161,7 @@ RULES:
         acceptable_alternatives: item.acceptable_alternatives || [],
         points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
         rubric_notes: item.rubric_notes || item.explanation || '',
+        standard: standard || undefined,
       };
     });
 
@@ -285,7 +297,8 @@ RULES:
             total_pages: totalPages,
             columns: 2,
             student_id_digits: 3,
-            layout_config: { columns: 2, spacing: 'balanced' },
+            track_standards: true,
+            layout_config: { columns: 2, spacing: 'balanced', track_standards: true },
           })
           .select('id')
           .single();
@@ -304,6 +317,7 @@ RULES:
             acceptable_alternatives: q.acceptable_alternatives,
             points: q.points,
             rubric_notes: q.rubric_notes,
+            standard: q.standard || null,
             bounding_box: {},
           }));
           await supabase.from('questions').insert(qPayload);

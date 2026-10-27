@@ -26,12 +26,17 @@ TASK: Return a valid JSON array in this exact schema (no conversational text or 
   {
     "prompt": "Solve for x: \\frac{x}{3} + 4 = 10",
     "question_type": "numeric",
+    "standard": "6.EE.B.7",
     "correct_answer": "18",
     "acceptable_alternatives": ["x = 18", "18"],
     "points": 2,
     "rubric_notes": "1 pt for subtracting 4 (x/3 = 6), 1 pt for multiplying by 3."
   }
-]`;
+]
+
+RULES:
+- "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
+- Use standard LaTeX for fractions and equations (e.g. \\frac{a}{b}, x^2, \\sqrt{x}). Do not add raw \\quad spacing.`;
 
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(aiSystemPromptTemplate);
@@ -89,6 +94,13 @@ TASK: Return a valid JSON array in this exact schema (no conversational text or 
             }
           }
 
+          // Extract or infer standard
+          let standard = item.standard || '';
+          if (!standard && item.rubric_notes) {
+            const stdMatch = String(item.rubric_notes).match(/([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)/i);
+            if (stdMatch) standard = stdMatch[1];
+          }
+
           return {
             id: crypto.randomUUID(),
             order_index: idx + 1,
@@ -100,6 +112,7 @@ TASK: Return a valid JSON array in this exact schema (no conversational text or 
             acceptable_alternatives: item.acceptable_alternatives || [],
             points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
             rubric_notes: item.rubric_notes || item.explanation || '',
+            standard: standard || undefined,
           };
         });
 

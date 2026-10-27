@@ -23,6 +23,7 @@ const INITIAL_WORKSHEET: Worksheet = {
   total_pages: 1,
   columns: 2,
   spacing: 'balanced',
+  track_standards: true,
   student_id_digits: 3,
   layout_config: {
     border_style: 'solid',
@@ -31,6 +32,7 @@ const INITIAL_WORKSHEET: Worksheet = {
     columns: 2,
     spacing: 'balanced',
     show_honor_pledge: false,
+    track_standards: true,
   },
   questions: [], // Starts empty so the Import Hub leads!
 };
@@ -173,11 +175,13 @@ export function App() {
         style_preset: worksheet.style_preset,
         total_pages: worksheet.total_pages,
         columns: worksheet.columns || 2,
+        track_standards: worksheet.track_standards !== false,
         student_id_digits: worksheet.student_id_digits,
         layout_config: {
           ...worksheet.layout_config,
           columns: worksheet.columns || 2,
           spacing: worksheet.spacing || 'balanced',
+          track_standards: worksheet.track_standards !== false,
         },
         updated_at: new Date().toISOString(),
       };
@@ -213,6 +217,7 @@ export function App() {
           acceptable_alternatives: q.acceptable_alternatives || [],
           points: q.points || 1,
           rubric_notes: q.rubric_notes || '',
+          standard: q.standard || null,
           bounding_box: q.bounding_box || {},
         }));
 
@@ -396,6 +401,7 @@ export function App() {
                       totalQuestions={worksheet.questions.length}
                       totalPages={worksheet.total_pages || 1}
                       stylePreset={worksheet.style_preset}
+                      trackStandards={worksheet.track_standards !== false}
                       onUpdate={(updated) => handleUpdateQuestion(question.id, updated)}
                       onDelete={() => handleDeleteQuestion(question.id)}
                       onDuplicate={() => handleDuplicateQuestion(question.id)}

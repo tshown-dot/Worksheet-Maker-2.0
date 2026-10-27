@@ -124,6 +124,7 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
         total_pages: wsData.total_pages || 1,
         columns: wsData.columns || wsData.layout_config?.columns || 2,
         spacing: wsData.spacing || wsData.layout_config?.spacing || 'balanced',
+        track_standards: wsData.track_standards !== false,
         student_id_digits: wsData.student_id_digits || 3,
         layout_config: wsData.layout_config || {
           border_style: 'solid',
@@ -144,6 +145,7 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
           acceptable_alternatives: q.acceptable_alternatives || [],
           points: q.points || 1,
           rubric_notes: q.rubric_notes || '',
+          standard: q.standard || undefined,
           bounding_box: q.bounding_box,
         })),
       };

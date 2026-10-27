@@ -121,7 +121,17 @@ export async function generateWorksheetPDF(
 
     pageQuestions.forEach((q, idx) => {
       const qY = currentY + idx * (questionCardHeight + 3);
-      renderQuestionCard(doc, q, qY, questionCardHeight, margin + 5, pageWidth - (margin * 2) - 10, worksheet.style_preset, isAnswerKey);
+      renderQuestionCard(
+        doc,
+        q,
+        qY,
+        questionCardHeight,
+        margin + 5,
+        pageWidth - (margin * 2) - 10,
+        worksheet.style_preset,
+        isAnswerKey,
+        worksheet.track_standards !== false
+      );
     });
 
     // 5. FOOTER
@@ -238,7 +248,8 @@ function renderQuestionCard(
   x: number,
   width: number,
   preset: StylePreset,
-  isAnswerKey: boolean
+  isAnswerKey: boolean,
+  trackStandards: boolean = true
 ) {
   // 1. Outer Question Container Border
   doc.setLineWidth(0.4);
@@ -268,12 +279,24 @@ function renderQuestionCard(
   doc.setTextColor(17, 24, 39);
   doc.text(`Question ${q.order_index}.`, x + 3, y + 5);
 
+  let currentHeaderX = x + 26;
+
   // Points Badge
   if (q.points) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(107, 114, 128);
-    doc.text(`[ ${q.points} pt${q.points > 1 ? 's' : ''} ]`, x + 26, y + 4.8);
+    const ptText = `[ ${q.points} pt${q.points > 1 ? 's' : ''} ]`;
+    doc.text(ptText, currentHeaderX, y + 4.8);
+    currentHeaderX += doc.getTextWidth(ptText) + 3;
+  }
+
+  // NJSLS Standards Badge on Answer Key
+  if (isAnswerKey && trackStandards && q.standard) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(126, 34, 206); // Purple-700
+    doc.text(`[ NJSLS: ${q.standard} ]`, currentHeaderX, y + 4.8);
   }
 
   // 3. Question Prompt Text
@@ -308,13 +331,16 @@ function renderQuestionCard(
   doc.setTextColor(156, 163, 175);
   doc.text('Show your work:', x + 5, workAreaY + 3.5);
 
-  // If Answer Key, write rubric guidance in work box
-  if (isAnswerKey && q.rubric_notes) {
+  // If Answer Key, write rubric guidance & standard in work box
+  if (isAnswerKey && (q.rubric_notes || (trackStandards && q.standard))) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(37, 99, 235);
-    const rubricLines = doc.splitTextToSize(`Rubric Notes: ${q.rubric_notes}`, workBoxWidth - 4);
-    doc.text(rubricLines, x + 5, workAreaY + 8);
+    const keyNotes: string[] = [];
+    if (trackStandards && q.standard) keyNotes.push(`Target: ${q.standard}`);
+    if (q.rubric_notes) keyNotes.push(`Rubric: ${q.rubric_notes}`);
+    const rubricLines = doc.splitTextToSize(keyNotes.join(' • '), workBoxWidth - 4);
+    doc.text(rubricLines, x + 5, workAreaY + 7.5);
   }
 
   // B. FINAL ANSWER BOX (HIGH CONTRAST FOR VISION OCR)

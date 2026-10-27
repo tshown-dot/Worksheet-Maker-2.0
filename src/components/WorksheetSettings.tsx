@@ -5,7 +5,8 @@ import {
   QrCode,
   Folder,
   Columns,
-  Maximize2
+  Maximize2,
+  Target
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
@@ -299,6 +300,26 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
               2 Pages
             </button>
           </div>
+
+          {/* NJSLS Standards Tracking Toggle */}
+          <button
+            type="button"
+            onClick={() => onChange({ track_standards: worksheet.track_standards === false ? true : false })}
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
+              worksheet.track_standards !== false
+                ? 'bg-purple-50 text-purple-800 border-purple-300 shadow-xs'
+                : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+            }`}
+            title="Toggle whether NJSLS math standards are tagged per problem and included on the Answer Key"
+          >
+            <Target className={`w-3.5 h-3.5 ${worksheet.track_standards !== false ? 'text-purple-600' : 'text-slate-400'}`} />
+            <span>NJSLS Standards:</span>
+            <span className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+              worksheet.track_standards !== false ? 'bg-purple-600 text-white' : 'bg-slate-300 text-slate-700'
+            }`}>
+              {worksheet.track_standards !== false ? 'ON' : 'OFF'}
+            </span>
+          </button>
 
           {/* Student ID Digits */}
           <div className="flex items-center space-x-1 bg-slate-100 px-2 py-1 rounded-lg">

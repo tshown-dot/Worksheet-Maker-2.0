@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Worksheet, Question } from '../types/worksheet';
 import { MathText } from '../utils/mathRenderer';
+import { getStandardDescription } from '../utils/standards';
 
 interface WorksheetPageProps {
   worksheet: Worksheet;
@@ -197,11 +198,18 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                 {/* Question Header & Rendered Math Prompt */}
                 <div>
                   <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-100">
-                    <span className="text-xs font-bold text-slate-900">
-                      Problem {q.order_index}.
-                    </span>
+                    <div className="flex items-center space-x-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-slate-900">
+                        Problem {q.order_index}.
+                      </span>
+                      {isAnswerKey && worksheet.track_standards !== false && q.standard && (
+                        <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                          {q.standard}{getStandardDescription(q.standard) ? ` • ${getStandardDescription(q.standard)}` : ''}
+                        </span>
+                      )}
+                    </div>
                     {q.points && (
-                      <span className="text-[10px] font-semibold text-slate-500">
+                      <span className="text-[10px] font-semibold text-slate-500 shrink-0">
                         [{q.points} pt{q.points > 1 ? 's' : ''}]
                       </span>
                     )}
@@ -228,9 +236,18 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                     <span className="text-[8px] text-slate-400 italic block">
                       Show your work:
                     </span>
-                    {isAnswerKey && q.rubric_notes && (
-                      <div className="text-[9px] text-blue-700 italic mt-1 leading-tight font-sans">
-                        Rubric: {q.rubric_notes}
+                    {isAnswerKey && (
+                      <div className="mt-0.5 space-y-0.5">
+                        {worksheet.track_standards !== false && q.standard && (
+                          <div className="text-[8px] font-semibold text-purple-800 leading-tight">
+                            Standard: {q.standard} {getStandardDescription(q.standard) ? `(${getStandardDescription(q.standard)})` : ''}
+                          </div>
+                        )}
+                        {q.rubric_notes && (
+                          <div className="text-[8.5px] text-blue-700 italic leading-tight font-sans">
+                            Rubric: {q.rubric_notes}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

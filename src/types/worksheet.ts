@@ -36,6 +36,7 @@ export interface Question {
   acceptable_alternatives: string[];
   points: number;
   rubric_notes: string;
+  standard?: string;
   bounding_box?: BoundingBox;
 }
 
@@ -46,6 +47,7 @@ export interface LayoutConfig {
   columns: 1 | 2;
   spacing: SpacingMode;
   show_honor_pledge: boolean;
+  track_standards?: boolean;
 }
 
 export interface Worksheet {
@@ -60,6 +62,7 @@ export interface Worksheet {
   total_pages: 1 | 2;
   columns: 1 | 2;
   spacing: SpacingMode;
+  track_standards?: boolean;
   student_id_digits: number;
   layout_config: LayoutConfig;
   questions: Question[];
