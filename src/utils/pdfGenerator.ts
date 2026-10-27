@@ -275,6 +275,35 @@ function renderStudentHeader(
 }
 
 // ----------------------------------------------------------------------------
+// HELPER: Clean LaTeX for PDF Text Rendering
+// ----------------------------------------------------------------------------
+function cleanLatexForPdf(text: string): string {
+  if (!text) return '';
+  let s = text;
+  // Convert superscripts
+  s = s.replace(/\^2\b/g, '²')
+       .replace(/\^3\b/g, '³')
+       .replace(/\^([0-9])/g, (_, d) => ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'][Number(d)] || `^${d}`);
+  // Convert fractions \frac{a}{b} -> a/b
+  s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+  // Convert common latex symbols
+  s = s.replace(/\\times\b/g, '×')
+       .replace(/\\div\b/g, '÷')
+       .replace(/\\cdot\b/g, '·')
+       .replace(/\\pm\b/g, '±')
+       .replace(/\\le\b/g, '≤')
+       .replace(/\\ge\b/g, '≥')
+       .replace(/\\neq\b/g, '≠')
+       .replace(/\\approx\b/g, '≈')
+       .replace(/\\text\{([^}]+)\}/g, '$1')
+       .replace(/\\mathrm\{([^}]+)\}/g, '$1')
+       .replace(/\\quad\b/g, ' ');
+  // Strip math delimiters $...$ (preserving standalone currency like $45.50)
+  s = s.replace(/\$([^\s$](?:[^\n$]*?[^\s$])?)\$/g, '$1');
+  return s;
+}
+
+// ----------------------------------------------------------------------------
 // HELPER: Renders an Individual Question Card with OCR Zones
 // ----------------------------------------------------------------------------
 function renderQuestionCard(
@@ -350,9 +379,10 @@ function renderQuestionCard(
 
   const is2Col = width < 120;
 
-  // Wrap prompt text cleanly
+  // Wrap prompt text cleanly (clean LaTeX commands for crisp PDF display)
   const promptMaxWidth = width - 8;
-  const promptLines = doc.splitTextToSize(q.prompt, promptMaxWidth);
+  const promptText = cleanLatexForPdf(q.prompt);
+  const promptLines = doc.splitTextToSize(promptText, promptMaxWidth);
   doc.text(promptLines, x + 3, y + headerHeight + 4.2);
 
   let promptBottomY = y + headerHeight + 3.2 + (promptLines.length * 3.8);
@@ -372,7 +402,8 @@ function renderQuestionCard(
       doc.text(`(${opt.label}) `, optX, optY);
       const labelW = doc.getTextWidth(`(${opt.label}) `);
       doc.setFont('helvetica', 'normal');
-      const textLine = doc.splitTextToSize(opt.text, halfWidth - labelW - 2)[0] || '';
+      const optTextClean = cleanLatexForPdf(opt.text);
+      const textLine = doc.splitTextToSize(optTextClean, halfWidth - labelW - 2)[0] || '';
       doc.text(textLine, optX + labelW, optY);
     });
     const totalOptionRows = Math.ceil(q.options.length / 2);

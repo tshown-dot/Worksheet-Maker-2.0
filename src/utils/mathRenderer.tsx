@@ -6,30 +6,46 @@ interface MathTextProps {
   className?: string;
 }
 
+/**
+ * Pre-processes LaTeX math content to ensure connective English words
+ * (like "when", "for", "where", "if") are properly wrapped in \text{}
+ * so KaTeX formats them cleanly with proper spacing and standard font.
+ */
+function cleanMathContent(content: string): string {
+  if (!content) return '';
+  return content.replace(/\b(when|for|where|if)\b/g, (match, word, offset, str) => {
+    const before = str.slice(0, offset);
+    if (/\\text\{[^}]*$/.test(before) || /\\mathrm\{[^}]*$/.test(before)) {
+      return match;
+    }
+    return `\\text{ ${word} }`;
+  });
+}
+
 export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
   if (!text) return null;
 
-  // 1. Protect currency patterns (e.g. $35, $0.10, $52.50) from being misidentified as LaTeX delimiters
-  const currencyPlaceholder = '___CURRENCY_DOLLAR___';
-  const protectedText = text.replace(/\$(\d+(?:\.\d+)?)/g, `${currencyPlaceholder}$1`);
-
   const parts: React.ReactNode[] = [];
 
-  // 2. Check for explicit math blocks $$...$$ or $...$
-  if (protectedText.includes('$')) {
-    const mathRegex = /(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/g;
+  // Match $$...$$ (display math) or $...$ (inline math, where closing $ is not preceded by space and opening $ is not followed by space)
+  // This cleanly distinguishes real math ($3x^2$, $x = 2.4$, etc.) from currency ($45.50, $15, etc.)
+  const mathRegex = /(\$\$[\s\S]*?\$\$|\$([^\s$](?:[^\n$]*?[^\s$])?)\$)/g;
+
+  if (text.includes('$')) {
     let lastIndex = 0;
     let match: RegExpExecArray | null;
+    let hasMathMatch = false;
 
-    while ((match = mathRegex.exec(protectedText)) !== null) {
+    while ((match = mathRegex.exec(text)) !== null) {
+      hasMathMatch = true;
       if (match.index > lastIndex) {
-        const textSegment = protectedText.substring(lastIndex, match.index).replace(new RegExp(currencyPlaceholder, 'g'), '$');
-        parts.push(<span key={`text-${lastIndex}`}>{textSegment}</span>);
+        parts.push(<span key={`text-${lastIndex}`}>{text.substring(lastIndex, match.index)}</span>);
       }
 
       const rawFormula = match[0];
       const isDisplay = rawFormula.startsWith('$$');
-      const mathContent = isDisplay ? rawFormula.slice(2, -2) : rawFormula.slice(1, -1);
+      const rawContent = isDisplay ? rawFormula.slice(2, -2) : rawFormula.slice(1, -1);
+      const mathContent = cleanMathContent(rawContent);
 
       try {
         const html = katex.renderToString(mathContent, {
@@ -51,29 +67,29 @@ export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
       lastIndex = mathRegex.lastIndex;
     }
 
-    if (lastIndex < protectedText.length) {
-      const remaining = protectedText.substring(lastIndex).replace(new RegExp(currencyPlaceholder, 'g'), '$');
-      parts.push(<span key={`text-${lastIndex}`}>{remaining}</span>);
+    if (hasMathMatch) {
+      if (lastIndex < text.length) {
+        parts.push(<span key={`text-${lastIndex}`}>{text.substring(lastIndex)}</span>);
+      }
+      return <span className={className}>{parts}</span>;
     }
-
-    return <span className={className}>{parts}</span>;
   }
 
-  // 3. Handle raw LaTeX commands without dollar signs (e.g. "Solve for y: \quad \frac{y}{4} - 3 = 5")
+  // 2. Handle raw LaTeX commands without dollar signs (e.g. "Solve for y: \quad \frac{y}{4} - 3 = 5" or "Evaluate: \frac{3}{4} \div \frac{1}{2}")
   const latexTriggers = ['\\frac', '\\sqrt', '\\quad', '\\cdot', '\\times', '\\pm', '\\le', '\\ge', '\\div', '\\neq', '\\approx', '^'];
-  const hasLatex = latexTriggers.some((t) => protectedText.includes(t));
+  const hasLatex = latexTriggers.some((t) => text.includes(t));
 
   if (hasLatex) {
-    // If there's a prefix like "Solve for y: " or "1. "
-    const colonIndex = protectedText.indexOf(':');
-    if (colonIndex !== -1 && colonIndex < protectedText.length - 1) {
-      const prefix = protectedText.substring(0, colonIndex + 1).replace(new RegExp(currencyPlaceholder, 'g'), '$');
-      const formula = protectedText.substring(colonIndex + 1).replace(/^\\quad\s*/, '').trim();
+    // If there's a prefix like "Solve for y: " or "Evaluate: "
+    const colonIndex = text.indexOf(':');
+    if (colonIndex !== -1 && colonIndex < text.length - 1) {
+      const prefix = text.substring(0, colonIndex + 1);
+      const formula = cleanMathContent(text.substring(colonIndex + 1).replace(/^\\quad\s*/, '').trim());
 
       try {
         const html = katex.renderToString(formula, {
           displayMode: false,
-          output: 'html', // Output HTML only
+          output: 'html',
           throwOnError: false,
         });
         return (
@@ -92,7 +108,7 @@ export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
 
     // Try rendering entire text through KaTeX with output: 'html'
     try {
-      const cleaned = protectedText.replace(/^\\quad\s*/, '').replace(new RegExp(currencyPlaceholder, 'g'), '$');
+      const cleaned = cleanMathContent(text.replace(/^\\quad\s*/, ''));
       const html = katex.renderToString(cleaned, {
         displayMode: false,
         output: 'html',
@@ -109,7 +125,6 @@ export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
     }
   }
 
-  // 4. Default plain text (restore any protected currency symbols)
-  const plain = protectedText.replace(new RegExp(currencyPlaceholder, 'g'), '$');
-  return <span className={className}>{plain}</span>;
+  // 3. Default plain text (e.g. pure English word problems or single currency amounts like "$45.50")
+  return <span className={className}>{text}</span>;
 };
