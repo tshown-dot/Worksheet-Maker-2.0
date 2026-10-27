@@ -17,7 +17,7 @@
     }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 p-4 space-y-4 text-xs">
+<body class="bg-slate-50 text-slate-800 p-3.5 space-y-3.5 text-xs">
 
   <!-- TOP HEADER / BRANDING -->
   <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -26,24 +26,34 @@
         📐
       </div>
       <div>
-        <h1 class="font-bold text-slate-900 text-sm">Autograder Panel</h1>
+        <h1 class="font-bold text-slate-900 text-sm leading-tight">Autograder & Roster</h1>
         <p class="text-[10px] text-slate-500 font-medium">Worksheet Maker 2.0 • Vision AI</p>
       </div>
     </div>
     <button 
       onclick="refreshData()" 
-      title="Refresh analytics from sheet"
-      class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+      title="Refresh analytics & roster from sheet"
+      class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
     >
       🔄
     </button>
   </div>
 
-  <!-- ACTION: GRADE SCANS BUTTON -->
+  <!-- ACTION: GRADE SCANS CARD -->
   <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
     <div class="flex items-center justify-between">
-      <span class="font-bold text-slate-800 text-xs uppercase tracking-wide">Copier Scanner Ingestion</span>
+      <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide">1. Copier Scanner Ingestion</span>
       <span class="text-[10px] text-slate-400">Folder: <code class="bg-slate-100 px-1 py-0.5 rounded text-blue-700 font-mono">Worksheet Scans</code></span>
+    </div>
+
+    <div>
+      <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Assignment Key (Optional):</label>
+      <select
+        id="assignmentSelect"
+        class="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-semibold text-slate-700"
+      >
+        <option value="">🔍 Auto-Detect Code from Scan Header / QR</option>
+      </select>
     </div>
 
     <button 
@@ -59,10 +69,82 @@
     <div id="statusBox" class="hidden p-2 rounded-lg text-[11px] leading-relaxed"></div>
   </div>
 
+  <!-- STUDENT ROSTER & MISSING SUBMISSIONS CARD -->
+  <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center space-x-1">
+        <span>👥</span>
+        <span>Student Roster (ID # Link)</span>
+      </span>
+      <span id="rosterCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+        0 rostered
+      </span>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <button
+        onclick="openRosterTab()"
+        class="flex-1 py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center justify-center space-x-1"
+      >
+        <span>📋</span>
+        <span>Edit Roster Sheet</span>
+      </button>
+      <button
+        onclick="toggleQuickAddRoster()"
+        class="py-1.5 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold rounded-lg text-[11px] transition cursor-pointer"
+      >
+        + Add Student
+      </button>
+    </div>
+
+    <!-- Inline Quick-Add Student Form -->
+    <div id="quickAddRosterForm" class="hidden p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+      <div class="text-[10px] font-bold text-slate-600 uppercase">Add / Update Student in Roster</div>
+      <div class="grid grid-cols-3 gap-1.5">
+        <input
+          id="newRosterId"
+          type="text"
+          placeholder="ID # (e.g. 104)"
+          class="col-span-1 p-1.5 bg-white border border-slate-300 rounded text-[11px] font-bold"
+        />
+        <input
+          id="newRosterName"
+          type="text"
+          placeholder="Full Name (e.g. Maya Lin)"
+          class="col-span-2 p-1.5 bg-white border border-slate-300 rounded text-[11px]"
+        />
+      </div>
+      <div class="flex items-center space-x-1.5">
+        <input
+          id="newRosterPeriod"
+          type="text"
+          placeholder="Class / Period (e.g. Period 2)"
+          class="flex-1 p-1.5 bg-white border border-slate-300 rounded text-[11px]"
+        />
+        <button
+          id="saveRosterBtn"
+          onclick="saveRosterStudent()"
+          class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded text-[11px] cursor-pointer"
+        >
+          Save
+        </button>
+      </div>
+      <div id="rosterFormMsg" class="hidden text-[10px] font-semibold"></div>
+    </div>
+
+    <!-- Missing Submissions Tracker -->
+    <div id="missingStudentsBox" class="hidden p-2 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+      <div class="flex items-center justify-between text-[10px]">
+        <span class="font-bold text-slate-600 uppercase">⏳ Not Graded Yet (<span id="missingCount">0</span>):</span>
+      </div>
+      <div id="missingStudentsList" class="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scroll pt-0.5"></div>
+    </div>
+  </div>
+
   <!-- CLASS ANALYTICS CARD -->
   <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-3">
     <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-      <span class="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center space-x-1">
+      <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center space-x-1">
         <span>📊</span>
         <span>Class Analytics</span>
       </span>
@@ -106,20 +188,20 @@
   <!-- STUDENT LOOKUP & CONFERENCING -->
   <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-3">
     <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-      <span class="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center space-x-1">
+      <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center space-x-1">
         <span>🔍</span>
-        <span>Student Lookup</span>
+        <span>Student Lookup & Conferencing</span>
       </span>
     </div>
 
     <div>
-      <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Select Student ID:</label>
+      <label class="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Select Graded Student:</label>
       <select 
         id="studentSelect" 
         onchange="onSelectStudent()"
         class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500"
       >
-        <option value="">-- Choose a Student ID --</option>
+        <option value="">-- Choose a Student --</option>
       </select>
     </div>
 
@@ -127,10 +209,13 @@
     <div id="studentDetailsCard" class="hidden space-y-2.5 pt-1">
       <div class="p-2.5 bg-blue-50/70 border border-blue-200 rounded-lg flex items-center justify-between">
         <div>
-          <span class="text-[10px] font-bold text-blue-600 uppercase">Student ID:</span>
-          <span id="detailStudentId" class="font-extrabold text-sm text-slate-900 ml-1">#104</span>
+          <div id="detailStudentName" class="font-extrabold text-xs text-slate-900">Student Name</div>
+          <div class="text-[10px] font-semibold text-blue-700">
+            ID: <span id="detailStudentId" class="font-bold">#104</span>
+            <span id="detailStudentPeriod" class="ml-1.5 text-slate-500"></span>
+          </div>
         </div>
-        <div id="detailScoreBadge" class="px-2.5 py-1 rounded-md text-xs font-extrabold bg-blue-600 text-white">
+        <div id="detailScoreBadge" class="px-2.5 py-1 rounded-md text-xs font-extrabold bg-blue-600 text-white shrink-0">
           83% (5/6 pts)
         </div>
       </div>
@@ -153,25 +238,23 @@
   </div>
 
   <!-- FOOTER QUICK LINKS -->
-  <div class="pt-2 flex items-center justify-between text-[10px] text-slate-400">
-    <button onclick="google.script.run.setGeminiApiKeyPrompt()" class="hover:text-blue-600 underline">
+  <div class="pt-1 pb-2 flex items-center justify-between text-[10px] text-slate-400">
+    <button onclick="google.script.run.setGeminiApiKeyPrompt()" class="hover:text-blue-600 underline cursor-pointer">
       ⚙️ Set Gemini Key
     </button>
     <span>•</span>
-    <button onclick="google.script.run.testSupabaseConnection()" class="hover:text-blue-600 underline">
-      🔗 Test Supabase
+    <button onclick="google.script.run.testSupabaseConnection()" class="hover:text-blue-600 underline cursor-pointer">
+      🔗 Test Connection
     </button>
     <span>•</span>
-    <button onclick="google.script.run.setupGradebookSheet()" class="hover:text-blue-600 underline">
-      📊 Reset Sheet
+    <button onclick="google.script.run.setupAllSheets()" class="hover:text-blue-600 underline cursor-pointer">
+      📊 Format All Sheets
     </button>
   </div>
 
   <script>
-    // Global data cache
     let currentAnalytics = null;
 
-    // Load initial analytics on sidebar launch
     window.onload = function() {
       refreshData();
     };
@@ -185,14 +268,98 @@
         .getGradebookAnalytics();
     }
 
+    function openRosterTab() {
+      google.script.run.openRosterSheet();
+    }
+
+    function toggleQuickAddRoster() {
+      const form = document.getElementById('quickAddRosterForm');
+      form.classList.toggle('hidden');
+    }
+
+    function saveRosterStudent() {
+      const idEl = document.getElementById('newRosterId');
+      const nameEl = document.getElementById('newRosterName');
+      const periodEl = document.getElementById('newRosterPeriod');
+      const msgEl = document.getElementById('rosterFormMsg');
+      const btn = document.getElementById('saveRosterBtn');
+
+      const studentId = idEl.value.trim();
+      const studentName = nameEl.value.trim();
+      const classPeriod = periodEl.value.trim();
+
+      if (!studentId || !studentName) {
+        msgEl.classList.remove('hidden', 'text-emerald-700');
+        msgEl.classList.add('text-red-600');
+        msgEl.innerText = 'Please enter both an ID # and Student Name.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = '...';
+
+      google.script.run
+        .withSuccessHandler(function(updatedData) {
+          btn.disabled = false;
+          btn.innerText = 'Save';
+          idEl.value = '';
+          nameEl.value = '';
+          msgEl.classList.remove('hidden', 'text-red-600');
+          msgEl.classList.add('text-emerald-700');
+          msgEl.innerText = '✅ Added ' + studentName + ' (#' + studentId + ') to Roster!';
+          renderAnalytics(updatedData);
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.innerText = 'Save';
+          msgEl.classList.remove('hidden', 'text-emerald-700');
+          msgEl.classList.add('text-red-600');
+          msgEl.innerText = '❌ ' + err.message;
+        })
+        .addOrUpdateRosterStudent(studentId, studentName, classPeriod, '');
+    }
+
     function renderAnalytics(data) {
       currentAnalytics = data;
       if (!data) return;
 
+      // Update Roster count & Missing Students
+      document.getElementById('rosterCountBadge').innerText = (data.rosterCount || 0) + ' rostered';
+
+      const missingBox = document.getElementById('missingStudentsBox');
+      const missingList = document.getElementById('missingStudentsList');
+      if (data.missingStudents && data.missingStudents.length > 0 && data.totalSubmissions > 0) {
+        missingBox.classList.remove('hidden');
+        document.getElementById('missingCount').innerText = data.missingStudents.length;
+        missingList.innerHTML = '';
+        data.missingStudents.forEach(function(m) {
+          const pill = document.createElement('span');
+          pill.className = 'px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9.5px] font-medium text-slate-600';
+          pill.innerText = m.studentName + ' (#' + m.studentId + ')';
+          missingList.appendChild(pill);
+        });
+      } else {
+        missingBox.classList.add('hidden');
+      }
+
+      // Populate Assignment Selector
+      const assignSelect = document.getElementById('assignmentSelect');
+      const prevAssign = assignSelect.value;
+      assignSelect.innerHTML = '<option value="">🔍 Auto-Detect Code from Scan Header / QR</option>';
+      if (data.recentWorksheets && data.recentWorksheets.length > 0) {
+        data.recentWorksheets.forEach(function(ws) {
+          const opt = document.createElement('option');
+          opt.value = ws.short_code;
+          opt.innerText = '[' + ws.short_code + '] ' + ws.title;
+          assignSelect.appendChild(opt);
+        });
+      }
+      if (prevAssign) assignSelect.value = prevAssign;
+
       // Update counters
       document.getElementById('submissionCountBadge').innerText = data.totalSubmissions + ' graded';
-      document.getElementById('classAverageScore').innerText = data.classAverage ? data.classAverage + '%' : '—';
-      document.getElementById('passRateScore').innerText = data.passRate ? data.passRate + '%' : '—';
+      document.getElementById('classAverageScore').innerText = data.totalSubmissions > 0 ? data.classAverage + '%' : '—';
+      document.getElementById('passRateScore').innerText = data.totalSubmissions > 0 ? data.passRate + '%' : '—';
 
       // Most Missed Question
       const alertBox = document.getElementById('mostMissedAlert');
@@ -224,37 +391,62 @@
         });
       }
 
-      // Populate Student Dropdown
+      // Populate Student Dropdown (with Student Name tied to ID!)
       const select = document.getElementById('studentSelect');
       const prevVal = select.value;
-      select.innerHTML = '<option value="">-- Choose a Student ID --</option>';
+      select.innerHTML = '<option value="">-- Choose a Student --</option>';
       if (data.students && data.students.length > 0) {
-        data.students.forEach(function(s) {
+        data.students.forEach(function(s, idx) {
           const opt = document.createElement('option');
-          opt.value = s.studentId;
-          opt.innerText = 'Student #' + s.studentId + ' — ' + s.scorePct + '% (' + s.points + ' pts)';
+          opt.value = String(idx);
+          const displayName = (s.studentName && s.studentName !== 'Unlisted in Roster')
+            ? (s.studentName + ' (#' + s.studentId + ')')
+            : ('Student #' + s.studentId);
+          opt.innerText = displayName + ' — ' + s.scorePct + '% (' + s.points + '/' + s.totalPossible + ' pts)';
           select.appendChild(opt);
         });
       }
-      if (prevVal) select.value = prevVal;
+      if (prevVal && select.querySelector('option[value="' + prevVal + '"]')) {
+        select.value = prevVal;
+        onSelectStudent();
+      }
     }
 
     function onSelectStudent() {
       const select = document.getElementById('studentSelect');
-      const studentId = select.value;
+      const idxStr = select.value;
       const detailsCard = document.getElementById('studentDetailsCard');
 
-      if (!studentId || !currentAnalytics || !currentAnalytics.students) {
+      if (idxStr === '' || !currentAnalytics || !currentAnalytics.students) {
         detailsCard.classList.add('hidden');
         return;
       }
 
-      const student = currentAnalytics.students.find(function(s) { return s.studentId === studentId; });
+      const student = currentAnalytics.students[parseInt(idxStr, 10)];
       if (!student) return;
 
       detailsCard.classList.remove('hidden');
+      document.getElementById('detailStudentName').innerText = student.studentName || ('Student #' + student.studentId);
       document.getElementById('detailStudentId').innerText = '#' + student.studentId;
+      document.getElementById('detailStudentPeriod').innerText = student.classPeriod ? ('• ' + student.classPeriod) : '';
       document.getElementById('detailScoreBadge').innerText = student.scorePct + '% (' + student.points + '/' + student.totalPossible + ' pts)';
+
+      // Populate Blocker and Gap diagnostic badges
+      const blockerBadge = document.getElementById('blockerBadge');
+      const gapBadge = document.getElementById('gapBadge');
+      if (student.blocker) {
+        blockerBadge.classList.remove('hidden');
+        document.getElementById('blockerText').innerText = student.blocker;
+      } else {
+        blockerBadge.classList.add('hidden');
+      }
+
+      if (student.gap) {
+        gapBadge.classList.remove('hidden');
+        document.getElementById('gapText').innerText = student.gap;
+      } else {
+        gapBadge.classList.add('hidden');
+      }
 
       const list = document.getElementById('detailQuestionsList');
       list.innerHTML = '';
@@ -291,6 +483,7 @@
       const btn = document.getElementById('gradeBtn');
       const btnText = document.getElementById('gradeBtnText');
       const statusBox = document.getElementById('statusBox');
+      const selectedCode = document.getElementById('assignmentSelect').value;
 
       btn.disabled = true;
       btn.classList.add('opacity-50');
@@ -298,7 +491,7 @@
 
       statusBox.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-emerald-50', 'text-emerald-700');
       statusBox.classList.add('bg-blue-50', 'text-blue-800', 'border', 'border-blue-200');
-      statusBox.innerHTML = '⏳ Reading PDF scans from Google Drive... Please wait.';
+      statusBox.innerHTML = '⏳ Reading PDF scans & matching Student Roster IDs... Please wait.';
 
       google.script.run
         .withSuccessHandler(function(msg) {
@@ -321,7 +514,7 @@
           statusBox.classList.add('bg-red-50', 'text-red-800', 'border-red-200');
           statusBox.innerHTML = '❌ ' + err.message;
         })
-        .runGradingFromSidebar();
+        .runGradingFromSidebar(selectedCode);
     }
   </script>
 </body>
