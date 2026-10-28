@@ -164,9 +164,9 @@ function setupStandardsMapSheet() {
 
 /**
  * Sets up and updates the "Student Monitoring" tab:
- * Ties every Student ID to the "Student Roster" tab (Student Name & Class/Period)
- * and analyzes all graded submissions to compute:
- * - Graded Work Count
+ * Ties every 2-digit or 3-digit Student ID to the "Student Roster" tab
+ * (First Name, Last Name, & Class/Period) and computes:
+ * - Graded Submissions Count
  * - Overall Average %
  * - Active Unit Need (lowest current concept)
  * - Actionable Gap (20% - 69% mastery)
@@ -182,14 +182,17 @@ function updateStudentMonitoringSheet() {
   const rosterInfo = typeof getRosterData === 'function' ? getRosterData() : { byId: {}, list: [] };
   const gradebook = ss.getSheetByName('Gradebook');
 
-  // Map: studentId -> { studentId, studentName, classPeriod, submissions, totalEarned, totalPossible, standards: { stdCode: { attempts, correct } } }
   const studentMap = {};
 
   // Seed with all students from Student Roster first so missing students are also visible
   for (const rStudent of rosterInfo.list) {
-    studentMap[rStudent.studentId] = {
+    const normKey = typeof normalizeStudentIdKey === 'function'
+      ? normalizeStudentIdKey(rStudent.studentId)
+      : rStudent.studentId;
+    studentMap[normKey || rStudent.studentId] = {
       studentId: rStudent.studentId,
-      studentName: rStudent.studentName,
+      firstName: rStudent.firstName || '',
+      lastName: rStudent.lastName || '',
       classPeriod: rStudent.classPeriod || '',
       submissions: 0,
       totalEarned: 0,
@@ -204,7 +207,9 @@ function updateStudentMonitoringSheet() {
     const rows = gbData.slice(1);
 
     const idCol = headers.indexOf('student id') !== -1 ? headers.indexOf('student id') : 1;
-    const nameCol = headers.indexOf('student name');
+    const firstCol = headers.indexOf('first name');
+    const lastCol = headers.indexOf('last name');
+    const fullNameCol = headers.indexOf('student name');
     const periodCol = headers.indexOf('class / period');
     const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 5;
     const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 6;
@@ -212,20 +217,34 @@ function updateStudentMonitoringSheet() {
 
     for (const r of rows) {
       const rawId = String(r[idCol] || '').trim();
-      const rawName = nameCol !== -1 ? String(r[nameCol] || '').trim() : '';
+      const rawFirst = firstCol !== -1 ? String(r[firstCol] || '').trim() : '';
+      const rawLast = lastCol !== -1 ? String(r[lastCol] || '').trim() : '';
+      const rawFull = fullNameCol !== -1
+        ? String(r[fullNameCol] || '').trim()
+        : [rawFirst, rawLast].filter(Boolean).join(' ');
       const rawPeriod = periodCol !== -1 ? String(r[periodCol] || '').trim() : '';
 
       const resolved = typeof resolveStudentFromRoster === 'function'
-        ? resolveStudentFromRoster(rawId, rawName, rosterInfo)
-        : { studentId: rawId || '???', studentName: rawName || 'Unmatched Student', classPeriod: rawPeriod };
+        ? resolveStudentFromRoster(rawId, rawFull, rosterInfo)
+        : {
+            studentId: rawId || '???',
+            firstName: rawFirst,
+            lastName: rawLast,
+            studentName: rawFull,
+            classPeriod: rawPeriod
+          };
 
-      const key = resolved.studentId !== '???' ? resolved.studentId : (resolved.studentName || '???');
-      if (key === '???' && !rawName) continue;
+      const normKey = typeof normalizeStudentIdKey === 'function'
+        ? normalizeStudentIdKey(resolved.studentId)
+        : resolved.studentId;
+      const key = normKey || resolved.studentName || '???';
+      if (key === '???' && !rawFull) continue;
 
       if (!studentMap[key]) {
         studentMap[key] = {
           studentId: resolved.studentId,
-          studentName: resolved.studentName || 'Unlisted in Roster',
+          firstName: resolved.firstName || rawFirst || 'Unlisted',
+          lastName: resolved.lastName || rawLast || '',
           classPeriod: resolved.classPeriod || rawPeriod || '',
           submissions: 0,
           totalEarned: 0,
@@ -233,8 +252,11 @@ function updateStudentMonitoringSheet() {
           standards: {}
         };
       } else {
-        if (!studentMap[key].studentName && resolved.studentName) {
-          studentMap[key].studentName = resolved.studentName;
+        if (!studentMap[key].firstName && (resolved.firstName || rawFirst)) {
+          studentMap[key].firstName = resolved.firstName || rawFirst;
+        }
+        if (!studentMap[key].lastName && (resolved.lastName || rawLast)) {
+          studentMap[key].lastName = resolved.lastName || rawLast;
         }
         if (!studentMap[key].classPeriod && (resolved.classPeriod || rawPeriod)) {
           studentMap[key].classPeriod = resolved.classPeriod || rawPeriod;
@@ -248,7 +270,6 @@ function updateStudentMonitoringSheet() {
       sData.totalEarned += earned;
       sData.totalPossible += possible;
 
-      // Inspect Q1..Q10 columns for standard tags
       for (let q = 0; q < 10; q++) {
         const baseCol = q1ScoreCol + (q * 3);
         if (baseCol + 2 >= r.length) break;
@@ -274,7 +295,8 @@ function updateStudentMonitoringSheet() {
 
   const outHeaders = [
     'Student ID',
-    'Student Name',
+    'First Name',
+    'Last Name',
     'Class / Period',
     'Submissions',
     'Overall Avg',
@@ -297,7 +319,8 @@ function updateStudentMonitoringSheet() {
     if (sData.submissions === 0) {
       outRows.push([
         sData.studentId,
-        sData.studentName || '—',
+        sData.firstName || '—',
+        sData.lastName || '—',
         sData.classPeriod || '—',
         0,
         '—',
@@ -355,7 +378,8 @@ function updateStudentMonitoringSheet() {
 
     outRows.push([
       sData.studentId,
-      sData.studentName || 'Unlisted in Roster',
+      sData.firstName || '—',
+      sData.lastName || '—',
       sData.classPeriod || '—',
       sData.submissions,
       `${overallAvg}%`,
@@ -379,14 +403,13 @@ function updateStudentMonitoringSheet() {
   header.setHorizontalAlignment('center');
   monitorSheet.setRowHeight(1, 35);
   monitorSheet.setFrozenRows(1);
-  monitorSheet.setFrozenColumns(2);
+  monitorSheet.setFrozenColumns(3);
 
-  // Format Status & Overall Avg colors
   for (let rIdx = 2; rIdx <= outRows.length; rIdx++) {
-    const avgVal = String(outRows[rIdx - 1][4] || '');
-    const statusVal = String(outRows[rIdx - 1][11] || '');
-    const avgCell = monitorSheet.getRange(rIdx, 5);
-    const statusCell = monitorSheet.getRange(rIdx, 12);
+    const avgVal = String(outRows[rIdx - 1][5] || '');
+    const statusVal = String(outRows[rIdx - 1][12] || '');
+    const avgCell = monitorSheet.getRange(rIdx, 6);
+    const statusCell = monitorSheet.getRange(rIdx, 13);
 
     if (avgVal.endsWith('%')) {
       const pct = parseFloat(avgVal);

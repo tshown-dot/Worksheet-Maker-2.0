@@ -69,49 +69,63 @@
     <div id="statusBox" class="hidden p-2 rounded-lg text-[11px] leading-relaxed"></div>
   </div>
 
-  <!-- STUDENT ROSTER & MISSING SUBMISSIONS CARD -->
+  <!-- STUDENT ROSTER & PORTAL CARD -->
   <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
     <div class="flex items-center justify-between border-b border-slate-100 pb-2">
       <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center space-x-1">
         <span>👥</span>
-        <span>Student Roster (ID # Link)</span>
+        <span>Student Roster (2 & 3-Digit IDs)</span>
       </span>
       <span id="rosterCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
         0 rostered
       </span>
     </div>
 
-    <div class="flex items-center space-x-2">
+    <div class="grid grid-cols-2 gap-1.5">
       <button
         onclick="openRosterTab()"
-        class="flex-1 py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center justify-center space-x-1"
+        class="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center justify-center space-x-1"
       >
         <span>📋</span>
-        <span>Edit Roster Sheet</span>
+        <span>Edit Roster Tab</span>
       </button>
       <button
         onclick="toggleQuickAddRoster()"
-        class="py-1.5 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold rounded-lg text-[11px] transition cursor-pointer"
+        class="py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold rounded-lg text-[11px] transition cursor-pointer"
       >
         + Add Student
       </button>
     </div>
 
-    <!-- Inline Quick-Add Student Form -->
+    <button
+      onclick="openStudentPortal()"
+      class="w-full py-2 px-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center justify-center space-x-1.5"
+    >
+      <span>🎓</span>
+      <span>Open Student Progress Portal</span>
+    </button>
+
+    <!-- Inline Quick-Add Student Form (2/3-digit ID, First Name, Last Name, Period) -->
     <div id="quickAddRosterForm" class="hidden p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
       <div class="text-[10px] font-bold text-slate-600 uppercase">Add / Update Student in Roster</div>
       <div class="grid grid-cols-3 gap-1.5">
         <input
           id="newRosterId"
           type="text"
-          placeholder="ID # (e.g. 104)"
+          placeholder="ID # (14 / 104)"
           class="col-span-1 p-1.5 bg-white border border-slate-300 rounded text-[11px] font-bold"
         />
         <input
-          id="newRosterName"
+          id="newRosterFirst"
           type="text"
-          placeholder="Full Name (e.g. Maya Lin)"
-          class="col-span-2 p-1.5 bg-white border border-slate-300 rounded text-[11px]"
+          placeholder="First Name"
+          class="col-span-1 p-1.5 bg-white border border-slate-300 rounded text-[11px]"
+        />
+        <input
+          id="newRosterLast"
+          type="text"
+          placeholder="Last Name"
+          class="col-span-1 p-1.5 bg-white border border-slate-300 rounded text-[11px]"
         />
       </div>
       <div class="flex items-center space-x-1.5">
@@ -211,7 +225,7 @@
         <div>
           <div id="detailStudentName" class="font-extrabold text-xs text-slate-900">Student Name</div>
           <div class="text-[10px] font-semibold text-blue-700">
-            ID: <span id="detailStudentId" class="font-bold">#104</span>
+            ID: <span id="detailStudentId" class="font-bold">#14</span>
             <span id="detailStudentPeriod" class="ml-1.5 text-slate-500"></span>
           </div>
         </div>
@@ -272,6 +286,10 @@
       google.script.run.openRosterSheet();
     }
 
+    function openStudentPortal() {
+      google.script.run.openStudentPortalPreview();
+    }
+
     function toggleQuickAddRoster() {
       const form = document.getElementById('quickAddRosterForm');
       form.classList.toggle('hidden');
@@ -279,19 +297,21 @@
 
     function saveRosterStudent() {
       const idEl = document.getElementById('newRosterId');
-      const nameEl = document.getElementById('newRosterName');
+      const firstEl = document.getElementById('newRosterFirst');
+      const lastEl = document.getElementById('newRosterLast');
       const periodEl = document.getElementById('newRosterPeriod');
       const msgEl = document.getElementById('rosterFormMsg');
       const btn = document.getElementById('saveRosterBtn');
 
       const studentId = idEl.value.trim();
-      const studentName = nameEl.value.trim();
+      const firstName = firstEl.value.trim();
+      const lastName = lastEl.value.trim();
       const classPeriod = periodEl.value.trim();
 
-      if (!studentId || !studentName) {
+      if (!studentId || (!firstName && !lastName)) {
         msgEl.classList.remove('hidden', 'text-emerald-700');
         msgEl.classList.add('text-red-600');
-        msgEl.innerText = 'Please enter both an ID # and Student Name.';
+        msgEl.innerText = 'Please enter an ID # and First/Last Name.';
         return;
       }
 
@@ -303,10 +323,11 @@
           btn.disabled = false;
           btn.innerText = 'Save';
           idEl.value = '';
-          nameEl.value = '';
+          firstEl.value = '';
+          lastEl.value = '';
           msgEl.classList.remove('hidden', 'text-red-600');
           msgEl.classList.add('text-emerald-700');
-          msgEl.innerText = '✅ Added ' + studentName + ' (#' + studentId + ') to Roster!';
+          msgEl.innerText = '✅ Added ' + [firstName, lastName].filter(Boolean).join(' ') + ' (#' + studentId + ')!';
           renderAnalytics(updatedData);
         })
         .withFailureHandler(function(err) {
@@ -316,14 +337,13 @@
           msgEl.classList.add('text-red-600');
           msgEl.innerText = '❌ ' + err.message;
         })
-        .addOrUpdateRosterStudent(studentId, studentName, classPeriod, '');
+        .addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, '');
     }
 
     function renderAnalytics(data) {
       currentAnalytics = data;
       if (!data) return;
 
-      // Update Roster count & Missing Students
       document.getElementById('rosterCountBadge').innerText = (data.rosterCount || 0) + ' rostered';
 
       const missingBox = document.getElementById('missingStudentsBox');
@@ -391,7 +411,7 @@
         });
       }
 
-      // Populate Student Dropdown (with Student Name tied to ID!)
+      // Populate Student Dropdown
       const select = document.getElementById('studentSelect');
       const prevVal = select.value;
       select.innerHTML = '<option value="">-- Choose a Student --</option>';
@@ -431,7 +451,6 @@
       document.getElementById('detailStudentPeriod').innerText = student.classPeriod ? ('• ' + student.classPeriod) : '';
       document.getElementById('detailScoreBadge').innerText = student.scorePct + '% (' + student.points + '/' + student.totalPossible + ' pts)';
 
-      // Populate Blocker and Gap diagnostic badges
       const blockerBadge = document.getElementById('blockerBadge');
       const gapBadge = document.getElementById('gapBadge');
       if (student.blocker) {

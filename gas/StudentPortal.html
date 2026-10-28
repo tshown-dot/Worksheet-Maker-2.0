@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Math Progress Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-800">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+          📐
+        </div>
+        <div>
+          <h1 class="font-extrabold text-slate-900 text-base sm:text-lg tracking-tight">Math Progress Portal</h1>
+          <p class="text-xs text-slate-500 font-medium">Student Standards & Worksheet Tracker</p>
+        </div>
+      </div>
+
+      <button
+        id="logoutBtn"
+        onclick="logoutStudent()"
+        class="hidden px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+      >
+        Switch Student
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+
+    <!-- VIEW 1: STUDENT LOGIN CARD -->
+    <div id="loginSection" class="max-w-md mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6 mt-4">
+      <div class="text-center space-y-1.5">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 text-2xl mb-1">
+          🎓
+        </div>
+        <h2 class="text-xl font-extrabold text-slate-900">Check Your Math Progress</h2>
+        <p class="text-xs text-slate-500">
+          Enter your 2-digit or 3-digit Student ID # and Last Name to view your graded worksheets and skill mastery.
+        </p>
+      </div>
+
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Student ID # <span class="text-red-500">*</span>
+          </label>
+          <input
+            id="inputStudentId"
+            type="text"
+            inputmode="numeric"
+            required
+            placeholder="e.g. 14 or 104"
+            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-base font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+          />
+          <p class="text-[11px] text-slate-400 mt-1">The number you write in the <strong>ID #</strong> box on your worksheets.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+            Last Name
+          </label>
+          <input
+            id="inputLastName"
+            type="text"
+            placeholder="e.g. Rivera"
+            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+          />
+        </div>
+
+        <div id="loginError" class="hidden p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold"></div>
+
+        <button
+          id="loginSubmitBtn"
+          type="submit"
+          class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm rounded-xl shadow-sm transition cursor-pointer flex items-center justify-center space-x-2"
+        >
+          <span id="loginBtnText">View My Progress</span>
+          <span>→</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- VIEW 2: STUDENT DASHBOARD -->
+    <div id="dashboardSection" class="hidden space-y-6">
+
+      <!-- Student Banner -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <span id="studentIdBadge" class="px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-xs font-extrabold">ID #14</span>
+            <span id="studentPeriodBadge" class="px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">Period 1</span>
+          </div>
+          <h2 id="studentFullName" class="text-xl sm:text-2xl font-extrabold text-slate-900">Student Name</h2>
+        </div>
+
+        <div id="overallStatusPill" class="px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider self-start sm:self-center">
+          On Track
+        </div>
+      </div>
+
+      <!-- 4 KPI Summary Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-center">
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Overall Average</span>
+          <span id="kpiAverage" class="text-2xl sm:text-3xl font-black text-slate-900 mt-1 block">—</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-center">
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Worksheets Done</span>
+          <span id="kpiSubmissions" class="text-2xl sm:text-3xl font-black text-slate-900 mt-1 block">0</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-center">
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Points Earned</span>
+          <span id="kpiPoints" class="text-2xl sm:text-3xl font-black text-slate-900 mt-1 block">0 / 0</span>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs text-center">
+          <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Skills Mastered</span>
+          <span id="kpiMastered" class="text-2xl sm:text-3xl font-black text-emerald-600 mt-1 block">0</span>
+        </div>
+      </div>
+
+      <!-- Personalized Action Plan (Strengths & Focus Areas) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Strengths / Mastered -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-base">🌟</span>
+            <h3 class="font-extrabold text-sm text-slate-900 uppercase tracking-wide">Your Strengths (80%+ Mastery)</h3>
+          </div>
+          <div id="strengthsList" class="space-y-2 text-xs"></div>
+        </div>
+
+        <!-- Focus Areas / Next Steps -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
+          <div class="flex items-center space-x-2">
+            <span class="text-base">🎯</span>
+            <h3 class="font-extrabold text-sm text-slate-900 uppercase tracking-wide">Skills to Level Up Next</h3>
+          </div>
+          <div id="focusList" class="space-y-2 text-xs"></div>
+        </div>
+      </div>
+
+      <!-- Standards Mastery Progress Bars -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-extrabold text-sm text-slate-900 uppercase tracking-wide">📈 Math Standards Progress</h3>
+            <p class="text-xs text-slate-500">Your accuracy across each math skill you have practiced</p>
+          </div>
+        </div>
+        <div id="standardsBreakdownList" class="space-y-3"></div>
+      </div>
+
+      <!-- Graded Worksheets History & Question-by-Question Feedback -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+        <div class="border-b border-slate-100 pb-3">
+          <h3 class="font-extrabold text-sm text-slate-900 uppercase tracking-wide">📝 My Graded Worksheets</h3>
+          <p class="text-xs text-slate-500">Click any assignment to review your answers and coaching notes</p>
+        </div>
+        <div id="assignmentsList" class="space-y-3"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    function handleLogin(e) {
+      e.preventDefault();
+      const studentId = document.getElementById('inputStudentId').value.trim();
+      const lastName = document.getElementById('inputLastName').value.trim();
+      const errBox = document.getElementById('loginError');
+      const btn = document.getElementById('loginSubmitBtn');
+      const btnText = document.getElementById('loginBtnText');
+
+      if (!studentId) return;
+
+      errBox.classList.add('hidden');
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+      btnText.innerText = 'Loading Your Progress...';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-60');
+          btnText.innerText = 'View My Progress';
+
+          if (!res || !res.found) {
+            errBox.classList.remove('hidden');
+            errBox.innerText = (res && res.error) || 'Could not find a student with that ID #. Check your number and try again.';
+            return;
+          }
+
+          renderStudentDashboard(res);
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-60');
+          btnText.innerText = 'View My Progress';
+          errBox.classList.remove('hidden');
+          errBox.innerText = err.message || 'Unable to load progress right now.';
+        })
+        .getStudentPortalData(studentId, lastName);
+    }
+
+    function logoutStudent() {
+      document.getElementById('dashboardSection').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+      document.getElementById('loginSection').classList.remove('hidden');
+    }
+
+    function renderStudentDashboard(data) {
+      document.getElementById('loginSection').classList.add('hidden');
+      document.getElementById('dashboardSection').classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+
+      document.getElementById('studentIdBadge').innerText = 'ID #' + data.studentId;
+      const periodBadge = document.getElementById('studentPeriodBadge');
+      if (data.classPeriod) {
+        periodBadge.classList.remove('hidden');
+        periodBadge.innerText = data.classPeriod;
+      } else {
+        periodBadge.classList.add('hidden');
+      }
+      document.getElementById('studentFullName').innerText = data.fullName || ('Student #' + data.studentId);
+
+      // KPIs
+      document.getElementById('kpiAverage').innerText = data.totalSubmissions > 0 ? (data.overallAvg + '%') : '—';
+      document.getElementById('kpiSubmissions').innerText = data.totalSubmissions;
+      document.getElementById('kpiPoints').innerText = data.totalEarned + ' / ' + data.totalPossible;
+
+      const masteredStandards = (data.standards || []).filter(function(s) { return s.rate >= 80; });
+      const focusStandards = (data.standards || []).filter(function(s) { return s.rate < 80; });
+      document.getElementById('kpiMastered').innerText = masteredStandards.length;
+
+      // Status Pill
+      const pill = document.getElementById('overallStatusPill');
+      if (data.totalSubmissions === 0) {
+        pill.className = 'px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600';
+        pill.innerText = 'No Graded Worksheets Yet';
+      } else if (data.overallAvg >= 80) {
+        pill.className = 'px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200';
+        pill.innerText = '🌟 Strong Mastery';
+      } else if (data.overallAvg >= 65) {
+        pill.className = 'px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200';
+        pill.innerText = '📈 Building Momentum';
+      } else {
+        pill.className = 'px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200';
+        pill.innerText = '🎯 Practice Recommended';
+      }
+
+      // Strengths List
+      const strengthsEl = document.getElementById('strengthsList');
+      strengthsEl.innerHTML = '';
+      if (masteredStandards.length === 0) {
+        strengthsEl.innerHTML = '<div class="text-slate-400 italic py-2">Complete more problems at 80%+ accuracy to unlock mastered skills!</div>';
+      } else {
+        masteredStandards.forEach(function(s) {
+          strengthsEl.innerHTML +=
+            '<div class="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">' +
+              '<div>' +
+                '<div class="font-bold text-emerald-950">' + escapeHtml(s.name) + '</div>' +
+                '<div class="text-[10px] font-semibold text-emerald-700">Standard ' + escapeHtml(s.code) + ' • ' + s.correct + '/' + s.attempts + ' correct</div>' +
+              '</div>' +
+              '<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-extrabold text-xs">' + s.rate + '%</span>' +
+            '</div>';
+        });
+      }
+
+      // Focus List
+      const focusEl = document.getElementById('focusList');
+      focusEl.innerHTML = '';
+      if (focusStandards.length === 0) {
+        focusEl.innerHTML = '<div class="text-emerald-700 font-semibold py-2">🎉 All practiced standards are at 80% or above! Keep it up!</div>';
+      } else {
+        focusStandards.forEach(function(s) {
+          const isBlocker = s.rate < 20;
+          const boxClass = isBlocker
+            ? 'bg-rose-50/70 border-rose-200 text-rose-950'
+            : 'bg-amber-50/70 border-amber-200 text-amber-950';
+          const badgeClass = isBlocker ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white';
+          const tagLabel = isBlocker ? 'Priority Check-In' : 'Next Goal: 80%';
+
+          focusEl.innerHTML +=
+            '<div class="p-2.5 rounded-xl border ' + boxClass + ' flex items-center justify-between">' +
+              '<div>' +
+                '<div class="font-bold">' + escapeHtml(s.name) + '</div>' +
+                '<div class="text-[10px] font-semibold opacity-80">Standard ' + escapeHtml(s.code) + ' • ' + tagLabel + '</div>' +
+              '</div>' +
+              '<span class="px-2 py-0.5 rounded-md ' + badgeClass + ' font-extrabold text-xs">' + s.rate + '%</span>' +
+            '</div>';
+        });
+      }
+
+      // All Standards Bars
+      const stdListEl = document.getElementById('standardsBreakdownList');
+      stdListEl.innerHTML = '';
+      if (!data.standards || data.standards.length === 0) {
+        stdListEl.innerHTML = '<div class="text-xs text-slate-400 italic">No standards data recorded yet.</div>';
+      } else {
+        data.standards.forEach(function(s) {
+          const barColor = s.rate >= 80 ? 'bg-emerald-500' : (s.rate >= 60 ? 'bg-amber-500' : 'bg-rose-500');
+          stdListEl.innerHTML +=
+            '<div class="space-y-1">' +
+              '<div class="flex items-center justify-between text-xs">' +
+                '<div>' +
+                  '<span class="font-bold text-slate-800">' + escapeHtml(s.name) + '</span> ' +
+                  '<span class="text-[11px] font-mono text-slate-400">(' + escapeHtml(s.code) + ')</span>' +
+                '</div>' +
+                '<span class="font-extrabold text-slate-700">' + s.rate + '% <span class="text-[11px] font-normal text-slate-400">(' + s.correct + '/' + s.attempts + ')</span></span>' +
+              '</div>' +
+              '<div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">' +
+                '<div class="' + barColor + ' h-2.5 rounded-full transition-all" style="width: ' + Math.max(s.rate, 4) + '%"></div>' +
+              '</div>' +
+            '</div>';
+        });
+      }
+
+      // Assignments History
+      const assignEl = document.getElementById('assignmentsList');
+      assignEl.innerHTML = '';
+      if (!data.submissions || data.submissions.length === 0) {
+        assignEl.innerHTML = '<div class="text-xs text-slate-400 italic">No graded worksheets found for your ID yet.</div>';
+      } else {
+        data.submissions.forEach(function(sub, idx) {
+          const scoreBadgeColor = sub.scorePct >= 80
+            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+            : (sub.scorePct >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+
+          let questionsHtml = '';
+          (sub.questions || []).forEach(function(q) {
+            const isCorrect = q.score > 0;
+            const qBorder = isCorrect ? 'border-emerald-200 bg-emerald-50/30' : 'border-rose-200 bg-rose-50/30';
+            const qIcon = isCorrect ? '✅' : '❌';
+            questionsHtml +=
+              '<div class="p-3 rounded-xl border ' + qBorder + ' space-y-1 text-xs">' +
+                '<div class="flex items-center justify-between font-bold">' +
+                  '<span class="text-slate-900">' + qIcon + ' Question ' + q.orderIndex + '</span>' +
+                  '<span class="text-slate-600">' + q.score + ' pt</span>' +
+                '</div>' +
+                '<div class="text-slate-700">' +
+                  '<span class="font-semibold text-slate-500">Your Answer: </span>' +
+                  '<span class="font-bold font-mono">' + escapeHtml(q.studentAnswer || '—') + '</span>' +
+                '</div>' +
+                (q.feedback
+                  ? '<div class="text-[11px] text-blue-900 bg-blue-50/80 border border-blue-100 p-2 rounded-lg leading-relaxed mt-1">💡 <strong>Coach Note:</strong> ' + escapeHtml(q.feedback) + '</div>'
+                  : '') +
+              '</div>';
+          });
+
+          assignEl.innerHTML +=
+            '<div class="border border-slate-200 rounded-xl overflow-hidden">' +
+              '<button type="button" onclick="toggleAssignment(' + idx + ')" class="w-full p-3.5 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-left transition cursor-pointer">' +
+                '<div>' +
+                  '<div class="flex items-center space-x-2">' +
+                    '<span class="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[10px] font-bold">' + escapeHtml(sub.assignmentCode) + '</span>' +
+                    '<span class="text-[11px] text-slate-400 font-medium">' + escapeHtml(sub.timestamp) + '</span>' +
+                  '</div>' +
+                  '<div class="font-extrabold text-sm text-slate-900 mt-0.5">' + escapeHtml(sub.assignmentTitle) + '</div>' +
+                '</div>' +
+                '<div class="flex items-center space-x-2">' +
+                  '<span class="px-2.5 py-1 rounded-lg border font-extrabold text-xs ' + scoreBadgeColor + '">' +
+                    sub.scorePct + '% (' + sub.points + '/' + sub.totalPossible + ')' +
+                  '</span>' +
+                  '<span class="text-slate-400 text-xs">▼</span>' +
+                '</div>' +
+              '</button>' +
+              '<div id="assignDetails_' + idx + '" class="' + (idx === 0 ? '' : 'hidden ') + 'p-3.5 bg-white border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5">' +
+                questionsHtml +
+              '</div>' +
+            '</div>';
+        });
+      }
+    }
+
+    function toggleAssignment(idx) {
+      const el = document.getElementById('assignDetails_' + idx);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

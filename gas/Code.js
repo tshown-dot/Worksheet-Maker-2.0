@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * WORKSHEET MAKER 2.0 - GOOGLE SHEETS AUTOGRADER & STUDENT ROSTER ENGINE
+ * WORKSHEET MAKER 2.0 - GOOGLE SHEETS AUTOGRADER, ROSTER & STUDENT PORTAL
  * ==============================================================================
  */
 
@@ -11,6 +11,7 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('📐 Math Autograder')
     .addItem('📱 Open Autograder Sidebar', 'showSidebar')
+    .addItem('🎓 Preview / Share Student Progress Portal', 'openStudentPortalPreview')
     .addSeparator()
     .addItem('🚀 Grade Scanned Worksheets (from Drive)', 'gradeScannedWorksheets')
     .addItem('👥 Open / Format Student Roster', 'openRosterSheet')
@@ -22,6 +23,33 @@ function onOpen() {
     .addToUi();
 
   showSidebar();
+}
+
+/**
+ * Serves the Student Progress Portal Web App (or JSON API) when deployed as a Web App
+ */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.action === 'studentProgress') {
+    const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.lastName || '');
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return HtmlService.createHtmlOutputFromFile('StudentPortal')
+    .setTitle('Math Progress Portal')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Opens a live preview modal of the Student Progress Portal inside Google Sheets
+ * so the teacher can test student lookups or share the Web App URL.
+ */
+function openStudentPortalPreview() {
+  const html = HtmlService.createHtmlOutputFromFile('StudentPortal')
+    .setWidth(920)
+    .setHeight(720);
+  SpreadsheetApp.getUi().showModalDialog(html, '🎓 Student Math Progress Portal (Live Preview)');
 }
 
 /**
@@ -82,6 +110,31 @@ function testSupabaseConnection() {
 }
 
 /**
+ * Splits a full name string ("Maya Lin" or "Lin, Maya") into { firstName, lastName }
+ */
+function splitFullName(rawFullName) {
+  const clean = String(rawFullName || '').trim();
+  if (!clean) return { firstName: '', lastName: '' };
+
+  if (clean.includes(',')) {
+    const parts = clean.split(',').map(s => s.trim());
+    return {
+      firstName: parts.slice(1).join(' ') || '',
+      lastName: parts[0] || ''
+    };
+  }
+
+  const parts = clean.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' };
+  }
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    lastName: parts[parts.length - 1]
+  };
+}
+
+/**
  * Sets up Student Roster, Gradebook, Standards Map, and Student Monitoring sheets
  */
 function setupAllSheets() {
@@ -91,16 +144,19 @@ function setupAllSheets() {
   updateStudentMonitoringSheet();
   SpreadsheetApp.getUi().alert(
     'Sheets Formatted ✅',
-    'Created and styled "Student Roster", "Gradebook", "Student Monitoring", and "Standards Map" sheets.\n\n' +
-    'Enter your students and their ID numbers in the "Student Roster" tab to automatically tie scanned worksheets to student names!',
+    'Created and styled "Student Roster" (supporting both 2-digit and 3-digit Student IDs, First Name, & Last Name), "Gradebook", "Student Monitoring", and "Standards Map" sheets.',
     SpreadsheetApp.getUi().ButtonSet.OK
   );
 }
 
 /**
- * Creates or formats the "Student Roster" tab so teachers can map Student IDs
- * (written in the worksheet ID # box) to Student Names and Class Periods.
- * Preserves any existing student rows.
+ * Creates or formats the "Student Roster" tab with:
+ *   Col A: Student ID (supports 2-digit e.g. 12, or 3-digit e.g. 104)
+ *   Col B: First Name
+ *   Col C: Last Name
+ *   Col D: Class / Period
+ *   Col E: Notes / Accommodations
+ * Preserves existing student rows and auto-migrates 4-column rosters.
  */
 function setupRosterSheet(silent) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -110,7 +166,29 @@ function setupRosterSheet(silent) {
     sheet = ss.insertSheet('Student Roster', 0);
   }
 
-  const headers = ['Student ID', 'Student Name', 'Class / Period', 'Notes / Accommodations'];
+  // Check if an older 4-column layout exists (Col B = "Student Name", Col C = "Class / Period")
+  if (sheet.getLastRow() >= 1 && sheet.getLastColumn() >= 3) {
+    const row1 = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 4)).getValues()[0];
+    const h1 = row1.map(h => String(h || '').trim().toLowerCase());
+    if (h1[1] === 'student name' && h1[2] === 'class / period') {
+      sheet.insertColumnAfter(2);
+      const lastR = sheet.getLastRow();
+      if (lastR > 1) {
+        const names = sheet.getRange(2, 2, lastR - 1, 1).getValues();
+        const splitRows = names.map(r => {
+          const full = String(r[0] || '').trim();
+          if (full.toLowerCase().includes('(edit me)')) {
+            return ['Example', 'Student (Edit Me)'];
+          }
+          const sp = splitFullName(full);
+          return [sp.firstName, sp.lastName];
+        });
+        sheet.getRange(2, 2, splitRows.length, 2).setValues(splitRows);
+      }
+    }
+  }
+
+  const headers = ['Student ID', 'First Name', 'Last Name', 'Class / Period', 'Notes / Accommodations'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
   const headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -123,26 +201,29 @@ function setupRosterSheet(silent) {
   sheet.setFrozenRows(1);
 
   sheet.setColumnWidth(1, 110);
-  sheet.setColumnWidth(2, 220);
-  sheet.setColumnWidth(3, 140);
-  sheet.setColumnWidth(4, 240);
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 160);
+  sheet.setColumnWidth(4, 130);
+  sheet.setColumnWidth(5, 220);
 
-  // If the roster is brand new (no rows below header), add starter example rows
+  // Format Column A as Plain Text so 2-digit numbers (like "04" or "12") and 3-digit numbers ("104") stay exact
+  sheet.getRange(2, 1, 250, 1).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
+
+  // If brand new (no rows below header), add starter example rows showing 2-digit & 3-digit support
   if (sheet.getLastRow() <= 1) {
     const starterRows = [
-      ['101', 'Example Student 1 (Edit Me)', 'Period 1', ''],
-      ['102', 'Example Student 2 (Edit Me)', 'Period 1', ''],
-      ['103', 'Example Student 3 (Edit Me)', 'Period 1', '']
+      ['11', 'Example', 'Student 1 (Edit Me)', 'Period 1', 'Supports 2-digit (e.g. 11) or 3-digit (e.g. 101) IDs'],
+      ['12', 'Example', 'Student 2 (Edit Me)', 'Period 1', ''],
+      ['13', 'Example', 'Student 3 (Edit Me)', 'Period 1', '']
     ];
-    sheet.getRange(2, 1, starterRows.length, 4).setValues(starterRows);
-    sheet.getRange(2, 1, 200, 1).setHorizontalAlignment('center').setFontWeight('bold');
+    sheet.getRange(2, 1, starterRows.length, 5).setValues(starterRows);
   }
 
   if (!silent) {
     ss.setActiveSheet(sheet);
     SpreadsheetApp.getUi().alert(
       'Student Roster Ready 👥',
-      'Add your students\' ID numbers and names in the "Student Roster" sheet. Every graded worksheet will automatically tie the student\'s ID # to their name and period!',
+      'Add your students\' 2-digit or 3-digit ID numbers, First Name, and Last Name in the "Student Roster" tab.',
       SpreadsheetApp.getUi().ButtonSet.OK
     );
   }
@@ -163,7 +244,8 @@ function openRosterSheet() {
 }
 
 /**
- * Normalizes a Student ID for reliable matching (strips leading '#', spaces, and leading zeros for numeric IDs)
+ * Normalizes a 2-digit, 3-digit, or alphanumeric Student ID for reliable matching
+ * (strips leading '#', spaces, and leading zeros for numeric IDs so "07" == "7" and "14" == "14" and "104" == "104")
  */
 function normalizeStudentIdKey(rawId) {
   const cleaned = String(rawId || '').replace(/^#/, '').trim();
@@ -186,28 +268,53 @@ function getRosterData() {
 
   const byId = {};
   const byNormalizedId = {};
-  const byName = {};
+  const byFullName = {};
   const list = [];
 
   if (sheet.getLastRow() <= 1) {
-    return { byId, byNormalizedId, byName, list };
+    return { byId, byNormalizedId, byFullName, list };
   }
 
   const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+  const isFiveCol = headers.includes('first name') && headers.includes('last name');
+
   for (let i = 1; i < data.length; i++) {
     const rawId = String(data[i][0] || '').replace(/^#/, '').trim();
-    const rawName = String(data[i][1] || '').trim();
-    const rawPeriod = String(data[i][2] || '').trim();
-    const rawNotes = String(data[i][3] || '').trim();
+    let firstName = '';
+    let lastName = '';
+    let rawPeriod = '';
+    let rawNotes = '';
 
-    if (!rawId && !rawName) continue;
-    // Skip untouched starter placeholder rows when computing missing students if desired,
-    // or include them if they have an ID
-    const isPlaceholder = rawName.toLowerCase().includes('(edit me)');
+    if (isFiveCol) {
+      firstName = String(data[i][1] || '').trim();
+      lastName = String(data[i][2] || '').trim();
+      rawPeriod = String(data[i][3] || '').trim();
+      rawNotes = String(data[i][4] || '').trim();
+      // If teacher pasted full name into First Name and left Last Name empty, split it automatically
+      if (firstName && !lastName && (firstName.includes(' ') || firstName.includes(','))) {
+        const sp = splitFullName(firstName);
+        firstName = sp.firstName;
+        lastName = sp.lastName;
+      }
+    } else {
+      const sp = splitFullName(String(data[i][1] || '').trim());
+      firstName = sp.firstName;
+      lastName = sp.lastName;
+      rawPeriod = String(data[i][2] || '').trim();
+      rawNotes = String(data[i][3] || '').trim();
+    }
+
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    if (!rawId && !fullName) continue;
+
+    const isPlaceholder = fullName.toLowerCase().includes('(edit me)');
 
     const entry = {
       studentId: rawId || `ROW-${i}`,
-      studentName: rawName,
+      firstName,
+      lastName,
+      studentName: fullName,
       classPeriod: rawPeriod,
       notes: rawNotes,
       rowIndex: i + 1,
@@ -218,33 +325,39 @@ function getRosterData() {
       byId[rawId] = entry;
       byNormalizedId[normalizeStudentIdKey(rawId)] = entry;
     }
-    if (rawName && !isPlaceholder) {
-      byName[rawName.toLowerCase()] = entry;
+    if (fullName && !isPlaceholder) {
+      byFullName[fullName.toLowerCase()] = entry;
+      if (lastName && firstName) {
+        byFullName[`${lastName.toLowerCase()}, ${firstName.toLowerCase()}`] = entry;
+      }
     }
     if (!isPlaceholder) {
       list.push(entry);
     }
   }
 
-  return { byId, byNormalizedId, byName, list };
+  return { byId, byNormalizedId, byFullName, list };
 }
 
 /**
- * Resolves a student's canonical ID, Name, and Class/Period from the Student Roster
- * using either the scanned ID # box OR the handwritten Name line.
+ * Resolves a student's canonical ID, First Name, Last Name, and Class/Period from the Student Roster
+ * using either the scanned 2-digit/3-digit ID # box OR the handwritten Name line.
  */
 function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
   const roster = existingRosterInfo || getRosterData();
   const cleanId = String(rawId || '').replace(/^#/, '').trim();
   const normId = normalizeStudentIdKey(cleanId);
   const cleanName = String(rawName || '').trim();
+  const splitHandwritten = splitFullName(cleanName);
 
-  // 1. Direct or numeric-normalized Student ID match in Roster
+  // 1. Direct or numeric-normalized Student ID match in Roster (works for 2-digit & 3-digit IDs)
   if (cleanId && cleanId !== '???') {
     const matchById = roster.byId[cleanId] || roster.byNormalizedId[normId];
     if (matchById && !matchById.isPlaceholder) {
       return {
         studentId: matchById.studentId,
+        firstName: matchById.firstName || splitHandwritten.firstName,
+        lastName: matchById.lastName || splitHandwritten.lastName,
         studentName: matchById.studentName || cleanName || 'Unnamed Student',
         classPeriod: matchById.classPeriod || '',
         matchedInRoster: true
@@ -255,25 +368,31 @@ function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
   // 2. Fallback: Match by handwritten Student Name on the worksheet if ID was blank/unmatched
   if (cleanName) {
     const lowerName = cleanName.toLowerCase();
-    if (roster.byName[lowerName]) {
-      const m = roster.byName[lowerName];
+    if (roster.byFullName[lowerName]) {
+      const m = roster.byFullName[lowerName];
       return {
         studentId: m.studentId || cleanId || '???',
+        firstName: m.firstName,
+        lastName: m.lastName,
         studentName: m.studentName,
         classPeriod: m.classPeriod || '',
         matchedInRoster: true
       };
     }
 
-    // Partial first+last or token match if unique in roster
+    // Match by unique First Name or First+Last substring
     const partialMatches = roster.list.filter(s => {
-      const rLower = s.studentName.toLowerCase();
-      return rLower.includes(lowerName) || lowerName.includes(rLower);
+      const rFull = s.studentName.toLowerCase();
+      const rFirst = s.firstName.toLowerCase();
+      const rLast = s.lastName.toLowerCase();
+      return rFull === lowerName || rFirst === lowerName || rLast === lowerName || rFull.includes(lowerName);
     });
     if (partialMatches.length === 1) {
       const m = partialMatches[0];
       return {
         studentId: m.studentId || cleanId || '???',
+        firstName: m.firstName,
+        lastName: m.lastName,
         studentName: m.studentName,
         classPeriod: m.classPeriod || '',
         matchedInRoster: true
@@ -284,6 +403,8 @@ function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
   // 3. Not found in roster yet — return whatever was extracted from the worksheet
   return {
     studentId: cleanId || '???',
+    firstName: splitHandwritten.firstName,
+    lastName: splitHandwritten.lastName,
     studentName: cleanName || '',
     classPeriod: '',
     matchedInRoster: false
@@ -291,16 +412,23 @@ function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
 }
 
 /**
- * Adds or updates a student in the "Student Roster" tab (callable from Sidebar or auto-registration)
+ * Adds or updates a student in the "Student Roster" tab (supports 2-digit or 3-digit Student IDs, First Name, & Last Name)
  */
-function addOrUpdateRosterStudent(studentId, studentName, classPeriod, notes) {
+function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, notes) {
   const cleanId = String(studentId || '').replace(/^#/, '').trim();
-  const cleanName = String(studentName || '').trim();
+  let cleanFirst = String(firstName || '').trim();
+  let cleanLast = String(lastName || '').trim();
   const cleanPeriod = String(classPeriod || '').trim();
   const cleanNotes = String(notes || '').trim();
 
-  if (!cleanId || !cleanName) {
-    throw new Error('Both Student ID and Student Name are required.');
+  if (cleanFirst && !cleanLast && (cleanFirst.includes(' ') || cleanFirst.includes(','))) {
+    const sp = splitFullName(cleanFirst);
+    cleanFirst = sp.firstName;
+    cleanLast = sp.lastName;
+  }
+
+  if (!cleanId || (!cleanFirst && !cleanLast)) {
+    throw new Error('Student ID and Name are required.');
   }
 
   const sheet = setupRosterSheet(true);
@@ -310,21 +438,25 @@ function addOrUpdateRosterStudent(studentId, studentName, classPeriod, notes) {
   let updatedRow = -1;
   for (let i = 1; i < data.length; i++) {
     const rowId = String(data[i][0] || '').replace(/^#/, '').trim();
-    const rowName = String(data[i][1] || '').trim();
-    // Overwrite matching ID or first untouched "(Edit Me)" starter row
-    if (normalizeStudentIdKey(rowId) === normTarget || rowName.toLowerCase().includes('(edit me)')) {
+    const rowFirst = String(data[i][1] || '').trim();
+    const rowLast = String(data[i][2] || '').trim();
+    if (
+      normalizeStudentIdKey(rowId) === normTarget ||
+      rowFirst.toLowerCase().includes('(edit me)') ||
+      rowLast.toLowerCase().includes('(edit me)')
+    ) {
       updatedRow = i + 1;
       break;
     }
   }
 
   if (updatedRow !== -1) {
-    sheet.getRange(updatedRow, 1, 1, 4).setValues([[cleanId, cleanName, cleanPeriod, cleanNotes]]);
-    sheet.getRange(updatedRow, 1).setHorizontalAlignment('center').setFontWeight('bold');
+    sheet.getRange(updatedRow, 1, 1, 5).setValues([[cleanId, cleanFirst, cleanLast, cleanPeriod, cleanNotes]]);
+    sheet.getRange(updatedRow, 1).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
   } else {
-    sheet.appendRow([cleanId, cleanName, cleanPeriod, cleanNotes]);
+    sheet.appendRow([cleanId, cleanFirst, cleanLast, cleanPeriod, cleanNotes]);
     const lastRow = sheet.getLastRow();
-    sheet.getRange(lastRow, 1).setHorizontalAlignment('center').setFontWeight('bold');
+    sheet.getRange(lastRow, 1).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
   }
 
   try {
@@ -337,13 +469,14 @@ function addOrUpdateRosterStudent(studentId, studentName, classPeriod, notes) {
 }
 
 /**
- * Builds the canonical Gradebook headers (including Student ID, Student Name, Class / Period, and Q1..Q10)
+ * Builds the canonical Gradebook headers (including Student ID, First Name, Last Name, Class / Period, and Q1..Q10)
  */
 function getCanonicalGradebookHeaders() {
   const headers = [
     'Timestamp',
     'Student ID',
-    'Student Name',
+    'First Name',
+    'Last Name',
     'Class / Period',
     'Assignment Code',
     'Assignment Title',
@@ -359,7 +492,15 @@ function getCanonicalGradebookHeaders() {
 }
 
 /**
- * Ensures an existing Gradebook sheet has the "Student Name" and "Class / Period" columns
+ * Helper to create a type-safe VLOOKUP formula against 'Student Roster'!$A:$E
+ */
+function buildRosterVlookupFormula(rowNum, rosterColIndex, fallbackText) {
+  const safeFallback = String(fallbackText || '').replace(/"/g, '""');
+  return `=IFERROR(VLOOKUP(B${rowNum}, 'Student Roster'!$A:$E, ${rosterColIndex}, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${rowNum}), 'Student Roster'!$A:$E, ${rosterColIndex}, FALSE), IFERROR(VLOOKUP(VALUE(B${rowNum}), 'Student Roster'!$A:$E, ${rosterColIndex}, FALSE), "${safeFallback}")))`;
+}
+
+/**
+ * Ensures an existing Gradebook sheet has "First Name", "Last Name", and "Class / Period"
  * right after "Student ID" without losing any existing graded rows.
  */
 function ensureGradebookColumns(sheet) {
@@ -370,26 +511,27 @@ function ensureGradebookColumns(sheet) {
     return;
   }
 
-  const firstRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 10)).getValues()[0];
+  const firstRow = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 11)).getValues()[0];
   const lowerHeaders = firstRow.map(h => String(h || '').trim().toLowerCase());
 
-  // If old layout (Col B = Student ID, Col C = Assignment Code), insert 2 columns after Col B
+  // Case 1: Very old layout (Col B = Student ID, Col C = Assignment Code) -> insert 3 columns (First Name, Last Name, Class / Period)
   if (lowerHeaders[1] === 'student id' && lowerHeaders[2] === 'assignment code') {
-    sheet.insertColumnsAfter(2, 2);
-    sheet.getRange(1, 3).setValue('Student Name');
-    sheet.getRange(1, 4).setValue('Class / Period');
-
-    // Backfill VLOOKUP formulas for any existing graded rows so they tie to Student Roster immediately
+    sheet.insertColumnsAfter(2, 3);
     const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      for (let r = 2; r <= lastRow; r++) {
-        sheet.getRange(r, 3).setFormula(
-          `=IFERROR(VLOOKUP(B${r}, 'Student Roster'!$A:$C, 2, FALSE), IFERROR(VLOOKUP(VALUE(B${r}), 'Student Roster'!$A:$C, 2, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${r}), 'Student Roster'!$A:$C, 2, FALSE), "")))`
-        );
-        sheet.getRange(r, 4).setFormula(
-          `=IFERROR(VLOOKUP(B${r}, 'Student Roster'!$A:$C, 3, FALSE), IFERROR(VLOOKUP(VALUE(B${r}), 'Student Roster'!$A:$C, 3, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${r}), 'Student Roster'!$A:$C, 3, FALSE), "")))`
-        );
-      }
+    for (let r = 2; r <= lastRow; r++) {
+      sheet.getRange(r, 3).setFormula(buildRosterVlookupFormula(r, 2, ''));
+      sheet.getRange(r, 4).setFormula(buildRosterVlookupFormula(r, 3, ''));
+      sheet.getRange(r, 5).setFormula(buildRosterVlookupFormula(r, 4, ''));
+    }
+  }
+  // Case 2: Previous layout (Col B = Student ID, Col C = Student Name, Col D = Class / Period) -> insert 1 column after C for Last Name
+  else if (lowerHeaders[1] === 'student id' && lowerHeaders[2] === 'student name') {
+    sheet.insertColumnAfter(3);
+    const lastRow = sheet.getLastRow();
+    for (let r = 2; r <= lastRow; r++) {
+      sheet.getRange(r, 3).setFormula(buildRosterVlookupFormula(r, 2, ''));
+      sheet.getRange(r, 4).setFormula(buildRosterVlookupFormula(r, 3, ''));
+      sheet.getRange(r, 5).setFormula(buildRosterVlookupFormula(r, 4, ''));
     }
   }
 
@@ -404,7 +546,7 @@ function ensureGradebookColumns(sheet) {
   headerRange.setHorizontalAlignment('center');
   sheet.setRowHeight(1, 35);
   sheet.setFrozenRows(1);
-  sheet.setFrozenColumns(3); // Freeze Timestamp, Student ID, Student Name
+  sheet.setFrozenColumns(4); // Freeze Timestamp, Student ID, First Name, Last Name
 }
 
 /**
@@ -424,11 +566,177 @@ function setupGradebookSheet(silent) {
   if (!silent) {
     SpreadsheetApp.getUi().alert(
       'Gradebook Formatted ✅',
-      'The "Gradebook" sheet is formatted and linked to "Student Roster" (with Student ID, Student Name, and Class / Period columns).',
+      'The "Gradebook" sheet is formatted and linked to "Student Roster" (with Student ID, First Name, Last Name, and Class / Period columns).',
       SpreadsheetApp.getUi().ButtonSet.OK
     );
   }
   return sheet;
+}
+
+/**
+ * Student Portal API: Returns a specific student's progress, standards mastery, and graded worksheets
+ * when they log in with their 2-digit or 3-digit Student ID # (and optional Last Name).
+ */
+function getStudentPortalData(rawStudentId, rawLastName) {
+  const cleanInputId = String(rawStudentId || '').replace(/^#/, '').trim();
+  const normInputId = normalizeStudentIdKey(cleanInputId);
+  const inputLastLower = String(rawLastName || '').trim().toLowerCase();
+
+  if (!normInputId) {
+    return { found: false, error: 'Please enter your 2-digit or 3-digit Student ID #.' };
+  }
+
+  const rosterInfo = getRosterData();
+  const rosterMatch = rosterInfo.byId[cleanInputId] || rosterInfo.byNormalizedId[normInputId];
+
+  // If the student is in the Roster with a Last Name AND the student entered a Last Name, verify it matches
+  if (rosterMatch && rosterMatch.lastName && inputLastLower) {
+    const rLast = rosterMatch.lastName.toLowerCase();
+    const rFirst = rosterMatch.firstName.toLowerCase();
+    if (rLast !== inputLastLower && rFirst !== inputLastLower && !rLast.includes(inputLastLower)) {
+      return {
+        found: false,
+        error: 'The Last Name entered does not match Student ID #' + cleanInputId + '. Please check your ID # and spelling.'
+      };
+    }
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Gradebook');
+
+  const submissions = [];
+  let totalEarned = 0;
+  let totalPossible = 0;
+  const standardsMap = {};
+
+  let resolvedFirst = rosterMatch ? rosterMatch.firstName : '';
+  let resolvedLast = rosterMatch ? rosterMatch.lastName : '';
+  let resolvedPeriod = rosterMatch ? rosterMatch.classPeriod : '';
+
+  if (sheet && sheet.getLastRow() > 1) {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+    const rows = data.slice(1);
+
+    const tsCol = 0;
+    const idCol = headers.indexOf('student id') !== -1 ? headers.indexOf('student id') : 1;
+    const firstCol = headers.indexOf('first name');
+    const lastCol = headers.indexOf('last name');
+    const fullNameCol = headers.indexOf('student name');
+    const periodCol = headers.indexOf('class / period');
+    const codeCol = headers.indexOf('assignment code') !== -1 ? headers.indexOf('assignment code') : 5;
+    const titleCol = headers.indexOf('assignment title') !== -1 ? headers.indexOf('assignment title') : 6;
+    const scorePctCol = headers.indexOf('score %') !== -1 ? headers.indexOf('score %') : 7;
+    const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 8;
+    const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 9;
+    const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 11;
+
+    for (const r of rows) {
+      const rowId = String(r[idCol] || '').replace(/^#/, '').trim();
+      if (normalizeStudentIdKey(rowId) !== normInputId) continue;
+
+      if (!resolvedFirst && firstCol !== -1 && r[firstCol]) resolvedFirst = String(r[firstCol]).trim();
+      if (!resolvedLast && lastCol !== -1 && r[lastCol]) resolvedLast = String(r[lastCol]).trim();
+      if (!resolvedFirst && fullNameCol !== -1 && r[fullNameCol]) {
+        const sp = splitFullName(String(r[fullNameCol]));
+        resolvedFirst = sp.firstName;
+        resolvedLast = sp.lastName;
+      }
+      if (!resolvedPeriod && periodCol !== -1 && r[periodCol]) resolvedPeriod = String(r[periodCol]).trim();
+
+      const rawScoreVal = r[scorePctCol];
+      let scorePct = 0;
+      if (typeof rawScoreVal === 'number') {
+        scorePct = rawScoreVal <= 1 && rawScoreVal > 0 ? Math.round(rawScoreVal * 100) : Math.round(rawScoreVal);
+      } else {
+        scorePct = parseFloat(String(rawScoreVal || '0').replace('%', '')) || 0;
+      }
+
+      const pts = parseFloat(r[ptsCol]) || 0;
+      const poss = parseFloat(r[totalPtsCol]) || 0;
+      totalEarned += pts;
+      totalPossible += poss;
+
+      const questions = [];
+      for (let qIdx = 0; qIdx < 10; qIdx++) {
+        const baseCol = q1ScoreCol + (qIdx * 3);
+        if (baseCol + 2 >= r.length) break;
+        const cellVal = r[baseCol];
+        if (cellVal === '' || cellVal === null || cellVal === undefined) continue;
+
+        const qScore = parseFloat(cellVal) || 0;
+        const qAns = String(r[baseCol + 1] || '');
+        const qFeedback = String(r[baseCol + 2] || '');
+
+        questions.push({
+          orderIndex: qIdx + 1,
+          score: qScore,
+          studentAnswer: qAns,
+          feedback: qFeedback
+        });
+
+        const stdMatch = qFeedback.match(/([4-8]\.[A-Z]+\.[A-Z0-9\.]+)/i);
+        const stdCode = stdMatch ? stdMatch[1].toUpperCase() : null;
+        if (stdCode) {
+          if (!standardsMap[stdCode]) {
+            standardsMap[stdCode] = { code: stdCode, attempts: 0, correct: 0 };
+          }
+          standardsMap[stdCode].attempts++;
+          if (qScore > 0) standardsMap[stdCode].correct++;
+        }
+      }
+
+      let tsFormatted = '';
+      if (r[tsCol] instanceof Date) {
+        tsFormatted = Utilities.formatDate(r[tsCol], Session.getScriptTimeZone(), 'MMM d, yyyy');
+      } else {
+        tsFormatted = String(r[tsCol] || '').split(' ')[0];
+      }
+
+      submissions.push({
+        timestamp: tsFormatted,
+        assignmentCode: String(r[codeCol] || ''),
+        assignmentTitle: String(r[titleCol] || 'Math Worksheet'),
+        scorePct,
+        points: pts,
+        totalPossible: poss,
+        questions
+      });
+    }
+  }
+
+  if (!rosterMatch && submissions.length === 0) {
+    return {
+      found: false,
+      error: `No student or graded worksheets found for ID #${cleanInputId}.`
+    };
+  }
+
+  const standards = Object.values(standardsMap).map(s => ({
+    code: s.code,
+    name: typeof translateStandard === 'function' ? translateStandard(s.code) : s.code,
+    attempts: s.attempts,
+    correct: s.correct,
+    rate: s.attempts > 0 ? Math.round((s.correct / s.attempts) * 100) : 0
+  })).sort((a, b) => a.rate - b.rate);
+
+  const overallAvg = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100) : 0;
+  const fullName = [resolvedFirst, resolvedLast].filter(Boolean).join(' ').trim() || `Student #${cleanInputId}`;
+
+  return {
+    found: true,
+    studentId: rosterMatch ? rosterMatch.studentId : cleanInputId,
+    firstName: resolvedFirst,
+    lastName: resolvedLast,
+    fullName,
+    classPeriod: resolvedPeriod,
+    totalSubmissions: submissions.length,
+    totalEarned,
+    totalPossible,
+    overallAvg,
+    standards,
+    submissions: submissions.reverse() // Most recent first
+  };
 }
 
 /**
@@ -445,7 +753,13 @@ function getGradebookAnalytics() {
       totalSubmissions: 0,
       rosterCount: rosterInfo.list.length,
       roster: rosterInfo.list,
-      missingStudents: rosterInfo.list.map(s => ({ studentId: s.studentId, studentName: s.studentName, classPeriod: s.classPeriod })),
+      missingStudents: rosterInfo.list.map(s => ({
+        studentId: s.studentId,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        studentName: s.studentName,
+        classPeriod: s.classPeriod
+      })),
       recentWorksheets,
       classAverage: 0,
       passRate: 0,
@@ -460,13 +774,15 @@ function getGradebookAnalytics() {
   const rows = data.slice(1);
 
   const idCol = headers.indexOf('student id') !== -1 ? headers.indexOf('student id') : 1;
-  const nameCol = headers.indexOf('student name');
+  const firstCol = headers.indexOf('first name');
+  const lastCol = headers.indexOf('last name');
+  const fullNameCol = headers.indexOf('student name');
   const periodCol = headers.indexOf('class / period');
-  const codeCol = headers.indexOf('assignment code') !== -1 ? headers.indexOf('assignment code') : 2;
-  const scorePctCol = headers.indexOf('score %') !== -1 ? headers.indexOf('score %') : 4;
-  const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 5;
-  const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 6;
-  const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 8;
+  const codeCol = headers.indexOf('assignment code') !== -1 ? headers.indexOf('assignment code') : 5;
+  const scorePctCol = headers.indexOf('score %') !== -1 ? headers.indexOf('score %') : 7;
+  const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 8;
+  const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 9;
+  const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 11;
 
   let totalScoreSum = 0;
   let passingCount = 0;
@@ -482,13 +798,19 @@ function getGradebookAnalytics() {
 
   for (const row of rows) {
     const rawId = String(row[idCol] || '???').trim();
-    const rawName = nameCol !== -1 ? String(row[nameCol] || '').trim() : '';
+    const rawFirst = firstCol !== -1 ? String(row[firstCol] || '').trim() : '';
+    const rawLast = lastCol !== -1 ? String(row[lastCol] || '').trim() : '';
+    const rawFull = fullNameCol !== -1
+      ? String(row[fullNameCol] || '').trim()
+      : [rawFirst, rawLast].filter(Boolean).join(' ');
     const rawPeriod = periodCol !== -1 ? String(row[periodCol] || '').trim() : '';
     const assignmentCode = String(row[codeCol] || '').trim();
 
-    const resolved = resolveStudentFromRoster(rawId, rawName, rosterInfo);
+    const resolved = resolveStudentFromRoster(rawId, rawFull, rosterInfo);
     const studentId = resolved.studentId || rawId || '???';
-    const studentName = resolved.studentName || rawName || 'Unlisted in Roster';
+    const firstName = resolved.firstName || rawFirst || '';
+    const lastName = resolved.lastName || rawLast || '';
+    const studentName = resolved.studentName || rawFull || 'Unlisted in Roster';
     const classPeriod = resolved.classPeriod || rawPeriod || '';
 
     const normId = normalizeStudentIdKey(studentId);
@@ -497,7 +819,6 @@ function getGradebookAnalytics() {
     const rawScoreVal = row[scorePctCol];
     let scorePct = 0;
     if (typeof rawScoreVal === 'number') {
-      // Handle Google Sheets percentage decimals (e.g. 0.83 vs 83)
       scorePct = rawScoreVal <= 1 && rawScoreVal > 0 ? Math.round(rawScoreVal * 100) : Math.round(rawScoreVal);
     } else {
       scorePct = parseFloat(String(rawScoreVal || '0').replace('%', '')) || 0;
@@ -549,7 +870,6 @@ function getGradebookAnalytics() {
       }
     }
 
-    // Compute per-student Blocker (<20%) and Gap (20-69%) for Sidebar Conferencing card
     let blocker = null;
     let gap = null;
     for (const [code, stat] of Object.entries(studentStandards)) {
@@ -565,6 +885,8 @@ function getGradebookAnalytics() {
 
     students.push({
       studentId,
+      firstName,
+      lastName,
       studentName,
       classPeriod,
       assignmentCode,
@@ -612,6 +934,8 @@ function getGradebookAnalytics() {
     .filter(r => !submittedNormalizedIds.has(normalizeStudentIdKey(r.studentId)))
     .map(r => ({
       studentId: r.studentId,
+      firstName: r.firstName,
+      lastName: r.lastName,
       studentName: r.studentName,
       classPeriod: r.classPeriod
     }));
@@ -700,7 +1024,6 @@ function runGradingFromSidebar(selectedAssignmentCode) {
       const knownCode = selectedAssignmentCode || fileCodeHint || batchDetectedCode;
       let manifest = knownCode ? getManifestCached(knownCode) : null;
 
-      // Single Gemini Vision call if manifest is already known; otherwise detect & grade
       let gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
       const assignmentCode = String(gradeResult.assignmentCode || knownCode || 'ALG-701').trim().toUpperCase();
 
@@ -708,7 +1031,6 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         batchDetectedCode = assignmentCode;
       }
 
-      // If we didn't have the manifest on the first pass, fetch it now and re-grade with official key
       if (!manifest && assignmentCode) {
         manifest = getManifestCached(assignmentCode);
         if (manifest) {
@@ -723,16 +1045,15 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         const extractedId = String(sub.studentId || '').replace(/^#/, '').trim();
         const extractedName = String(sub.studentName || '').trim();
 
-        // Tie Student ID & Name to the Student Roster
         const resolved = resolveStudentFromRoster(extractedId, extractedName, rosterInfo);
         const finalStudentId = resolved.studentId || extractedId || '???';
-        const fallbackName = (resolved.studentName || extractedName || 'Unlisted in Roster').replace(/"/g, '""');
-        const fallbackPeriod = (resolved.classPeriod || '').replace(/"/g, '""');
+        const fallbackFirst = resolved.firstName || '';
+        const fallbackLast = resolved.lastName || '';
+        const fallbackPeriod = resolved.classPeriod || '';
 
-        // If student wrote both a valid ID and Name on the worksheet and isn't in Student Roster yet, auto-register them!
-        if (!resolved.matchedInRoster && finalStudentId !== '???' && extractedName) {
+        if (!resolved.matchedInRoster && finalStudentId !== '???' && (fallbackFirst || fallbackLast)) {
           try {
-            addOrUpdateRosterStudent(finalStudentId, extractedName, '', 'Auto-added from worksheet scan');
+            addOrUpdateRosterStudent(finalStudentId, fallbackFirst, fallbackLast, '', 'Auto-added from worksheet scan');
           } catch (autoErr) {
             console.warn('Auto-roster add skipped:', autoErr);
           }
@@ -746,14 +1067,15 @@ function runGradingFromSidebar(selectedAssignmentCode) {
 
         const nextRowNum = sheet.getLastRow() + 1;
 
-        // Live VLOOKUP formulas so editing Student Roster always updates Gradebook names & periods
-        const nameFormula = `=IFERROR(VLOOKUP(B${nextRowNum}, 'Student Roster'!$A:$C, 2, FALSE), IFERROR(VLOOKUP(VALUE(B${nextRowNum}), 'Student Roster'!$A:$C, 2, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${nextRowNum}), 'Student Roster'!$A:$C, 2, FALSE), "${fallbackName}")))`;
-        const periodFormula = `=IFERROR(VLOOKUP(B${nextRowNum}, 'Student Roster'!$A:$C, 3, FALSE), IFERROR(VLOOKUP(VALUE(B${nextRowNum}), 'Student Roster'!$A:$C, 3, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${nextRowNum}), 'Student Roster'!$A:$C, 3, FALSE), "${fallbackPeriod}")))`;
+        const firstFormula = buildRosterVlookupFormula(nextRowNum, 2, fallbackFirst);
+        const lastFormula = buildRosterVlookupFormula(nextRowNum, 3, fallbackLast);
+        const periodFormula = buildRosterVlookupFormula(nextRowNum, 4, fallbackPeriod);
 
         const row = [
           Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
           finalStudentId,
-          nameFormula,
+          firstFormula,
+          lastFormula,
           periodFormula,
           assignmentCode,
           manifest && manifest.worksheet ? manifest.worksheet.title : 'Scanned Assignment',
@@ -778,8 +1100,8 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         sheet.appendRow(row);
 
         const lastRow = sheet.getLastRow();
-        sheet.getRange(lastRow, 2).setHorizontalAlignment('center').setFontWeight('bold');
-        const scoreCell = sheet.getRange(lastRow, 7); // Column 7 is Score %
+        sheet.getRange(lastRow, 2).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
+        const scoreCell = sheet.getRange(lastRow, 8); // Column 8 is Score %
         if (scorePct >= 80) {
           scoreCell.setBackground('#dcfce7').setFontColor('#166534').setFontWeight('bold');
         } else if (scorePct >= 60) {

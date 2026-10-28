@@ -36,7 +36,7 @@ Your job is to read the handwritten student submission(s) in this PDF and grade 
 LAYOUT & HEADER EXTRACTION RULES:
 1. STUDENT ID ("studentId"):
    - Look in the top-right header area for the unified box labeled "ID #" (or legacy digit boxes).
-   - Extract the exact ID number written inside the box (e.g., "104", "23", "1042"). Strip any leading "#" or spaces. If blank or unreadable, return "".
+   - Extract the exact 2-digit or 3-digit ID number written inside the box (e.g., "14", "07", "23", "104", "215"). Strip any leading "#" or spaces. If blank or unreadable, return "".
 2. STUDENT NAME ("studentName"):
    - Look in the top-left header area on the "Name:" line.
    - Read the student's handwritten name if written (e.g., "Alex Rivera"). If blank, return "".
