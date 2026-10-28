@@ -72,7 +72,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
     {
       id: 'pod',
       label: 'Problem of the Day',
-      desc: 'Dashed border, warm-up style',
+      desc: '6 questions • 2 columns • 1 page warm-up',
       icon: '★',
     },
     {
