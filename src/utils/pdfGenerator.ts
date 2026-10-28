@@ -445,27 +445,48 @@ function renderQuestionCard(
 
   let promptBottomY = y + headerHeight + 3 + (promptLines.length * 3.8);
 
-  // MULTIPLE CHOICE OPTIONS: Rendered in body under prompt
+  // MULTIPLE CHOICE OPTIONS: Adaptive layout (1-col stacked for sentences, 2-col for short terms)
   if (q.question_type === 'multiple_choice' && q.options && q.options.length > 0) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
+    doc.setFontSize(7.4);
     doc.setTextColor(30, 41, 59);
-    const halfWidth = (width - 6) / 2;
-    q.options.forEach((opt, oIdx) => {
-      const col = oIdx % 2;
-      const row = Math.floor(oIdx / 2);
-      const optX = x + 3.5 + col * halfWidth;
-      const optY = promptBottomY + 2 + (row * 3.8);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`(${opt.label}) `, optX, optY);
-      const labelW = doc.getTextWidth(`(${opt.label}) `);
-      doc.setFont('helvetica', 'normal');
-      const optTextClean = cleanLatexForPdf(opt.text);
-      const textLine = doc.splitTextToSize(optTextClean, halfWidth - labelW - 2)[0] || '';
-      doc.text(textLine, optX + labelW, optY);
-    });
-    const totalOptionRows = Math.ceil(q.options.length / 2);
-    promptBottomY += (totalOptionRows * 3.8) + 1.5;
+
+    const hasLongOptions = q.options.some((o) => (o.text || '').length > 22);
+
+    if (hasLongOptions) {
+      // Stacked 1-column layout across full card width (preserves work space for sentence options)
+      const fullOptWidth = width - 7;
+      let curOptY = promptBottomY + 2.2;
+      q.options.forEach((opt) => {
+        doc.setFont('helvetica', 'bold');
+        doc.text(`(${opt.label}) `, x + 3.5, curOptY);
+        const labelW = doc.getTextWidth(`(${opt.label}) `);
+        doc.setFont('helvetica', 'normal');
+        const optTextClean = cleanLatexForPdf(opt.text);
+        const optLines = doc.splitTextToSize(optTextClean, fullOptWidth - labelW);
+        doc.text(optLines, x + 3.5 + labelW, curOptY);
+        curOptY += (optLines.length * 3.3) + 0.6;
+      });
+      promptBottomY = curOptY + 0.4;
+    } else {
+      // Compact 2-column layout for short numbers, coordinates, or terms
+      const halfWidth = (width - 6) / 2;
+      q.options.forEach((opt, oIdx) => {
+        const col = oIdx % 2;
+        const row = Math.floor(oIdx / 2);
+        const optX = x + 3.5 + col * halfWidth;
+        const optY = promptBottomY + 2 + (row * 3.6);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`(${opt.label}) `, optX, optY);
+        const labelW = doc.getTextWidth(`(${opt.label}) `);
+        doc.setFont('helvetica', 'normal');
+        const optTextClean = cleanLatexForPdf(opt.text);
+        const textLine = doc.splitTextToSize(optTextClean, halfWidth - labelW - 1)[0] || '';
+        doc.text(textLine, optX + labelW, optY);
+      });
+      const totalOptionRows = Math.ceil(q.options.length / 2);
+      promptBottomY += (totalOptionRows * 3.6) + 1.2;
+    }
   }
 
   // 4. Calculate Zones: Seamless Work Area vs Final Answer Box

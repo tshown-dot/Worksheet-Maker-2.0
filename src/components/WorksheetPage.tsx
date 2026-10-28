@@ -233,20 +233,29 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                       <MathText text={q.prompt} />
                     </div>
 
-                    {q.question_type === 'multiple_choice' && q.options && q.options.length > 0 && (
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1.5 pt-1 text-xs text-slate-900">
-                        {q.options.map((opt) => (
-                          <div key={opt.label} className="flex items-baseline space-x-1.5">
-                            <span className="font-extrabold text-slate-900 text-[11.5px] shrink-0">
-                              ({opt.label})
-                            </span>
-                            <div className="text-[11.5px] leading-snug font-sans text-slate-800">
-                              <MathText text={opt.text} />
+                    {q.question_type === 'multiple_choice' && q.options && q.options.length > 0 && (() => {
+                      const hasLongOptions = q.options.some((o) => (o.text || '').length > 22);
+                      return (
+                        <div
+                          className={`mt-1.5 pt-1 text-slate-900 ${
+                            hasLongOptions
+                              ? 'grid grid-cols-1 gap-y-1'
+                              : 'grid grid-cols-2 gap-x-3 gap-y-0.5'
+                          }`}
+                        >
+                          {q.options.map((opt) => (
+                            <div key={opt.label} className="flex items-baseline space-x-1.5">
+                              <span className="font-extrabold text-slate-900 text-[11px] shrink-0">
+                                ({opt.label})
+                              </span>
+                              <div className="text-[11px] leading-snug font-sans text-slate-800">
+                                <MathText text={opt.text} />
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

@@ -333,18 +333,43 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         </div>
 
         {/* Multiple Choice Options Builder (Only shown when Multiple Choice is selected) */}
-        {question.question_type === 'multiple_choice' && (
-          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1">
-              <ListOrdered className="w-3.5 h-3.5 text-blue-600" />
-              <span>Multiple Choice Options</span>
-            </span>
+        {/* Multiple Choice Options Box */}
+        {question.question_type === 'multiple_choice' ? (
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1">
+                <ListOrdered className="w-3.5 h-3.5 text-blue-600" />
+                <span>Multiple Choice Options</span>
+              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-semibold">
+                  {question.options?.some((o) => (o.text || '').length > 22)
+                    ? 'Layout: 1 Column (Full Width)'
+                    : 'Layout: 2 Columns'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const matchedOpt = question.options?.find(
+                      (o) => o.label.toUpperCase() === question.correct_answer?.trim().toUpperCase()
+                    );
+                    onUpdate({
+                      question_type: 'numeric',
+                      correct_answer: matchedOpt ? matchedOpt.text : (question.correct_answer || ''),
+                    });
+                  }}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  Convert to Open-Ended
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {['A', 'B', 'C', 'D'].map((label) => {
                 const opt = question.options?.find((o) => o.label === label);
                 return (
                   <div key={label} className="flex items-center space-x-2">
-                    <span className="w-6 h-6 rounded bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center">
+                    <span className="w-6 h-6 rounded bg-slate-200 text-slate-800 text-xs font-bold flex items-center justify-center shrink-0">
                       {label}
                     </span>
                     <input
@@ -366,6 +391,27 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 );
               })}
             </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                onUpdate({
+                  question_type: 'multiple_choice',
+                  options: [
+                    { label: 'A', text: question.correct_answer || '' },
+                    { label: 'B', text: '' },
+                    { label: 'C', text: '' },
+                    { label: 'D', text: '' },
+                  ],
+                  correct_answer: 'A',
+                });
+              }}
+              className="text-[11px] font-semibold text-slate-500 hover:text-blue-600 flex items-center space-x-1"
+            >
+              <span>+ Convert to Multiple Choice</span>
+            </button>
           </div>
         )}
 
