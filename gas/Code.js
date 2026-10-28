@@ -14,6 +14,10 @@ function onOpen() {
     .addItem('📱 Open Autograder Sidebar', 'showSidebar')
     .addItem('🎓 Preview / Share Student Progress Portal', 'openStudentPortalPreview')
     .addSeparator()
+    .addItem('🔍 Filter Gradebook (Class & Date)', 'openGradebookFilterDialog')
+    .addItem('🔄 Clear Gradebook Filter (Show All)', 'clearGradebookFilter')
+    .addItem('🔑 Update & Lock Student Passwords', 'updateStudentPortalPasswords')
+    .addSeparator()
     .addItem('🚀 Grade Scanned Worksheets (from Drive)', 'gradeScannedWorksheets')
     .addItem('👥 Open / Format Student Roster', 'openRosterSheet')
     .addItem('📈 Refresh Student Standards Monitoring', 'updateStudentMonitoringSheet')
@@ -30,7 +34,7 @@ function onOpen() {
 function doGet(e) {
   if (e && e.parameter) {
     if (e.parameter.action === 'studentProgress') {
-      const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.lastName || '');
+      const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.password || e.parameter.lastName || '');
       return ContentService.createTextOutput(JSON.stringify(data))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -77,6 +81,16 @@ function openStudentPortalPreview() {
     .setWidth(920)
     .setHeight(720);
   SpreadsheetApp.getUi().showModalDialog(html, '🎓 Student Math Progress Portal (Live Preview)');
+}
+
+/**
+ * Opens the Gradebook Filter modal dialog
+ */
+function openGradebookFilterDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('GradebookFilter')
+    .setWidth(520)
+    .setHeight(460);
+  SpreadsheetApp.getUi().showModalDialog(html, '🔍 Filter Gradebook by Class & Date');
 }
 
 /**
@@ -182,8 +196,9 @@ function setupAllSheets() {
  *   Col B: First Name
  *   Col C: Last Name
  *   Col D: Class / Period
- *   Col E: Notes / Accommodations
- * Preserves existing student rows and auto-migrates 4-column rosters.
+ *   Col E: Portal Password (student-chosen password for Student Portal)
+ *   Col F: Notes / Accommodations
+ * Preserves existing student rows, auto-migrates 4-column rosters, and adds Portal Password column.
  */
 function setupRosterSheet(silent) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -193,10 +208,12 @@ function setupRosterSheet(silent) {
     sheet = ss.insertSheet('Student Roster', 0);
   }
 
-  // Check if an older 4-column layout exists (Col B = "Student Name", Col C = "Class / Period")
+  // Check if an older layout exists
   if (sheet.getLastRow() >= 1 && sheet.getLastColumn() >= 3) {
-    const row1 = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 4)).getValues()[0];
+    const row1 = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 5)).getValues()[0];
     const h1 = row1.map(h => String(h || '').trim().toLowerCase());
+    
+    // Check if 4-column layout (Col B = "Student Name", Col C = "Class / Period")
     if (h1[1] === 'student name' && h1[2] === 'class / period') {
       sheet.insertColumnAfter(2);
       const lastR = sheet.getLastRow();
@@ -213,9 +230,15 @@ function setupRosterSheet(silent) {
         sheet.getRange(2, 2, splitRows.length, 2).setValues(splitRows);
       }
     }
+
+    // Check if Portal Password column is missing
+    const hasPasswordCol = h1.some(h => h.includes('password') || h.includes('pin') || h.includes('passcode'));
+    if (!hasPasswordCol) {
+      sheet.insertColumnAfter(4); // Insert after Class / Period
+    }
   }
 
-  const headers = ['Student ID', 'First Name', 'Last Name', 'Class / Period', 'Notes / Accommodations'];
+  const headers = ['Student ID', 'First Name', 'Last Name', 'Class / Period', 'Portal Password', 'Notes / Accommodations'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
   const headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -228,29 +251,31 @@ function setupRosterSheet(silent) {
   sheet.setFrozenRows(1);
 
   sheet.setColumnWidth(1, 110);
-  sheet.setColumnWidth(2, 150);
-  sheet.setColumnWidth(3, 160);
-  sheet.setColumnWidth(4, 130);
-  sheet.setColumnWidth(5, 220);
+  sheet.setColumnWidth(2, 140);
+  sheet.setColumnWidth(3, 150);
+  sheet.setColumnWidth(4, 120);
+  sheet.setColumnWidth(5, 140); // Portal Password
+  sheet.setColumnWidth(6, 200); // Notes / Accommodations
 
-  // Format Column A as Plain Text so 2-digit numbers (like "04" or "12") and 3-digit numbers ("104") stay exact
+  // Format Column A (ID) and Column E (Password) as Plain Text @
   sheet.getRange(2, 1, 250, 1).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
+  sheet.getRange(2, 5, 250, 1).setNumberFormat('@').setHorizontalAlignment('center');
 
   // If brand new (no rows below header), add starter example rows showing 2-digit & 3-digit support
   if (sheet.getLastRow() <= 1) {
     const starterRows = [
-      ['11', 'Example', 'Student 1 (Edit Me)', 'Period 1', 'Supports 2-digit (e.g. 11) or 3-digit (e.g. 101) IDs'],
-      ['12', 'Example', 'Student 2 (Edit Me)', 'Period 1', ''],
-      ['13', 'Example', 'Student 3 (Edit Me)', 'Period 1', '']
+      ['11', 'Example', 'Student 1 (Edit Me)', 'Period 1', 'math11', 'Supports 2-digit (e.g. 11) or 3-digit (e.g. 101) IDs'],
+      ['12', 'Example', 'Student 2 (Edit Me)', 'Period 1', 'math12', ''],
+      ['13', 'Example', 'Student 3 (Edit Me)', 'Period 1', 'math13', '']
     ];
-    sheet.getRange(2, 1, starterRows.length, 5).setValues(starterRows);
+    sheet.getRange(2, 1, starterRows.length, 6).setValues(starterRows);
   }
 
   if (!silent) {
     ss.setActiveSheet(sheet);
     SpreadsheetApp.getUi().alert(
       'Student Roster Ready 👥',
-      'Add your students\' 2-digit or 3-digit ID numbers, First Name, and Last Name in the "Student Roster" tab.',
+      'Add your students\' ID numbers, First Name, Last Name, and student-chosen Portal Passwords in the "Student Roster" tab.\n\nThen click "🔑 Update & Lock Student Passwords" to activate them!',
       SpreadsheetApp.getUi().ButtonSet.OK
     );
   }
@@ -304,20 +329,34 @@ function getRosterData() {
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0].map(h => String(h || '').trim().toLowerCase());
-  const isFiveCol = headers.includes('first name') && headers.includes('last name');
+  const idCol = headers.indexOf('student id') !== -1 ? headers.indexOf('student id') : 0;
+  const firstCol = headers.indexOf('first name');
+  const lastCol = headers.indexOf('last name');
+  const periodCol = headers.indexOf('class / period');
+  const passCol = headers.findIndex(h => h.includes('password') || h.includes('pin') || h.includes('passcode'));
+  const notesCol = headers.findIndex(h => h.includes('note') || h.includes('accommodation'));
+
+  let cachedPasswords = {};
+  try {
+    const rawCache = PropertiesService.getScriptProperties().getProperty('STUDENT_PORTAL_PASSWORDS');
+    if (rawCache) cachedPasswords = JSON.parse(rawCache);
+  } catch (e) {}
 
   for (let i = 1; i < data.length; i++) {
-    const rawId = String(data[i][0] || '').replace(/^#/, '').trim();
+    const rawId = String(data[i][idCol] || '').replace(/^#/, '').trim();
     let firstName = '';
     let lastName = '';
     let rawPeriod = '';
+    let rawPassword = '';
     let rawNotes = '';
 
-    if (isFiveCol) {
-      firstName = String(data[i][1] || '').trim();
-      lastName = String(data[i][2] || '').trim();
-      rawPeriod = String(data[i][3] || '').trim();
-      rawNotes = String(data[i][4] || '').trim();
+    if (firstCol !== -1 && lastCol !== -1) {
+      firstName = String(data[i][firstCol] || '').trim();
+      lastName = String(data[i][lastCol] || '').trim();
+      rawPeriod = periodCol !== -1 ? String(data[i][periodCol] || '').trim() : '';
+      rawPassword = passCol !== -1 ? String(data[i][passCol] || '').trim() : '';
+      rawNotes = notesCol !== -1 ? String(data[i][notesCol] || '').trim() : '';
+
       // If teacher pasted full name into First Name and left Last Name empty, split it automatically
       if (firstName && !lastName && (firstName.includes(' ') || firstName.includes(','))) {
         const sp = splitFullName(firstName);
@@ -332,6 +371,13 @@ function getRosterData() {
       rawNotes = String(data[i][3] || '').trim();
     }
 
+    if (!rawPassword && rawId) {
+      const normId = normalizeStudentIdKey(rawId);
+      if (cachedPasswords[normId] || cachedPasswords[rawId]) {
+        rawPassword = cachedPasswords[normId] || cachedPasswords[rawId];
+      }
+    }
+
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
     if (!rawId && !fullName) continue;
 
@@ -343,6 +389,7 @@ function getRosterData() {
       lastName,
       studentName: fullName,
       classPeriod: rawPeriod,
+      password: rawPassword,
       notes: rawNotes,
       rowIndex: i + 1,
       isPlaceholder
@@ -439,14 +486,23 @@ function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
 }
 
 /**
- * Adds or updates a student in the "Student Roster" tab (supports 2-digit or 3-digit Student IDs, First Name, & Last Name)
+ * Adds or updates a student in the "Student Roster" tab (supports 2-digit or 3-digit Student IDs, First Name, Last Name, & Passwords)
  */
-function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, notes) {
+function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, password, notes) {
   const cleanId = String(studentId || '').replace(/^#/, '').trim();
   let cleanFirst = String(firstName || '').trim();
   let cleanLast = String(lastName || '').trim();
   const cleanPeriod = String(classPeriod || '').trim();
-  const cleanNotes = String(notes || '').trim();
+  let cleanPassword = '';
+  let cleanNotes = '';
+
+  // Backward compatibility if called with (id, first, last, period, notes)
+  if (notes === undefined && typeof password === 'string' && (password.length > 25 || password.includes(' '))) {
+    cleanNotes = password.trim();
+  } else {
+    cleanPassword = String(password || '').trim();
+    cleanNotes = String(notes || '').trim();
+  }
 
   if (cleanFirst && !cleanLast && (cleanFirst.includes(' ') || cleanFirst.includes(','))) {
     const sp = splitFullName(cleanFirst);
@@ -478,12 +534,18 @@ function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, n
   }
 
   if (updatedRow !== -1) {
-    sheet.getRange(updatedRow, 1, 1, 5).setValues([[cleanId, cleanFirst, cleanLast, cleanPeriod, cleanNotes]]);
+    // Preserve existing password if new password was left empty
+    if (!cleanPassword && data[updatedRow - 1][4]) {
+      cleanPassword = String(data[updatedRow - 1][4]).trim();
+    }
+    sheet.getRange(updatedRow, 1, 1, 6).setValues([[cleanId, cleanFirst, cleanLast, cleanPeriod, cleanPassword, cleanNotes]]);
     sheet.getRange(updatedRow, 1).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
+    sheet.getRange(updatedRow, 5).setNumberFormat('@').setHorizontalAlignment('center');
   } else {
-    sheet.appendRow([cleanId, cleanFirst, cleanLast, cleanPeriod, cleanNotes]);
+    sheet.appendRow([cleanId, cleanFirst, cleanLast, cleanPeriod, cleanPassword, cleanNotes]);
     const lastRow = sheet.getLastRow();
     sheet.getRange(lastRow, 1).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
+    sheet.getRange(lastRow, 5).setNumberFormat('@').setHorizontalAlignment('center');
   }
 
   try {
@@ -493,6 +555,101 @@ function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, n
   }
 
   return getGradebookAnalytics();
+}
+
+/**
+ * Hardcodes and updates all student-chosen passwords from the "Student Roster" sheet.
+ * Evaluates any formulas into static text values, trims whitespace, formats as plain text,
+ * and caches them into Script Properties for fast, secure authentication.
+ */
+function updateStudentPortalPasswords() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Student Roster');
+  if (!sheet) {
+    sheet = setupRosterSheet(true);
+  }
+
+  // Ensure Portal Password column exists
+  setupRosterSheet(true);
+  sheet = ss.getSheetByName('Student Roster');
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    try {
+      SpreadsheetApp.getUi().alert(
+        'Student Roster Empty',
+        'No students found in the "Student Roster" sheet. Please add students and their passwords before updating.',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } catch (e) {}
+    return { success: false, message: 'No students found in roster.' };
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+
+  const idColIndex = headers.indexOf('student id') !== -1 ? headers.indexOf('student id') : 0;
+  const passColIndex = headers.findIndex(h => h.includes('password') || h.includes('pin') || h.includes('passcode'));
+
+  if (passColIndex === -1) {
+    throw new Error('Could not find the "Portal Password" column in Student Roster.');
+  }
+
+  const passRange = sheet.getRange(2, passColIndex + 1, lastRow - 1, 1);
+  const passValues = passRange.getValues();
+
+  let updatedCount = 0;
+  let blankCount = 0;
+  const cleanedPassValues = [];
+  const passwordMap = {};
+
+  for (let i = 0; i < passValues.length; i++) {
+    const rowIndex = i + 1;
+    const rawId = String(data[rowIndex][idColIndex] || '').replace(/^#/, '').trim();
+    const normId = normalizeStudentIdKey(rawId);
+
+    // passValues[i][0] contains evaluated cell value (even if entered as a formula)
+    const rawPass = passValues[i][0];
+    const cleanPass = String(rawPass === null || rawPass === undefined ? '' : rawPass).trim();
+
+    // Hardcode as plain text
+    cleanedPassValues.push([cleanPass]);
+
+    if (normId) {
+      if (cleanPass) {
+        passwordMap[normId] = cleanPass;
+        passwordMap[rawId] = cleanPass;
+        updatedCount++;
+      } else {
+        blankCount++;
+      }
+    }
+  }
+
+  // Write static plain-text values back to the sheet (replaces any formulas with permanent text)
+  passRange.setNumberFormat('@');
+  passRange.setValues(cleanedPassValues);
+
+  // Cache in Script Properties
+  PropertiesService.getScriptProperties().setProperty('STUDENT_PORTAL_PASSWORDS', JSON.stringify(passwordMap));
+
+  const summaryMsg = `Successfully updated and locked passwords for ${updatedCount} student(s) in "Student Roster"! (${blankCount} student(s) have blank passwords).\n\nStudent Portal is now active with their custom student passwords.`;
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      '🔑 Student Passwords Updated & Hardcoded ✅',
+      summaryMsg,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch (uiErr) {}
+
+  return {
+    success: true,
+    updatedCount,
+    blankCount,
+    total: updatedCount + blankCount,
+    message: summaryMsg
+  };
 }
 
 /**
@@ -519,11 +676,11 @@ function getCanonicalGradebookHeaders() {
 }
 
 /**
- * Helper to create a type-safe VLOOKUP formula against 'Student Roster'!$A:$E
+ * Helper to create a type-safe VLOOKUP formula against 'Student Roster'!$A:$F
  */
 function buildRosterVlookupFormula(rowNum, rosterColIndex, fallbackText) {
   const safeFallback = String(fallbackText || '').replace(/"/g, '""');
-  return `=IFERROR(VLOOKUP(B${rowNum}, 'Student Roster'!$A:$E, ${rosterColIndex}, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${rowNum}), 'Student Roster'!$A:$E, ${rosterColIndex}, FALSE), IFERROR(VLOOKUP(VALUE(B${rowNum}), 'Student Roster'!$A:$E, ${rosterColIndex}, FALSE), "${safeFallback}")))`;
+  return `=IFERROR(VLOOKUP(B${rowNum}, 'Student Roster'!$A:$F, ${rosterColIndex}, FALSE), IFERROR(VLOOKUP(TO_TEXT(B${rowNum}), 'Student Roster'!$A:$F, ${rosterColIndex}, FALSE), IFERROR(VLOOKUP(VALUE(B${rowNum}), 'Student Roster'!$A:$F, ${rosterColIndex}, FALSE), "${safeFallback}")))`;
 }
 
 /**
@@ -574,6 +731,11 @@ function ensureGradebookColumns(sheet) {
   sheet.setRowHeight(1, 35);
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(4); // Freeze Timestamp, Student ID, First Name, Last Name
+
+  // Ensure native Google Sheets filter exists on Gradebook
+  if (sheet.getLastRow() >= 1 && sheet.getLastColumn() >= 1 && !sheet.getFilter()) {
+    sheet.getDataRange().createFilter();
+  }
 }
 
 /**
@@ -602,28 +764,57 @@ function setupGradebookSheet(silent) {
 
 /**
  * Student Portal API: Returns a specific student's progress, standards mastery, and graded worksheets
- * when they log in with their 2-digit or 3-digit Student ID # (and optional Last Name).
+ * when they log in with their 2-digit or 3-digit Student ID # and their Student-Chosen Password.
  */
-function getStudentPortalData(rawStudentId, rawLastName) {
+function getStudentPortalData(rawStudentId, rawPassword) {
   const cleanInputId = String(rawStudentId || '').replace(/^#/, '').trim();
   const normInputId = normalizeStudentIdKey(cleanInputId);
-  const inputLastLower = String(rawLastName || '').trim().toLowerCase();
+  const inputPassClean = String(rawPassword || '').trim();
 
   if (!normInputId) {
     return { found: false, error: 'Please enter your 2-digit or 3-digit Student ID #.' };
+  }
+  if (!inputPassClean) {
+    return { found: false, error: 'Please enter your student password.' };
   }
 
   const rosterInfo = getRosterData();
   const rosterMatch = rosterInfo.byId[cleanInputId] || rosterInfo.byNormalizedId[normInputId];
 
-  // If the student is in the Roster with a Last Name AND the student entered a Last Name, verify it matches
-  if (rosterMatch && rosterMatch.lastName && inputLastLower) {
-    const rLast = rosterMatch.lastName.toLowerCase();
-    const rFirst = rosterMatch.firstName.toLowerCase();
-    if (rLast !== inputLastLower && rFirst !== inputLastLower && !rLast.includes(inputLastLower)) {
+  // Retrieve cached passwords if available
+  let cachedPasswords = {};
+  try {
+    const rawCache = PropertiesService.getScriptProperties().getProperty('STUDENT_PORTAL_PASSWORDS');
+    if (rawCache) cachedPasswords = JSON.parse(rawCache);
+  } catch (e) {}
+
+  const configuredPass = (rosterMatch && rosterMatch.password) || cachedPasswords[normInputId] || cachedPasswords[cleanInputId] || '';
+
+  if (configuredPass) {
+    // Student has a configured password in Roster/Cache!
+    // Case-insensitive comparison with whitespace trimmed for student convenience
+    if (configuredPass.toLowerCase().trim() !== inputPassClean.toLowerCase()) {
       return {
         found: false,
-        error: 'The Last Name entered does not match Student ID #' + cleanInputId + '. Please check your ID # and spelling.'
+        error: 'Incorrect password for Student ID #' + cleanInputId + '. If you forgot your password, please ask your teacher.'
+      };
+    }
+  } else {
+    // Fallback: If no password is set yet in Roster, allow checking against student's Last Name or First Name
+    if (rosterMatch && (rosterMatch.lastName || rosterMatch.firstName)) {
+      const rLast = (rosterMatch.lastName || '').toLowerCase();
+      const rFirst = (rosterMatch.firstName || '').toLowerCase();
+      const pLower = inputPassClean.toLowerCase();
+      if (rLast !== pLower && rFirst !== pLower && !rLast.includes(pLower)) {
+        return {
+          found: false,
+          error: 'No password is set yet for Student ID #' + cleanInputId + '. Please ask your teacher to set your password in the roster.'
+        };
+      }
+    } else {
+      return {
+        found: false,
+        error: 'Student ID #' + cleanInputId + ' was not found in the roster. Please check your number or ask your teacher.'
       };
     }
   }
@@ -979,6 +1170,194 @@ function getGradebookAnalytics() {
     questionStats,
     students
   };
+}
+
+/**
+ * Returns available classes/periods and date info for Gradebook filtering
+ */
+function getGradebookFilterOptions() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const periods = new Set();
+  
+  // From Gradebook
+  const gbSheet = ss.getSheetByName('Gradebook');
+  let gbRowCount = 0;
+  if (gbSheet && gbSheet.getLastRow() > 1) {
+    const data = gbSheet.getDataRange().getValues();
+    gbRowCount = data.length - 1;
+    const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+    const periodCol = headers.indexOf('class / period');
+    if (periodCol !== -1) {
+      for (let i = 1; i < data.length; i++) {
+        const p = String(data[i][periodCol] || '').trim();
+        if (p) periods.add(p);
+      }
+    }
+  }
+
+  // From Roster
+  const rosterSheet = ss.getSheetByName('Student Roster');
+  if (rosterSheet && rosterSheet.getLastRow() > 1) {
+    const rData = rosterSheet.getDataRange().getValues();
+    const rHeaders = rData[0].map(h => String(h || '').trim().toLowerCase());
+    const rPeriodCol = rHeaders.indexOf('class / period');
+    if (rPeriodCol !== -1) {
+      for (let i = 1; i < rData.length; i++) {
+        const p = String(rData[i][rPeriodCol] || '').trim();
+        if (p) periods.add(p);
+      }
+    }
+  }
+
+  const sortedPeriods = Array.from(periods).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return {
+    periods: sortedPeriods,
+    totalRows: gbRowCount
+  };
+}
+
+/**
+ * Applies a filter to the Gradebook sheet by Class/Period and by Date
+ *
+ * @param {string} targetPeriod - Class/Period (e.g. 'Period 1') or 'ALL'
+ * @param {string} datePreset - 'ALL', 'TODAY', 'YESTERDAY', 'WEEK', 'MONTH', or 'CUSTOM'
+ * @param {string} customStart - Optional 'YYYY-MM-DD' start date
+ * @param {string} customEnd - Optional 'YYYY-MM-DD' end date
+ * @returns {Object} Filter results summary
+ */
+function applyGradebookFilter(targetPeriod, datePreset, customStart, customEnd) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Gradebook');
+  if (!sheet) {
+    sheet = setupGradebookSheet(true);
+  }
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow <= 1) {
+    return { success: false, message: 'Gradebook is currently empty.' };
+  }
+
+  let filter = sheet.getFilter();
+  if (!filter) {
+    filter = sheet.getRange(1, 1, lastRow, lastCol).createFilter();
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const displayData = sheet.getDataRange().getDisplayValues();
+  const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+
+  const tsColIndex = headers.indexOf('timestamp') !== -1 ? headers.indexOf('timestamp') + 1 : 1;
+  const periodColIndex = headers.indexOf('class / period') !== -1 ? headers.indexOf('class / period') + 1 : 5;
+
+  const cleanPeriod = String(targetPeriod || 'ALL').trim();
+  const cleanPreset = String(datePreset || 'ALL').trim().toUpperCase();
+
+  // 1. FILTER BY CLASS / PERIOD
+  if (cleanPeriod && cleanPeriod.toUpperCase() !== 'ALL') {
+    const hiddenPeriodsSet = new Set();
+    for (let r = 1; r < data.length; r++) {
+      const rowPeriod = String(data[r][periodColIndex - 1] || '').trim();
+      const displayPeriod = String(displayData[r][periodColIndex - 1] || '').trim();
+      if (rowPeriod.toLowerCase() !== cleanPeriod.toLowerCase()) {
+        hiddenPeriodsSet.add(displayPeriod);
+        if (rowPeriod) hiddenPeriodsSet.add(rowPeriod);
+      }
+    }
+    const periodCriteria = SpreadsheetApp.newFilterCriteria()
+      .setHiddenValues(Array.from(hiddenPeriodsSet))
+      .build();
+    filter.setColumnFilterCriteria(periodColIndex, periodCriteria);
+  } else {
+    filter.removeColumnFilterCriteria(periodColIndex);
+  }
+
+  // 2. FILTER BY DATE
+  if (cleanPreset !== 'ALL') {
+    const now = new Date();
+    let minDate = new Date(1970, 0, 1);
+    let maxDate = new Date(2100, 0, 1);
+
+    if (cleanPreset === 'TODAY') {
+      minDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      maxDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (cleanPreset === 'YESTERDAY') {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      minDate = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate(), 0, 0, 0);
+      maxDate = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate(), 23, 59, 59, 999);
+    } else if (cleanPreset === 'WEEK' || cleanPreset === 'LAST_7_DAYS') {
+      minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      maxDate = now;
+    } else if (cleanPreset === 'MONTH' || cleanPreset === 'LAST_30_DAYS') {
+      minDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      maxDate = now;
+    } else if (cleanPreset === 'CUSTOM' && customStart) {
+      minDate = new Date(customStart + 'T00:00:00');
+      if (customEnd) {
+        maxDate = new Date(customEnd + 'T23:59:59.999');
+      }
+    }
+
+    const hiddenTimestampsSet = new Set();
+    for (let r = 1; r < data.length; r++) {
+      const rawTs = data[r][tsColIndex - 1];
+      const displayTs = String(displayData[r][tsColIndex - 1] || '').trim();
+      let rowDate = null;
+      if (rawTs instanceof Date && !isNaN(rawTs.getTime())) {
+        rowDate = rawTs;
+      } else if (rawTs) {
+        const parsed = new Date(rawTs);
+        if (!isNaN(parsed.getTime())) rowDate = parsed;
+      }
+
+      if (!rowDate || rowDate < minDate || rowDate > maxDate) {
+        hiddenTimestampsSet.add(displayTs);
+        if (rawTs && typeof rawTs === 'string') hiddenTimestampsSet.add(rawTs);
+      }
+    }
+
+    const tsCriteria = SpreadsheetApp.newFilterCriteria()
+      .setHiddenValues(Array.from(hiddenTimestampsSet))
+      .build();
+    filter.setColumnFilterCriteria(tsColIndex, tsCriteria);
+  } else {
+    filter.removeColumnFilterCriteria(tsColIndex);
+  }
+
+  ss.setActiveSheet(sheet);
+  ss.toast(
+    `Gradebook filtered by Class: ${cleanPeriod} | Date: ${cleanPreset}`,
+    '🔍 Gradebook Filter Active',
+    4
+  );
+
+  return {
+    success: true,
+    period: cleanPeriod,
+    datePreset: cleanPreset,
+    totalRows: data.length - 1
+  };
+}
+
+/**
+ * Clears all active filter criteria on the Gradebook sheet so all rows are visible
+ */
+function clearGradebookFilter() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Gradebook');
+  if (!sheet) return { success: false, message: 'Gradebook sheet not found.' };
+
+  const filter = sheet.getFilter();
+  if (filter) {
+    const lastCol = sheet.getLastColumn();
+    for (let c = 1; c <= lastCol; c++) {
+      filter.removeColumnFilterCriteria(c);
+    }
+  }
+  ss.setActiveSheet(sheet);
+  ss.toast('All Gradebook filters cleared. All rows are now visible.', '🔄 Filter Cleared', 3);
+  return { success: true };
 }
 
 /**

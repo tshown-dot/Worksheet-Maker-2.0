@@ -50,7 +50,7 @@
         </div>
         <h2 class="text-xl font-extrabold text-slate-900">Check Your Math Progress</h2>
         <p class="text-xs text-slate-500">
-          Enter your 2-digit or 3-digit Student ID # and Last Name to view your graded worksheets and skill mastery.
+          Enter your 2-digit or 3-digit Student ID # and your Student Password to view your graded worksheets and skill mastery.
         </p>
       </div>
 
@@ -72,14 +72,26 @@
 
         <div>
           <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            Last Name
+            Student Password <span class="text-red-500">*</span>
           </label>
-          <input
-            id="inputLastName"
-            type="text"
-            placeholder="e.g. Rivera"
-            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-          />
+          <div class="relative">
+            <input
+              id="inputPassword"
+              type="password"
+              required
+              placeholder="Enter your student password"
+              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white pr-10"
+            />
+            <button
+              type="button"
+              onclick="togglePasswordVisibility()"
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer text-sm"
+              title="Toggle password visibility"
+            >
+              <span id="pwdToggleIcon">👁️</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Your chosen student password (or ask your teacher if you forgot it).</p>
         </div>
 
         <div id="loginError" class="hidden p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold"></div>
@@ -178,10 +190,23 @@
   </main>
 
   <script>
+    function togglePasswordVisibility() {
+      const pwdInput = document.getElementById('inputPassword');
+      const icon = document.getElementById('pwdToggleIcon');
+      if (!pwdInput) return;
+      if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        icon.innerText = '🙈';
+      } else {
+        pwdInput.type = 'password';
+        icon.innerText = '👁️';
+      }
+    }
+
     function handleLogin(e) {
       e.preventDefault();
       const studentId = document.getElementById('inputStudentId').value.trim();
-      const lastName = document.getElementById('inputLastName').value.trim();
+      const password = document.getElementById('inputPassword').value.trim();
       const errBox = document.getElementById('loginError');
       const btn = document.getElementById('loginSubmitBtn');
       const btnText = document.getElementById('loginBtnText');
@@ -214,7 +239,7 @@
           errBox.classList.remove('hidden');
           errBox.innerText = err.message || 'Unable to load progress right now.';
         })
-        .getStudentPortalData(studentId, lastName);
+        .getStudentPortalData(studentId, password);
     }
 
     function logoutStudent() {

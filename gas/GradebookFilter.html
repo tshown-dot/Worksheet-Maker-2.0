@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-5 space-y-4 text-xs">
+
+  <!-- HEADER -->
+  <div class="flex items-center space-x-2.5 pb-3 border-b border-slate-200">
+    <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-base font-bold shadow-sm">
+      🔍
+    </div>
+    <div>
+      <h1 class="font-extrabold text-slate-900 text-sm">Filter Gradebook</h1>
+      <p class="text-[11px] text-slate-500">Filter Google Sheets Gradebook rows by Class/Period and Date.</p>
+    </div>
+  </div>
+
+  <!-- FILTER CONTROLS FORM -->
+  <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+    
+    <!-- 1. CLASS / PERIOD SELECTOR -->
+    <div>
+      <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+        Class / Period
+      </label>
+      <select
+        id="filterPeriod"
+        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+      >
+        <option value="ALL">🌟 All Classes / Periods</option>
+      </select>
+    </div>
+
+    <!-- 2. DATE PRESET SELECTOR -->
+    <div>
+      <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+        Date Range
+      </label>
+      <select
+        id="filterDatePreset"
+        onchange="handleDatePresetChange()"
+        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+      >
+        <option value="ALL">📅 All Dates</option>
+        <option value="TODAY">⚡ Today Only</option>
+        <option value="YESTERDAY">⏮️ Yesterday</option>
+        <option value="WEEK">🗓️ Past 7 Days</option>
+        <option value="MONTH">📆 Past 30 Days</option>
+        <option value="CUSTOM">🎯 Custom Date Range...</option>
+      </select>
+    </div>
+
+    <!-- 3. CUSTOM DATE RANGE INPUTS (Hidden by default) -->
+    <div id="customDateRangeBox" class="hidden p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-2 gap-2.5">
+      <div>
+        <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">From Date</label>
+        <input
+          id="customStartDate"
+          type="date"
+          class="w-full p-1.5 bg-white border border-slate-300 rounded text-xs font-medium"
+        />
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">To Date</label>
+        <input
+          id="customEndDate"
+          type="date"
+          class="w-full p-1.5 bg-white border border-slate-300 rounded text-xs font-medium"
+        />
+      </div>
+    </div>
+
+    <!-- STATUS / FEEDBACK BANNER -->
+    <div id="filterStatus" class="hidden p-2.5 rounded-lg text-xs font-semibold"></div>
+
+  </div>
+
+  <!-- ACTION BUTTONS -->
+  <div class="flex items-center justify-between pt-2">
+    <button
+      type="button"
+      onclick="handleClearFilter()"
+      class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition cursor-pointer flex items-center space-x-1.5"
+    >
+      <span>🔄</span>
+      <span>Show All Rows (Clear)</span>
+    </button>
+
+    <button
+      id="applyBtn"
+      type="button"
+      onclick="handleApplyFilter()"
+      class="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg shadow-sm transition cursor-pointer flex items-center space-x-1.5"
+    >
+      <span id="applyBtnIcon">🔍</span>
+      <span id="applyBtnText">Apply Filter to Sheet</span>
+    </button>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      loadFilterOptions();
+    });
+
+    function loadFilterOptions() {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res) return;
+          const select = document.getElementById('filterPeriod');
+          const currentVal = select.value;
+          select.innerHTML = '<option value="ALL">🌟 All Classes / Periods</option>';
+          (res.periods || []).forEach(function(p) {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            select.appendChild(opt);
+          });
+          select.value = currentVal || 'ALL';
+        })
+        .getGradebookFilterOptions();
+    }
+
+    function handleDatePresetChange() {
+      const preset = document.getElementById('filterDatePreset').value;
+      const customBox = document.getElementById('customDateRangeBox');
+      if (preset === 'CUSTOM') {
+        customBox.classList.remove('hidden');
+      } else {
+        customBox.classList.add('hidden');
+      }
+    }
+
+    function handleApplyFilter() {
+      const period = document.getElementById('filterPeriod').value;
+      const preset = document.getElementById('filterDatePreset').value;
+      const customStart = document.getElementById('customStartDate').value;
+      const customEnd = document.getElementById('customEndDate').value;
+
+      const btn = document.getElementById('applyBtn');
+      const btnText = document.getElementById('applyBtnText');
+      const statusBox = document.getElementById('filterStatus');
+
+      btn.disabled = true;
+      btn.classList.add('opacity-70');
+      btnText.innerText = 'Filtering...';
+      statusBox.classList.add('hidden');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-70');
+          btnText.innerText = 'Apply Filter to Sheet';
+
+          statusBox.classList.remove('hidden');
+          statusBox.className = 'p-2.5 rounded-lg text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800';
+          statusBox.innerHTML = '✅ <strong>Filter Active!</strong> Showing ' + (res.period === 'ALL' ? 'all classes' : res.period) + ' (' + res.datePreset + '). Google Sheets has focused the Gradebook.';
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-70');
+          btnText.innerText = 'Apply Filter to Sheet';
+
+          statusBox.classList.remove('hidden');
+          statusBox.className = 'p-2.5 rounded-lg text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-800';
+          statusBox.innerText = 'Error applying filter: ' + (err.message || err);
+        })
+        .applyGradebookFilter(period, preset, customStart, customEnd);
+    }
+
+    function handleClearFilter() {
+      const statusBox = document.getElementById('filterStatus');
+      google.script.run
+        .withSuccessHandler(function() {
+          document.getElementById('filterPeriod').value = 'ALL';
+          document.getElementById('filterDatePreset').value = 'ALL';
+          handleDatePresetChange();
+
+          statusBox.classList.remove('hidden');
+          statusBox.className = 'p-2.5 rounded-lg text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-800';
+          statusBox.innerHTML = '🔄 <strong>Filter Cleared!</strong> All Gradebook rows are visible.';
+        })
+        .clearGradebookFilter();
+    }
+  </script>
+</body>
+</html>

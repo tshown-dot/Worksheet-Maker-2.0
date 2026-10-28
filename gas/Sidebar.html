@@ -120,6 +120,16 @@
       <span>Open Student Progress Portal</span>
     </button>
 
+    <button
+      id="updatePasswordsBtn"
+      onclick="updatePasswords()"
+      class="w-full py-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center justify-center space-x-1.5"
+      title="Converts any formula passwords into static text and syncs to portal"
+    >
+      <span>🔑</span>
+      <span id="updatePwdBtnText">Update / Lock Student Passwords</span>
+    </button>
+
     <!-- Inline Quick-Add Student Form (2/3-digit ID, First Name, Last Name, Period) -->
     <div id="quickAddRosterForm" class="hidden p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
       <div class="text-[10px] font-bold text-slate-600 uppercase">Add / Update Student in Roster</div>
@@ -168,6 +178,67 @@
       </div>
       <div id="missingStudentsList" class="flex flex-wrap gap-1 max-h-20 overflow-y-auto custom-scroll pt-0.5"></div>
     </div>
+  </div>
+
+  <!-- ACTION: GRADEBOOK FILTER CARD -->
+  <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+      <span class="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center space-x-1">
+        <span>🔍</span>
+        <span>Filter Gradebook</span>
+      </span>
+      <button
+        type="button"
+        onclick="google.script.run.openGradebookFilterDialog()"
+        class="text-[10px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+      >
+        Custom Dialog ↗
+      </button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-1.5">
+      <div>
+        <label class="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Class / Period:</label>
+        <select
+          id="sbFilterPeriod"
+          class="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-semibold text-slate-700"
+        >
+          <option value="ALL">All Classes</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Date Range:</label>
+        <select
+          id="sbFilterDate"
+          class="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-[11px] font-semibold text-slate-700"
+        >
+          <option value="ALL">All Dates</option>
+          <option value="TODAY">Today Only</option>
+          <option value="YESTERDAY">Yesterday</option>
+          <option value="WEEK">Past 7 Days</option>
+          <option value="MONTH">Past 30 Days</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+      <button
+        id="sbApplyFilterBtn"
+        onclick="applySidebarFilter()"
+        class="py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg text-[11px] shadow-xs transition cursor-pointer flex items-center justify-center space-x-1"
+      >
+        <span>🔍</span>
+        <span>Apply Filter</span>
+      </button>
+      <button
+        onclick="clearSidebarFilter()"
+        class="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-[11px] transition cursor-pointer flex items-center justify-center space-x-1"
+      >
+        <span>🔄</span>
+        <span>Clear</span>
+      </button>
+    </div>
+    <div id="sbFilterStatus" class="hidden text-[10px] font-semibold"></div>
   </div>
 
   <!-- CLASS ANALYTICS CARD -->
@@ -286,15 +357,94 @@
 
     window.onload = function() {
       refreshData();
+      loadSidebarFilterOptions();
     };
 
     function refreshData() {
+      loadSidebarFilterOptions();
       google.script.run
         .withSuccessHandler(renderAnalytics)
         .withFailureHandler(function(err) {
           console.error(err);
         })
         .getGradebookAnalytics();
+    }
+
+    function updatePasswords() {
+      const btn = document.getElementById('updatePasswordsBtn');
+      const btnText = document.getElementById('updatePwdBtnText');
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.innerText = 'Locking Passwords...';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (btn) btn.disabled = false;
+          if (btnText) btnText.innerText = 'Update / Lock Student Passwords';
+          alert(res.message || 'Passwords successfully updated and locked!');
+        })
+        .withFailureHandler(function(err) {
+          if (btn) btn.disabled = false;
+          if (btnText) btnText.innerText = 'Update / Lock Student Passwords';
+          alert('Error updating passwords: ' + (err.message || err));
+        })
+        .updateStudentPortalPasswords();
+    }
+
+    function loadSidebarFilterOptions() {
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res) return;
+          const select = document.getElementById('sbFilterPeriod');
+          if (!select) return;
+          const currentVal = select.value;
+          select.innerHTML = '<option value="ALL">All Classes</option>';
+          (res.periods || []).forEach(function(p) {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            select.appendChild(opt);
+          });
+          select.value = currentVal || 'ALL';
+        })
+        .getGradebookFilterOptions();
+    }
+
+    function applySidebarFilter() {
+      const period = document.getElementById('sbFilterPeriod').value;
+      const datePreset = document.getElementById('sbFilterDate').value;
+      const btn = document.getElementById('sbApplyFilterBtn');
+      const statusBox = document.getElementById('sbFilterStatus');
+
+      if (btn) btn.disabled = true;
+      statusBox.classList.add('hidden');
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (btn) btn.disabled = false;
+          statusBox.classList.remove('hidden', 'text-rose-600');
+          statusBox.classList.add('text-emerald-700');
+          statusBox.innerHTML = '✅ Filter active for ' + (res.period === 'ALL' ? 'all classes' : res.period) + '!';
+        })
+        .withFailureHandler(function(err) {
+          if (btn) btn.disabled = false;
+          statusBox.classList.remove('hidden', 'text-emerald-700');
+          statusBox.classList.add('text-rose-600');
+          statusBox.innerText = 'Error: ' + (err.message || err);
+        })
+        .applyGradebookFilter(period, datePreset);
+    }
+
+    function clearSidebarFilter() {
+      const statusBox = document.getElementById('sbFilterStatus');
+      google.script.run
+        .withSuccessHandler(function() {
+          document.getElementById('sbFilterPeriod').value = 'ALL';
+          document.getElementById('sbFilterDate').value = 'ALL';
+          statusBox.classList.remove('hidden', 'text-rose-600');
+          statusBox.classList.add('text-blue-700');
+          statusBox.innerText = '🔄 All Gradebook rows visible.';
+        })
+        .clearGradebookFilter();
     }
 
     function openRosterTab() {
