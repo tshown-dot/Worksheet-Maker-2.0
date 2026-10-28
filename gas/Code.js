@@ -10,6 +10,7 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('📐 Math Autograder')
+    .addItem('🎯 Small Groups & Intervention Popout', 'openInterventionDashboard')
     .addItem('📱 Open Autograder Sidebar', 'showSidebar')
     .addItem('🎓 Preview / Share Student Progress Portal', 'openStudentPortalPreview')
     .addSeparator()
@@ -24,19 +25,47 @@ function onOpen() {
 }
 
 /**
- * Serves the Student Progress Portal Web App (or JSON API) when deployed as a Web App
+ * Serves the Student Progress Portal Web App (or Teacher Dashboard / JSON API) when deployed as a Web App
  */
 function doGet(e) {
-  if (e && e.parameter && e.parameter.action === 'studentProgress') {
-    const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.lastName || '');
-    return ContentService.createTextOutput(JSON.stringify(data))
-      .setMimeType(ContentService.MimeType.JSON);
+  if (e && e.parameter) {
+    if (e.parameter.action === 'studentProgress') {
+      const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.lastName || '');
+      return ContentService.createTextOutput(JSON.stringify(data))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    if (e.parameter.action === 'interventionData') {
+      const data = getInterventionDashboardData(
+        e.parameter.period || 'ALL',
+        e.parameter.codes ? e.parameter.codes.split(',') : [],
+        Number(e.parameter.tier3) || 60,
+        Number(e.parameter.tier2) || 80
+      );
+      return ContentService.createTextOutput(JSON.stringify(data))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
+      return HtmlService.createHtmlOutputFromFile('TeacherDashboard')
+        .setTitle('Small Groups & Intervention Dashboard')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
   }
 
   return HtmlService.createHtmlOutputFromFile('StudentPortal')
     .setTitle('Math Progress Portal')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Opens the Small Groups & Intervention Command Center popout dialog inside Google Sheets
+ */
+function openInterventionDashboard() {
+  const html = HtmlService.createHtmlOutputFromFile('TeacherDashboard')
+    .setWidth(1150)
+    .setHeight(820);
+  SpreadsheetApp.getUi().showModalDialog(html, '🎯 Small Groups & Intervention Command Center');
 }
 
 /**
@@ -1132,4 +1161,363 @@ function runGradingFromSidebar(selectedAssignmentCode) {
  */
 function gradeScannedWorksheets() {
   showSidebar();
+}
+
+/**
+ * ==============================================================================
+ * TEACHER SMALL GROUPS & INTERVENTION COMMAND CENTER BACKEND API
+ * ==============================================================================
+ * Aggregates student scores, question performance, and standards gaps across
+ * user-selected assignments and class periods, automatically binning students
+ * into Tier 3 (Intensive Intervention), Tier 2 (Strategic Support), and Tier 1 (Mastery).
+ */
+function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cutoffTier2) {
+  targetPeriod = targetPeriod || 'ALL';
+  targetCodes = Array.isArray(targetCodes) ? targetCodes : [];
+  cutoffTier3 = Number(cutoffTier3) || 60;
+  cutoffTier2 = Number(cutoffTier2) || 80;
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rosterInfo = getRosterData();
+  const gradebookSheet = ss.getSheetByName('Gradebook');
+
+  // 1. Gather all periods from Roster and Gradebook
+  const periodsSet = new Set();
+  rosterInfo.list.forEach(r => {
+    if (r.classPeriod) periodsSet.add(r.classPeriod.trim());
+  });
+
+  if (!gradebookSheet || gradebookSheet.getLastRow() <= 1) {
+    return {
+      periods: Array.from(periodsSet).sort(),
+      selectedPeriod: targetPeriod,
+      assignments: [],
+      selectedCodes: [],
+      cutoffTier3,
+      cutoffTier2,
+      summary: {
+        overallAverage: 0,
+        totalStudentsGraded: 0,
+        rosterCount: rosterInfo.list.length,
+        tier3Count: 0,
+        tier2Count: 0,
+        tier1Count: 0,
+        missingCount: rosterInfo.list.length,
+        topStrugglingStandard: null
+      },
+      tiers: { tier3: [], tier2: [], tier1: [] },
+      missingStudents: rosterInfo.list.map(r => ({
+        studentId: r.studentId,
+        fullName: r.studentName,
+        classPeriod: r.classPeriod || 'No Period'
+      })),
+      itemAnalysis: []
+    };
+  }
+
+  const data = gradebookSheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+  const rows = data.slice(1);
+
+  const idCol = headers.indexOf('student id') !== -1 ? headers.indexOf('student id') : 1;
+  const firstCol = headers.indexOf('first name');
+  const lastCol = headers.indexOf('last name');
+  const fullNameCol = headers.indexOf('student name');
+  const periodCol = headers.indexOf('class / period');
+  const codeCol = headers.indexOf('assignment code') !== -1 ? headers.indexOf('assignment code') : 5;
+  const titleCol = headers.indexOf('assignment title') !== -1 ? headers.indexOf('assignment title') : 6;
+  const scorePctCol = headers.indexOf('score %') !== -1 ? headers.indexOf('score %') : 7;
+  const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 8;
+  const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 9;
+
+  // 2. Discover all unique assignments and periods in Gradebook
+  const assignmentMap = new Map();
+  for (const row of rows) {
+    const rawPeriod = periodCol !== -1 ? String(row[periodCol] || '').trim() : '';
+    if (rawPeriod) periodsSet.add(rawPeriod);
+
+    const code = String(row[codeCol] || '').trim().toUpperCase();
+    if (!code) continue;
+    const title = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;
+    const timestamp = row[0] instanceof Date ? row[0] : new Date(row[0] || Date.now());
+    const scoreVal = parseFloat(String(row[scorePctCol] || '').replace('%', '')) || 0;
+
+    if (!assignmentMap.has(code)) {
+      assignmentMap.set(code, {
+        code,
+        title,
+        date: Utilities.formatDate(timestamp, ss.getSpreadsheetTimeZone() || 'GMT', 'M/d/yy'),
+        rawDate: timestamp.getTime(),
+        submissionCount: 0,
+        totalScoreSum: 0
+      });
+    }
+    const a = assignmentMap.get(code);
+    a.submissionCount++;
+    a.totalScoreSum += scoreVal;
+  }
+
+  const allAssignments = Array.from(assignmentMap.values())
+    .map(a => ({
+      code: a.code,
+      title: a.title,
+      date: a.date,
+      submissionCount: a.submissionCount,
+      averageScore: a.submissionCount > 0 ? Math.round((a.totalScoreSum / a.submissionCount) * 10) / 10 : 0,
+      rawDate: a.rawDate
+    }))
+    .sort((a, b) => b.rawDate - a.rawDate);
+
+  // If no codes selected, default to the 3 most recent assignments
+  let activeCodes = targetCodes.map(c => String(c).trim().toUpperCase()).filter(Boolean);
+  if (activeCodes.length === 0 && allAssignments.length > 0) {
+    activeCodes = allAssignments.slice(0, 3).map(a => a.code);
+  }
+  const activeCodesSet = new Set(activeCodes);
+
+  // 3. Aggregate Student Data across Selected Assignments
+  const studentMap = new Map();
+  const stdMissCount = new Map();
+  const itemAnalysisMap = new Map();
+
+  for (const row of rows) {
+    const code = String(row[codeCol] || '').trim().toUpperCase();
+    if (!activeCodesSet.has(code)) continue;
+
+    const rawId = String(row[idCol] || '???').trim();
+    const rawFirst = firstCol !== -1 ? String(row[firstCol] || '').trim() : '';
+    const rawLast = lastCol !== -1 ? String(row[lastCol] || '').trim() : '';
+    const rawFull = fullNameCol !== -1
+      ? String(row[fullNameCol] || '').trim()
+      : [rawFirst, rawLast].filter(Boolean).join(' ');
+    const rawPeriod = periodCol !== -1 ? String(row[periodCol] || '').trim() : '';
+
+    const resolved = resolveStudentFromRoster(rawId, rawFull, rosterInfo);
+    const studentId = resolved.studentId || rawId || '???';
+    const firstName = resolved.firstName || rawFirst || '';
+    const lastName = resolved.lastName || rawLast || '';
+    const studentName = resolved.studentName || [firstName, lastName].filter(Boolean).join(' ') || rawFull || `Student #${studentId}`;
+    const studentPeriod = resolved.classPeriod || rawPeriod || 'No Period';
+
+    // Filter by period if requested
+    if (targetPeriod !== 'ALL' && studentPeriod.toLowerCase() !== targetPeriod.toLowerCase()) {
+      continue;
+    }
+
+    const normKey = normalizeStudentIdKey(studentId);
+    if (!studentMap.has(normKey)) {
+      studentMap.set(normKey, {
+        studentId,
+        firstName,
+        lastName,
+        fullName: studentName,
+        classPeriod: studentPeriod,
+        submissions: [],
+        totalPointsEarned: 0,
+        totalPointsPossible: 0,
+        missedQuestions: [],
+        strugglingStandards: {}
+      });
+    }
+
+    const studentObj = studentMap.get(normKey);
+    const scoreVal = parseFloat(String(row[scorePctCol] || '').replace('%', '')) || 0;
+    const ptsEarned = parseFloat(row[ptsCol]) || 0;
+    const ptsTotal = parseFloat(row[totalPtsCol]) || 0;
+
+    studentObj.totalPointsEarned += ptsEarned;
+    studentObj.totalPointsPossible += ptsTotal;
+
+    const subQuestions = [];
+    const assignmentTitle = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;
+
+    // Scan up to 10 questions
+    for (let q = 1; q <= 10; q++) {
+      const qScoreIndex = headers.indexOf(`q${q} score`);
+      if (qScoreIndex === -1) break;
+      const qScoreVal = row[qScoreIndex];
+      if (qScoreVal === '' || qScoreVal === undefined || qScoreVal === null) continue;
+
+      const qAnsIndex = headers.indexOf(`q${q} student ans`);
+      const qFeedbackIndex = headers.indexOf(`q${q} feedback`);
+
+      const qScore = parseFloat(qScoreVal) || 0;
+      const qAns = qAnsIndex !== -1 ? String(row[qAnsIndex] || '') : '';
+      const qFeedback = qFeedbackIndex !== -1 ? String(row[qFeedbackIndex] || '') : '';
+
+      // Extract standard from feedback e.g. [6.NS.C.6b]
+      let stdCode = '';
+      const stdMatch = qFeedback.match(/\[([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)\]/);
+      if (stdMatch) stdCode = stdMatch[1];
+
+      const itemKey = `${code}_Q${q}`;
+      if (!itemAnalysisMap.has(itemKey)) {
+        itemAnalysisMap.set(itemKey, {
+          assignmentCode: code,
+          assignmentTitle,
+          qNum: q,
+          standard: stdCode,
+          standardDescription: (typeof getStandardDescription === 'function')
+            ? getStandardDescription(stdCode)
+            : (typeof STANDARDS_DICTIONARY !== 'undefined' && STANDARDS_DICTIONARY[stdCode] ? STANDARDS_DICTIONARY[stdCode] : ''),
+          attempts: 0,
+          earnedSum: 0,
+          correctCount: 0,
+          missedStudents: []
+        });
+      }
+      const itemStat = itemAnalysisMap.get(itemKey);
+      itemStat.attempts++;
+      itemStat.earnedSum += qScore;
+      if (qScore > 0) itemStat.correctCount++;
+
+      // If missed or partial credit
+      if (qScore === 0 || (ptsTotal > 0 && qScore < (ptsTotal / 10))) {
+        itemStat.missedStudents.push({
+          studentName,
+          studentId,
+          classPeriod: studentPeriod,
+          studentAns: qAns,
+          feedback: qFeedback
+        });
+
+        studentObj.missedQuestions.push({
+          assignmentTitle,
+          assignmentCode: code,
+          qNum: q,
+          score: qScore,
+          studentAns: qAns,
+          feedback: qFeedback,
+          standard: stdCode
+        });
+
+        if (stdCode) {
+          studentObj.strugglingStandards[stdCode] = (studentObj.strugglingStandards[stdCode] || 0) + 1;
+          stdMissCount.set(stdCode, (stdMissCount.get(stdCode) || 0) + 1);
+        }
+      }
+
+      subQuestions.push({
+        qNum: q,
+        score: qScore,
+        studentAns: qAns,
+        feedback: qFeedback,
+        standard: stdCode
+      });
+    }
+
+    studentObj.submissions.push({
+      assignmentCode: code,
+      assignmentTitle,
+      scorePercent: scoreVal,
+      pointsEarned: ptsEarned,
+      pointsTotal: ptsTotal,
+      questions: subQuestions
+    });
+  }
+
+  // 4. Compute Student Averages & Assign to Intervention Tiers
+  const tier3Students = [];
+  const tier2Students = [];
+  const tier1Students = [];
+
+  let overallScoreSum = 0;
+  let overallSubmissionCount = 0;
+
+  studentMap.forEach((s) => {
+    const avg = s.submissions.length > 0
+      ? Math.round(s.submissions.reduce((acc, sub) => acc + sub.scorePercent, 0) / s.submissions.length * 10) / 10
+      : 0;
+    s.averageScore = avg;
+
+    overallScoreSum += avg;
+    overallSubmissionCount++;
+
+    s.primaryGaps = Object.entries(s.strugglingStandards)
+      .sort((a, b) => b[1] - a[1])
+      .map(([code]) => code);
+
+    if (avg < cutoffTier3) {
+      tier3Students.push(s);
+    } else if (avg < cutoffTier2) {
+      tier2Students.push(s);
+    } else {
+      tier1Students.push(s);
+    }
+  });
+
+  tier3Students.sort((a, b) => a.averageScore - b.averageScore);
+  tier2Students.sort((a, b) => a.averageScore - b.averageScore);
+  tier1Students.sort((a, b) => b.averageScore - a.averageScore);
+
+  // 5. Find missing roster students for this period
+  const missingStudents = rosterInfo.list
+    .filter(r => {
+      const pMatch = targetPeriod === 'ALL' || (r.classPeriod && r.classPeriod.toLowerCase() === targetPeriod.toLowerCase());
+      return pMatch && !studentMap.has(normalizeStudentIdKey(r.studentId));
+    })
+    .map(r => ({
+      studentId: r.studentId,
+      fullName: r.studentName,
+      classPeriod: r.classPeriod || 'No Period'
+    }));
+
+  // 6. Top Struggling Standard
+  let topStandard = null;
+  let maxMisses = 0;
+  stdMissCount.forEach((count, code) => {
+    if (count > maxMisses) {
+      maxMisses = count;
+      const desc = (typeof getStandardDescription === 'function')
+        ? getStandardDescription(code)
+        : (typeof STANDARDS_DICTIONARY !== 'undefined' && STANDARDS_DICTIONARY[code] ? STANDARDS_DICTIONARY[code] : '');
+      topStandard = { code, name: desc, missCount: count };
+    }
+  });
+
+  // 7. Item Analysis List
+  const itemAnalysis = Array.from(itemAnalysisMap.values()).map(item => ({
+    assignmentCode: item.assignmentCode,
+    assignmentTitle: item.assignmentTitle,
+    qNum: item.qNum,
+    standard: item.standard,
+    standardDescription: item.standardDescription,
+    attempts: item.attempts,
+    correctCount: item.correctCount,
+    accuracyPercent: item.attempts > 0 ? Math.round((item.correctCount / item.attempts) * 100) : 0,
+    missedStudents: item.missedStudents
+  })).sort((a, b) => a.accuracyPercent - b.accuracyPercent);
+
+  const totalGraded = overallSubmissionCount;
+  const overallAvg = totalGraded > 0 ? Math.round((overallScoreSum / totalGraded) * 10) / 10 : 0;
+  const periodRosterCount = rosterInfo.list.filter(r => targetPeriod === 'ALL' || (r.classPeriod && r.classPeriod.toLowerCase() === targetPeriod.toLowerCase())).length;
+
+  return {
+    periods: Array.from(periodsSet).sort(),
+    selectedPeriod: targetPeriod,
+    assignments: allAssignments.map(a => ({
+      ...a,
+      isSelected: activeCodesSet.has(a.code)
+    })),
+    selectedCodes: activeCodes,
+    cutoffTier3,
+    cutoffTier2,
+    summary: {
+      overallAverage: overallAvg,
+      totalStudentsGraded: totalGraded,
+      rosterCount: periodRosterCount,
+      tier3Count: tier3Students.length,
+      tier2Count: tier2Students.length,
+      tier1Count: tier1Students.length,
+      missingCount: missingStudents.length,
+      topStrugglingStandard: topStandard
+    },
+    tiers: {
+      tier3: tier3Students,
+      tier2: tier2Students,
+      tier1: tier1Students
+    },
+    missingStudents,
+    itemAnalysis
+  };
 }
