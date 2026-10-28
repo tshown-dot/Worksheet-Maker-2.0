@@ -306,11 +306,12 @@ function cleanLatexForPdf(text: string): string {
     .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => `$$${m.trim()}$$`)
     .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m.trim()}$`);
 
-  // Protect standalone currency (e.g. $45.50.)
+  // Protect escaped dollar signs (\$45.50) and standalone currency (e.g. $45.50.)
+  // Never split a decimal number (like $7.5$) at its decimal point.
   const currencyPlaceholder = '___CURRENCY_DOLLAR___';
   const currencyRegex =
-    /\$(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)(?=\s+(?!(?:when|for|where|if)\b)[a-zA-Z]{2,}|[.,;!?)]|\s*$)/g;
-  s = s.replace(currencyRegex, `${currencyPlaceholder}$1`);
+    /(?<!\\)\$(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)(?![0-9$]|\.[0-9]|,[0-9])(?=\s+(?!(?:when|for|where|if)\b)[a-zA-Z]{2,}|[.,;!?)](?![0-9$])|\s*$)/g;
+  s = s.replace(/\\\$/g, currencyPlaceholder).replace(currencyRegex, `${currencyPlaceholder}$1`);
 
   // Strip math delimiters $...$ and $$...$$
   s = s.replace(/\$\$([\s\S]*?)\$\$/g, '$1');

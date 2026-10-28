@@ -149,14 +149,17 @@ export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
     .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => `$$${m.trim()}$$`)
     .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m.trim()}$`);
 
-  // 2. Protect standalone currency values (e.g. "$45.50.", "$15 and", "$1,200,")
-  // Only matches $ followed by a plain number when immediately followed by punctuation, end-of-string, or an English prose word (excluding math connectives).
+  // 2. Protect escaped dollar signs (\$45.50) and standalone currency values (e.g. "$45.50.", "$15 and", "$1,200,")
+  // Never split a decimal number (like $7.5$) at its decimal point.
   const currencyPlaceholder = '___CURRENCY_DOLLAR___';
   const currencyRegex =
-    /\$(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)(?=\s+(?!(?:when|for|where|if)\b)[a-zA-Z]{2,}|[.,;!?)]|\s*$)/g;
-  const protectedText = normalized.replace(currencyRegex, `${currencyPlaceholder}$1`);
+    /(?<!\\)\$(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)(?![0-9$]|\.[0-9]|,[0-9])(?=\s+(?!(?:when|for|where|if)\b)[a-zA-Z]{2,}|[.,;!?)](?![0-9$])|\s*$)/g;
+  const protectedText = normalized
+    .replace(/\\\$/g, currencyPlaceholder)
+    .replace(currencyRegex, `${currencyPlaceholder}$1`);
 
   const restoreCurrency = (s: string) => s.replace(new RegExp(currencyPlaceholder, 'g'), '$');
+  const restoreMathCurrency = (s: string) => s.replace(new RegExp(currencyPlaceholder, 'g'), '\\$');
 
   // 3. Match $$...$$ (display math) or $...$ (inline math)
   const mathRegex = /(\$\$[\s\S]*?\$\$|\$([^\s$](?:[^\n$]*?[^\s$])?)\$)/g;
@@ -176,7 +179,7 @@ export const MathText: React.FC<MathTextProps> = ({ text, className = '' }) => {
 
       const rawFormula = match[0];
       const isDisplay = rawFormula.startsWith('$$');
-      const rawContent = restoreCurrency(
+      const rawContent = restoreMathCurrency(
         isDisplay ? rawFormula.slice(2, -2) : rawFormula.slice(1, -1)
       );
       const mathContent = cleanMathContent(rawContent);
