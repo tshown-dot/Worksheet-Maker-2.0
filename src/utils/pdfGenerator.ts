@@ -21,7 +21,7 @@ export async function generateWorksheetPDF(
 
   const pageWidth = 215.9;
   const pageHeight = 279.4;
-  const margin = 12; // safe printable margin in mm
+  const margin = 9.5; // tightened printable margin in mm (~0.37")
   const totalPages = worksheet.total_pages || 1;
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
@@ -34,9 +34,9 @@ export async function generateWorksheetPDF(
       .filter((q) => (q.page_number || 1) === pageNum)
       .sort((a, b) => a.order_index - b.order_index);
 
-    // 1. DRAW 4-CORNER FIDUCIAL MARKERS (5mm x 5mm solid black squares at 6mm inset — 4mm clear margin from content)
-    const fiducialSize = 5;
-    const fiducialOffset = 6;
+    // 1. DRAW 4-CORNER FIDUCIAL MARKERS (4mm x 4mm solid black squares at 3.5mm inset)
+    const fiducialSize = 4;
+    const fiducialOffset = 3.5;
     doc.setFillColor(0, 0, 0);
     // Top-left
     doc.rect(fiducialOffset, fiducialOffset, fiducialSize, fiducialSize, 'F');
@@ -54,8 +54,8 @@ export async function generateWorksheetPDF(
       width: 100,
       errorCorrectionLevel: 'M',
     });
-    const qrX = pageWidth - margin - 17;
-    const qrY = margin + 1.5;
+    const qrX = pageWidth - margin - 12;
+    const qrY = margin - 0.5;
     doc.addImage(qrDataUrl, 'PNG', qrX, qrY, 12, 12);
 
     // QR Label below code
@@ -68,71 +68,71 @@ export async function generateWorksheetPDF(
     renderLargeStudentIdBox(doc, qrX, qrY);
 
     // 3. DRAW PAGE HEADER (Publishing-Grade Academic Masthead)
-    let currentY = margin + 2.5;
+    let currentY = margin + 0.5;
 
     // Watermark/Header banner if Answer Key
     if (isAnswerKey) {
       doc.setFillColor(239, 246, 255);
       doc.setDrawColor(59, 130, 246);
       doc.setLineWidth(0.5);
-      doc.roundedRect(margin + 5, currentY - 1, 65, 5.5, 1, 1, 'FD');
+      doc.roundedRect(margin, currentY - 1, 65, 5.5, 1, 1, 'FD');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(29, 78, 216);
-      doc.text('TEACHER MASTER / ANSWER KEY', margin + 7, currentY + 3);
+      doc.text('TEACHER MASTER / ANSWER KEY', margin + 2, currentY + 3);
       currentY += 6.5;
     }
 
     // Worksheet Title + Badge on same line / lockup
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(12.5);
     doc.setTextColor(17, 24, 39);
-    const maxTitleWidth = qrX - margin - 10 - 65;
+    const maxTitleWidth = qrX - margin - 72;
     let displayTitle = worksheet.title || 'Untitled Math Worksheet';
     if (doc.getTextWidth(displayTitle) > maxTitleWidth) {
       displayTitle = doc.splitTextToSize(displayTitle, maxTitleWidth)[0] + '...';
     }
-    doc.text(displayTitle, margin + 5, currentY + 3);
+    doc.text(displayTitle, margin, currentY + 3.5);
     const titleWidth = doc.getTextWidth(displayTitle);
-    renderThemeBadge(doc, worksheet.style_preset, margin + 8 + titleWidth, currentY + 3);
-    currentY += 4.5;
+    renderThemeBadge(doc, worksheet.style_preset, margin + 3 + titleWidth, currentY + 3.5);
+    currentY += 5;
 
     // Subject & Grade Level Subtitle
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(8);
     doc.setTextColor(107, 114, 128);
-    doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin + 5, currentY + 2.5);
-    currentY = Math.max(currentY + 5, qrY + 16);
+    doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin, currentY + 2.5);
+    currentY = Math.max(currentY + 4.5, qrY + 15.5);
 
     // Academic Double Divider Line
     doc.setDrawColor(15, 23, 42);
     doc.setLineWidth(0.5);
-    doc.line(margin + 5, currentY, pageWidth - margin - 5, currentY);
+    doc.line(margin, currentY, pageWidth - margin, currentY);
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
-    doc.line(margin + 5, currentY + 0.6, pageWidth - margin - 5, currentY + 0.6);
-    currentY += 3.5;
+    doc.line(margin, currentY + 0.6, pageWidth - margin, currentY + 0.6);
+    currentY += 3;
 
     // 4. DRAW QUESTIONS GRID (Dynamically fills entire page height in 1 or 2 columns)
     const columns = worksheet.columns || 1;
-    const availableHeight = pageHeight - currentY - margin - 8;
+    const availableHeight = pageHeight - currentY - margin - 5.5;
     const totalQ = pageQuestions.length;
     const rowCount = columns === 2 ? Math.max(Math.ceil(totalQ / 2), 1) : Math.max(totalQ, 1);
-    const cardGap = 3;
+    const cardGap = 2.8;
     const questionCardHeight = (availableHeight - (rowCount - 1) * cardGap) / rowCount;
 
-    const usableWidth = pageWidth - (margin * 2) - 10;
-    const colGap = 4;
+    const usableWidth = pageWidth - (margin * 2);
+    const colGap = 3.5;
     const cardWidth = columns === 2 ? (usableWidth - colGap) / 2 : usableWidth;
 
     pageQuestions.forEach((q, idx) => {
-      let qX = margin + 5;
+      let qX = margin;
       let qY = currentY;
 
       if (columns === 2) {
         const col = idx % 2;
         const row = Math.floor(idx / 2);
-        qX = margin + 5 + col * (cardWidth + colGap);
+        qX = margin + col * (cardWidth + colGap);
         qY = currentY + row * (questionCardHeight + cardGap);
       } else {
         qY = currentY + idx * (questionCardHeight + cardGap);
@@ -154,16 +154,16 @@ export async function generateWorksheetPDF(
     // 5. FOOTER (Professional Clean Running Footer)
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.3);
-    doc.line(margin + 5, pageHeight - 11, pageWidth - margin - 5, pageHeight - 11);
+    doc.line(margin, pageHeight - 9.5, pageWidth - margin, pageHeight - 9.5);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.8);
+    doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Worksheet Maker 2.0 • Form ${worksheet.short_code}`, margin + 5, pageHeight - 7.5);
+    doc.text(`Worksheet Maker 2.0 • Form ${worksheet.short_code}`, margin, pageHeight - 6.5);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 7.5, { align: 'center' });
+    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 6.5, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.text('Standardized OCR Assessment Layout', pageWidth - margin - 5, pageHeight - 7.5, { align: 'right' });
+    doc.text('Standardized OCR Assessment Layout', pageWidth - margin, pageHeight - 6.5, { align: 'right' });
   }
 
   return doc;
@@ -375,7 +375,7 @@ function renderQuestionCard(
   doc.text(`${q.order_index}`, x + 4.75, y + 4.3, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.2);
+  doc.setFontSize(9.2);
   doc.setTextColor(15, 23, 42);
   doc.text(`Question ${q.order_index}`, x + 8.5, y + 4.4);
 
@@ -384,7 +384,7 @@ function renderQuestionCard(
   // NJSLS Standards Badge on Answer Key
   if (isAnswerKey && trackStandards && q.standard) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.8);
+    doc.setFontSize(7.2);
     doc.setTextColor(126, 34, 206); // Purple-700
     doc.text(`[${q.standard}]`, currentHeaderX, y + 4.4);
   }
@@ -392,7 +392,7 @@ function renderQuestionCard(
   // Points Badge on Right of Header Bar
   if (q.points) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.8);
+    doc.setFontSize(7.2);
     doc.setTextColor(100, 116, 139);
     const ptText = `${q.points} pt${q.points > 1 ? 's' : ''}`;
     doc.text(ptText, x + width - 2.5, y + 4.4, { align: 'right' });
@@ -400,7 +400,7 @@ function renderQuestionCard(
 
   // 3. Question Prompt Text
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.8);
+  doc.setFontSize(10.2);
   doc.setTextColor(15, 23, 42);
 
   const is2Col = width < 120;
@@ -409,14 +409,14 @@ function renderQuestionCard(
   const promptMaxWidth = width - 6;
   const promptText = cleanLatexForPdf(q.prompt);
   const promptLines = doc.splitTextToSize(promptText, promptMaxWidth);
-  doc.text(promptLines, x + 3, y + headerHeight + 4);
+  doc.text(promptLines, x + 3, y + headerHeight + 4.2);
 
-  let promptBottomY = y + headerHeight + 3 + (promptLines.length * 3.8);
+  let promptBottomY = y + headerHeight + 3.2 + (promptLines.length * 4.1);
 
   // MULTIPLE CHOICE OPTIONS: Adaptive layout (1-col stacked for sentences, 2-col for short terms)
   if (q.question_type === 'multiple_choice' && q.options && q.options.length > 0) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.4);
+    doc.setFontSize(8.8);
     doc.setTextColor(30, 41, 59);
 
     const hasLongOptions = q.options.some((o) => (o.text || '').length > 22);
@@ -424,7 +424,7 @@ function renderQuestionCard(
     if (hasLongOptions) {
       // Stacked 1-column layout across full card width (preserves work space for sentence options)
       const fullOptWidth = width - 7;
-      let curOptY = promptBottomY + 2.2;
+      let curOptY = promptBottomY + 2.4;
       q.options.forEach((opt) => {
         doc.setFont('helvetica', 'bold');
         doc.text(`(${opt.label}) `, x + 3.5, curOptY);
@@ -433,7 +433,7 @@ function renderQuestionCard(
         const optTextClean = cleanLatexForPdf(opt.text);
         const optLines = doc.splitTextToSize(optTextClean, fullOptWidth - labelW);
         doc.text(optLines, x + 3.5 + labelW, curOptY);
-        curOptY += (optLines.length * 3.3) + 0.6;
+        curOptY += (optLines.length * 3.6) + 0.6;
       });
       promptBottomY = curOptY + 0.4;
     } else {
@@ -443,7 +443,7 @@ function renderQuestionCard(
         const col = oIdx % 2;
         const row = Math.floor(oIdx / 2);
         const optX = x + 3.5 + col * halfWidth;
-        const optY = promptBottomY + 2 + (row * 3.6);
+        const optY = promptBottomY + 2.2 + (row * 3.9);
         doc.setFont('helvetica', 'bold');
         doc.text(`(${opt.label}) `, optX, optY);
         const labelW = doc.getTextWidth(`(${opt.label}) `);
@@ -453,7 +453,7 @@ function renderQuestionCard(
         doc.text(textLine, optX + labelW, optY);
       });
       const totalOptionRows = Math.ceil(q.options.length / 2);
-      promptBottomY += (totalOptionRows * 3.6) + 1.2;
+      promptBottomY += (totalOptionRows * 3.9) + 1.2;
     }
   }
 

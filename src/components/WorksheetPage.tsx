@@ -44,16 +44,16 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
         width: '215.9mm',
         minHeight: '279.4mm',
         height: '279.4mm',
-        padding: '13mm 15mm',
+        padding: '9mm 9.5mm',
         pageBreakAfter: 'always',
         margin: '0 auto',
       }}
     >
-      {/* 4 SOLID CORNER FIDUCIAL MARKERS FOR COPIER SCANNER DESKEW (4mm clear margin from content) */}
-      <div className="absolute top-[6mm] left-[6mm] w-[5mm] h-[5mm] bg-black" />
-      <div className="absolute top-[6mm] right-[6mm] w-[5mm] h-[5mm] bg-black" />
-      <div className="absolute bottom-[6mm] left-[6mm] w-[5mm] h-[5mm] bg-black" />
-      <div className="absolute bottom-[6mm] right-[6mm] w-[5mm] h-[5mm] bg-black" />
+      {/* 4 SOLID CORNER FIDUCIAL MARKERS FOR COPIER SCANNER DESKEW */}
+      <div className="absolute top-[3.5mm] left-[3.5mm] w-[4mm] h-[4mm] bg-black" />
+      <div className="absolute top-[3.5mm] right-[3.5mm] w-[4mm] h-[4mm] bg-black" />
+      <div className="absolute bottom-[3.5mm] left-[3.5mm] w-[4mm] h-[4mm] bg-black" />
+      <div className="absolute bottom-[3.5mm] right-[3.5mm] w-[4mm] h-[4mm] bg-black" />
 
       {/* TOP HEADER SECTION (Publishing-Grade Academic Masthead) */}
       <div className="w-full">
@@ -64,10 +64,10 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between pb-2 border-b-2 border-b-slate-900 gap-3">
+        <div className="flex items-center justify-between pb-1.5 border-b-2 border-b-slate-900 gap-3">
           <div className="flex-1 min-w-0 pr-2">
             <div className="flex items-center space-x-2.5 flex-wrap">
-              <h1 className="text-[17px] font-extrabold text-slate-900 tracking-tight leading-snug">
+              <h1 className="text-[18px] font-extrabold text-slate-900 tracking-tight leading-snug">
                 {worksheet.title || 'Untitled Math Worksheet'}
               </h1>
               {(worksheet.style_preset === 'spiral' || worksheet.style_preset === 'homework') && (
@@ -176,13 +176,13 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                       <div className="flex items-center space-x-2 flex-wrap">
                         <div className="flex items-center space-x-1.5">
                           <span
-                            className={`w-4.5 h-4.5 rounded-xs font-black text-[10px] flex items-center justify-center shrink-0 ${
+                            className={`w-5 h-5 rounded-xs font-black text-[10.5px] flex items-center justify-center shrink-0 ${
                               isClasswork ? 'bg-emerald-700 text-white shadow-2xs' : 'bg-slate-900 text-white'
                             }`}
                           >
                             {q.order_index}
                           </span>
-                          <span className="text-[11.5px] font-extrabold text-slate-900 tracking-tight">
+                          <span className="text-[12.5px] font-extrabold text-slate-900 tracking-tight">
                             Question {q.order_index}
                           </span>
                         </div>
@@ -196,7 +196,7 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                       )}
                     </div>
                     {q.points && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
                         {q.points} pt{q.points > 1 ? 's' : ''}
                       </span>
                     )}
@@ -204,7 +204,7 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
 
                   {/* 2. Problem Prompt & Multiple Choice Options */}
                   <div className="px-3 pt-2 pb-1.5">
-                    <div className="text-[12.5px] text-slate-900 leading-relaxed font-sans">
+                    <div className="text-[14px] text-slate-900 leading-snug font-sans">
                       <MathText text={q.prompt} />
                     </div>
 
@@ -212,7 +212,7 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                       const hasLongOptions = q.options.some((o) => (o.text || '').length > 22);
                       return (
                         <div
-                          className={`mt-1.5 pt-1 text-slate-900 ${
+                          className={`mt-1.5 pt-0.5 text-slate-900 ${
                             hasLongOptions
                               ? 'grid grid-cols-1 gap-y-1'
                               : 'grid grid-cols-2 gap-x-3 gap-y-0.5'
@@ -220,10 +220,10 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                         >
                           {q.options.map((opt) => (
                             <div key={opt.label} className="flex items-baseline space-x-1.5">
-                              <span className="font-extrabold text-slate-900 text-[11px] shrink-0">
+                              <span className="font-extrabold text-slate-900 text-[12.5px] shrink-0">
                                 ({opt.label})
                               </span>
-                              <div className="text-[11px] leading-snug font-sans text-slate-800">
+                              <div className="text-[12.5px] leading-snug font-sans text-slate-800">
                                 <MathText text={opt.text} />
                               </div>
                             </div>
