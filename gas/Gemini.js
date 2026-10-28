@@ -17,13 +17,17 @@
  * @param {Object|null} manifest - The answer key manifest from Supabase (optional)
  * @returns {Object} Normalized object containing `{ assignmentCode, submissions: [...] }`
  */
+const GEMINI_MODEL = 'gemini-3.8-flash';
+const FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+
 function gradeWorksheetWithGemini(pdfBlob, manifest) {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) {
     throw new Error("Gemini API Key is not set. Please go to '📐 Math Autograder ➔ ⚙️ Set Gemini API Key'.");
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const configuredModel = props.getProperty('GEMINI_MODEL') || GEMINI_MODEL;
   const base64Data = Utilities.base64Encode(pdfBlob.getBytes());
 
   let promptText = `You are an expert automated grading system for middle school math worksheets (Worksheet Maker 2.0) scanned at 300 DPI.
@@ -109,8 +113,18 @@ Output ONLY valid JSON matching this exact schema:
     muteHttpExceptions: true
   };
 
-  const response = UrlFetchApp.fetch(endpoint, options);
-  const status = response.getResponseCode();
+  const modelsToTry = [configuredModel, ...FALLBACK_MODELS.filter(m => m !== configuredModel)];
+  let response = null;
+  let status = 0;
+
+  for (const modelName of modelsToTry) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    response = UrlFetchApp.fetch(endpoint, options);
+    status = response.getResponseCode();
+    if (status !== 404) {
+      break;
+    }
+  }
 
   if (status !== 200) {
     throw new Error(`Gemini API Error (Status ${status}): ${response.getContentText()}`);
