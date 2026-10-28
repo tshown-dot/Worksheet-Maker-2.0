@@ -93,52 +93,56 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   // 1. Prompt for Converting Existing Docs / Tests / PDFs
   const convertDocPrompt = `You are a middle school math curriculum assistant for Worksheet Maker 2.0. 
 TASK: Extract all math problems from the attached document or text below into an OCR-ready worksheet format.
-Return ONLY a valid JSON array in this exact schema (no conversational text or markdown code blocks):
+Return ONLY a valid JSON array wrapped in a single markdown code block (\`\`\`json ... \`\`\`):
 
 [
   {
     "assignmentName": "Math 6 Quiz: Equations",
-    "prompt": "Solve for x: 3x - 5 = 16",
+    "stylePreset": "quiz",
+    "prompt": "Solve for $x$: $3x - 5 = 16$",
     "question_type": "numeric",
     "standard": "6.EE.B.7",
     "correct_answer": "7",
     "acceptable_alternatives": ["x = 7", "7"],
     "points": 2,
-    "rubric_notes": "1 pt for subtracting/adding, 1 pt for division."
+    "rubric_notes": "1 pt for subtracting/adding, 1 pt for division. [6.EE.B.7]"
   }
 ]
 
 RULES:
+- "stylePreset" must be one of: "pod" (6 questions, 1 page), "spiral" (6 questions, 1 page), "classwork" (6-10 questions, 1-2 pages), "quiz", or "exit_ticket" (2-3 questions).
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
 - Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.
-- For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
-- Output ONLY the raw JSON array.`;
+- For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}, {"label": "C", "text": "14"}, {"label": "D", "text": "16"}]. Keep each option text short and concise (under 8 words) so it does not crowd the student workspace box.
+- Output ONLY the JSON array inside a \`\`\`json code block, with no conversational text or follow-up tags.`;
 
   // 2. Prompt for Generating Brand New Content
   const generateNewPrompt = `You are a middle school math curriculum generator for Worksheet Maker 2.0.
 TASK: Generate high-quality math problems for middle school students on the requested topic.
-Return ONLY a valid JSON array in this exact schema (no conversational text or markdown code blocks):
+Return ONLY a valid JSON array wrapped in a single markdown code block (\`\`\`json ... \`\`\`):
 
 [
   {
-    "assignmentName": "Math 6 POD: Ratios",
-    "prompt": "Solve for x: \\frac{x}{3} + 4 = 10",
+    "assignmentName": "Math 6 POD Mon 10/26",
+    "stylePreset": "pod",
+    "prompt": "Solve for $x$: $\\frac{x}{3} + 4 = 10$",
     "question_type": "numeric",
     "standard": "6.EE.B.7",
     "correct_answer": "18",
     "acceptable_alternatives": ["x = 18", "18"],
     "points": 2,
-    "rubric_notes": "1 pt for subtracting 4 (x/3 = 6), 1 pt for multiplying by 3."
+    "rubric_notes": "1 pt for subtracting 4 (x/3 = 6), 1 pt for multiplying by 3. [6.EE.B.7]"
   }
 ]
 
 RULES:
+- Preset question counts: "pod" = EXACTLY 6 questions per day/assignment (1 page); "spiral" = EXACTLY 6 questions (1 page); "classwork" = 6-10 questions (1-2 pages); "quiz" = assessment; "exit_ticket" = 2-3 questions.
 - "question_type" must be one of: "numeric", "fraction", "expression", "multiple_choice", or "multi_step".
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
 - Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.
-- For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}].
-- Output ONLY the raw JSON array.`;
+- For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}, {"label": "C", "text": "14"}, {"label": "D", "text": "16"}]. Keep each option text short and concise (under 8 words) so it does not crowd the student workspace box.
+- Output ONLY the JSON array inside a \`\`\`json code block, with no conversational text or follow-up tags.`;
 
   const handleCopy = (type: 'convert' | 'generate') => {
     const textToCopy = type === 'convert' ? convertDocPrompt : generateNewPrompt;
@@ -241,6 +245,25 @@ RULES:
     return { questions, totalPages };
   };
 
+  const inferStylePreset = (title: string | undefined, items: any[]): StylePreset => {
+    const explicit = String(items[0]?.stylePreset || items[0]?.style_preset || '').toLowerCase();
+    if (
+      explicit === 'pod' ||
+      explicit === 'spiral' ||
+      explicit === 'classwork' ||
+      explicit === 'quiz' ||
+      explicit === 'exit_ticket'
+    ) {
+      return explicit as StylePreset;
+    }
+    const lower = (title || '').toLowerCase();
+    if (lower.includes('classwork')) return 'classwork';
+    if (lower.includes('pod') || lower.includes('problem of the day')) return 'pod';
+    if (lower.includes('quiz') || lower.includes('test') || lower.includes('assessment')) return 'quiz';
+    if (lower.includes('exit')) return 'exit_ticket';
+    return 'spiral';
+  };
+
   const handleProcessImport = () => {
     setError(null);
     setDetectedGroups(null);
@@ -276,12 +299,7 @@ RULES:
 
         // Single assignment
         const title = items[0]?.assignmentName || undefined;
-        const lowerTitle = (title || '').toLowerCase();
-        const stylePreset: StylePreset = lowerTitle.includes('classwork')
-          ? 'classwork'
-          : lowerTitle.includes('pod') || lowerTitle.includes('problem of the day')
-          ? 'pod'
-          : 'spiral';
+        const stylePreset = inferStylePreset(title, items);
         const { questions, totalPages } = convertRawItemsToQuestions(items);
 
         onImportQuestions(questions, {
@@ -342,12 +360,7 @@ RULES:
   };
 
   const handleSelectGroup = (group: AssignmentGroup) => {
-    const lowerName = group.name.toLowerCase();
-    const stylePreset: StylePreset = lowerName.includes('classwork')
-      ? 'classwork'
-      : lowerName.includes('pod') || lowerName.includes('problem of the day')
-      ? 'pod'
-      : 'spiral';
+    const stylePreset = inferStylePreset(group.name, group.items);
     const { questions, totalPages } = convertRawItemsToQuestions(group.items);
 
     onImportQuestions(questions, {
@@ -366,12 +379,7 @@ RULES:
 
     try {
       for (const group of detectedGroups) {
-        const lowerGrp = group.name.toLowerCase();
-        const grpPreset: StylePreset = lowerGrp.includes('classwork')
-          ? 'classwork'
-          : lowerGrp.includes('pod')
-          ? 'pod'
-          : 'spiral';
+        const grpPreset = inferStylePreset(group.name, group.items);
         const code = 'M' + Math.floor(1000 + Math.random() * 9000);
         const { questions, totalPages } = convertRawItemsToQuestions(group.items);
 
