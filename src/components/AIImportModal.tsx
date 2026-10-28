@@ -45,7 +45,24 @@ RULES:
   };
 
   const robustParseJson = (rawText: string): any => {
-    let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    let cleaned = rawText.trim();
+    cleaned = cleaned.replace(/```(?:json)?/gi, '').replace(/```/g, '');
+
+    const firstArray = cleaned.indexOf('[');
+    const firstObj = cleaned.indexOf('{');
+    let start = -1;
+    if (firstArray !== -1 && firstObj !== -1) start = Math.min(firstArray, firstObj);
+    else start = firstArray !== -1 ? firstArray : firstObj;
+
+    const lastArray = cleaned.lastIndexOf(']');
+    const lastObj = cleaned.lastIndexOf('}');
+    const end = Math.max(lastArray, lastObj);
+
+    if (start !== -1 && end !== -1 && end > start) {
+      cleaned = cleaned.substring(start, end + 1);
+    }
+
+    cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
     cleaned = cleaned.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
     return JSON.parse(cleaned);
   };

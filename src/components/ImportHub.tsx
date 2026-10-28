@@ -147,9 +147,29 @@ RULES:
     setTimeout(() => setCopiedType(null), 2500);
   };
 
-  // ROBUST PARSER: Safely escapes single backslashes without corrupting already-escaped double backslashes
+  // ROBUST PARSER: Isolates valid JSON bracket boundaries, strips markdown/follow-up tags,
+  // cleans trailing commas, and safely escapes single backslashes for LaTeX
   const robustParseJson = (rawText: string): any => {
-    let cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    let cleaned = rawText.trim();
+    cleaned = cleaned.replace(/```(?:json)?/gi, '').replace(/```/g, '');
+
+    // Extract exact JSON boundary [ ... ] or { ... } to ignore any text or <FollowUp> tags
+    const firstArray = cleaned.indexOf('[');
+    const firstObj = cleaned.indexOf('{');
+    let start = -1;
+    if (firstArray !== -1 && firstObj !== -1) start = Math.min(firstArray, firstObj);
+    else start = firstArray !== -1 ? firstArray : firstObj;
+
+    const lastArray = cleaned.lastIndexOf(']');
+    const lastObj = cleaned.lastIndexOf('}');
+    const end = Math.max(lastArray, lastObj);
+
+    if (start !== -1 && end !== -1 && end > start) {
+      cleaned = cleaned.substring(start, end + 1);
+    }
+
+    // Clean trailing commas before closing braces/brackets
+    cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
 
     // Lookbehind regex: Only escapes a backslash if it is NOT preceded by a backslash
     // and NOT followed by a valid JSON escape char (" \ / b f n r t u)
