@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Worksheet } from '../types/worksheet';
+import { findWorksheetsDeletedInDrive, trashWorksheetInDrive } from '../utils/googleDrive';
 import { 
   FolderOpen, 
   X, 
@@ -9,7 +10,8 @@ import {
   Loader2, 
   Plus,
   Folder,
-  Search
+  Search,
+  RefreshCw
 } from 'lucide-react';
 
 interface WorksheetListModalProps {
@@ -18,6 +20,8 @@ interface WorksheetListModalProps {
   onSelectWorksheet: (ws: Worksheet) => void;
   onNew: () => void;
   teacherId?: string | null;
+  providerToken?: string | null;
+  onDriveTokenExpired?: () => void;
 }
 
 export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
@@ -26,6 +30,8 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
   onSelectWorksheet,
   onNew,
   teacherId,
+  providerToken,
+  onDriveTokenExpired,
 }) => {
   const [worksheets, setWorksheets] = useState<any[]>([]);
   const [folders, setFolders] = useState<string[]>([]);
@@ -34,16 +40,20 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncingDrive, setSyncingDrive] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      loadData();
+      setSyncMessage(null);
+      loadData(false);
     }
   }, [isOpen, teacherId]);
 
-  const loadData = async () => {
+  const loadData = async (isManualSync = false) => {
     setLoading(true);
+    if (isManualSync) setSyncingDrive(true);
     setError(null);
     try {
       // 1. Fetch folders
@@ -70,12 +80,38 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
       const { data: wsData, error: wsError } = await wsQuery;
 
       if (wsError) throw wsError;
-      setWorksheets(wsData || []);
+      let currentList = wsData || [];
+
+      // 3. Two-Way Google Drive Reconciliation: Remove worksheets deleted in Google Drive
+      if (providerToken && currentList.length > 0) {
+        try {
+          const { idsToDelete } = await findWorksheetsDeletedInDrive(providerToken, currentList);
+          if (idsToDelete.length > 0) {
+            await supabase.from('questions').delete().in('worksheet_id', idsToDelete);
+            await supabase.from('worksheets').delete().in('id', idsToDelete);
+            const deletedSet = new Set(idsToDelete);
+            currentList = currentList.filter((w: any) => !deletedSet.has(w.id));
+            setSyncMessage(
+              `🔄 Drive Sync: Removed ${idsToDelete.length} worksheet(s) that were deleted in Google Drive.`
+            );
+          } else if (isManualSync) {
+            setSyncMessage('✓ Synced with Google Drive — all worksheets are up to date.');
+          }
+        } catch (driveErr: any) {
+          console.warn('Drive reconciliation error:', driveErr);
+          if (driveErr?.message === 'DRIVE_AUTH_EXPIRED' && onDriveTokenExpired) {
+            onDriveTokenExpired();
+          }
+        }
+      }
+
+      setWorksheets(currentList);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to fetch worksheets');
     } finally {
       setLoading(false);
+      setSyncingDrive(false);
     }
   };
 
@@ -175,11 +211,26 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
 
   const handleDelete = async (wsId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this worksheet?')) return;
+    if (!confirm('Are you sure you want to delete this worksheet (and move its Google Drive PDFs to Trash)?')) return;
     try {
+      const targetWs = worksheets.find((w) => w.id === wsId);
+      await supabase.from('questions').delete().eq('worksheet_id', wsId);
       const { error } = await supabase.from('worksheets').delete().eq('id', wsId);
       if (error) throw error;
       setWorksheets((prev) => prev.filter((w) => w.id !== wsId));
+
+      if (providerToken && targetWs) {
+        try {
+          await trashWorksheetInDrive(
+            providerToken,
+            targetWs.short_code,
+            targetWs.layout_config?.drive_student_file_id,
+            targetWs.layout_config?.drive_key_file_id
+          );
+        } catch (driveErr) {
+          console.warn('Could not trash worksheet in Drive:', driveErr);
+        }
+      }
     } catch (err: any) {
       alert('Delete failed: ' + err.message);
     }
@@ -219,16 +270,43 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900">Worksheet File Manager</h3>
-              <p className="text-xs text-slate-500">Organized into folders & curriculum units</p>
+              <p className="text-xs text-slate-500">Two-way synced between Supabase & Google Drive</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            {providerToken && (
+              <button
+                type="button"
+                onClick={() => loadData(true)}
+                disabled={syncingDrive || loading}
+                className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer disabled:opacity-50"
+                title="Check Google Drive for deleted worksheets and sync with Supabase"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncingDrive ? 'animate-spin' : ''}`} />
+                <span>{syncingDrive ? 'Syncing Drive...' : 'Sync with Drive'}</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {syncMessage && (
+          <div className="px-6 py-2 bg-emerald-50 border-b border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center justify-between">
+            <span>{syncMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSyncMessage(null)}
+              className="text-emerald-600 hover:text-emerald-900 font-bold"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Search & Top Action Bar */}
         <div className="px-6 py-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">

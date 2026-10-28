@@ -317,6 +317,21 @@ export function App() {
             setDriveFolderUrl(driveRes.folderUrl);
             localStorage.setItem('wm_drive_folder_url', driveRes.folderUrl);
           }
+          if (wsId && (driveRes.studentFileId || driveRes.keyFileId)) {
+            await supabase
+              .from('worksheets')
+              .update({
+                layout_config: {
+                  ...worksheet.layout_config,
+                  columns: worksheet.columns,
+                  spacing: worksheet.spacing,
+                  track_standards: worksheet.track_standards !== false,
+                  drive_student_file_id: driveRes.studentFileId,
+                  drive_key_file_id: driveRes.keyFileId,
+                },
+              })
+              .eq('id', wsId);
+          }
           driveSaved = true;
         } catch (driveErr: any) {
           console.warn('Google Drive auto-save error:', driveErr);
@@ -591,6 +606,11 @@ export function App() {
         isOpen={isListModalOpen}
         onClose={() => setIsListModalOpen(false)}
         teacherId={user?.id}
+        providerToken={effectiveDriveToken}
+        onDriveTokenExpired={() => {
+          localStorage.removeItem('wm_google_provider_token');
+          setProviderToken(null);
+        }}
         onSelectWorksheet={(ws) => {
           setWorksheet(ws);
           setViewMode('editor');

@@ -460,6 +460,20 @@ RULES:
               baseName
             );
             driveSavedCount++;
+            if (wsData?.id && (driveRes.studentFileId || driveRes.keyFileId)) {
+              await supabase
+                .from('worksheets')
+                .update({
+                  layout_config: {
+                    columns: 2,
+                    spacing: 'balanced',
+                    track_standards: true,
+                    drive_student_file_id: driveRes.studentFileId,
+                    drive_key_file_id: driveRes.keyFileId,
+                  },
+                })
+                .eq('id', wsData.id);
+            }
             if (driveRes.folderUrl && onDriveFolderSaved) {
               onDriveFolderSaved(driveRes.folderUrl);
             }
