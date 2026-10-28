@@ -21,8 +21,6 @@ function onOpen() {
     .addItem('🔗 Test Connection to Worksheet Maker', 'testSupabaseConnection')
     .addItem('⚙️ Set Gemini API Key', 'setGeminiApiKeyPrompt')
     .addToUi();
-
-  showSidebar();
 }
 
 /**
