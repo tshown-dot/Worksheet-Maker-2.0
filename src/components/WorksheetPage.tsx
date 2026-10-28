@@ -70,6 +70,16 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
               <h1 className="text-[17px] font-extrabold text-slate-900 tracking-tight leading-snug">
                 {worksheet.title || 'Untitled Math Worksheet'}
               </h1>
+              {(worksheet.style_preset === 'spiral' || worksheet.style_preset === 'homework') && (
+                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xs">
+                  🔄 Spiral Review
+                </span>
+              )}
+              {worksheet.style_preset === 'classwork' && (
+                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xs">
+                  ✏️ Classwork
+                </span>
+              )}
               {worksheet.style_preset === 'pod' && (
                 <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-300 rounded-xs">
                   ★ Problem of the Day
@@ -83,11 +93,6 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
               {worksheet.style_preset === 'exit_ticket' && (
                 <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xs">
                   Exit Ticket
-                </span>
-              )}
-              {worksheet.style_preset === 'homework' && (
-                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-xs">
-                  Practice Assignment
                 </span>
               )}
             </div>
@@ -173,23 +178,39 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
               gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))`,
             }}
           >
-            {pageQuestions.map((q) => (
-              <div
-                key={q.id}
-                className="rounded-xs border border-slate-300 flex flex-col justify-between bg-white h-full overflow-hidden"
-              >
-                {/* 1. Card Top Header Bar */}
-                <div>
-                  <div className="bg-slate-50 border-b border-slate-200 px-2.5 py-1 flex items-center justify-between">
-                    <div className="flex items-center space-x-2 flex-wrap">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="w-4.5 h-4.5 rounded-xs bg-slate-900 text-white font-black text-[10px] flex items-center justify-center shrink-0">
-                          {q.order_index}
-                        </span>
-                        <span className="text-[11.5px] font-extrabold text-slate-900 tracking-tight">
-                          Question {q.order_index}
-                        </span>
-                      </div>
+            {pageQuestions.map((q) => {
+              const isClasswork = worksheet.style_preset === 'classwork';
+              return (
+                <div
+                  key={q.id}
+                  className={`rounded-xs flex flex-col justify-between bg-white h-full overflow-hidden transition-all ${
+                    isClasswork
+                      ? 'border-2 border-slate-700 shadow-2xs ring-1 ring-slate-300'
+                      : 'border border-slate-300'
+                  }`}
+                >
+                  {/* 1. Card Top Header Bar */}
+                  <div>
+                    <div
+                      className={`px-2.5 py-1 flex items-center justify-between ${
+                        isClasswork
+                          ? 'bg-gradient-to-r from-slate-100 via-slate-50 to-emerald-50/50 border-b-2 border-slate-700'
+                          : 'bg-slate-50 border-b border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 flex-wrap">
+                        <div className="flex items-center space-x-1.5">
+                          <span
+                            className={`w-4.5 h-4.5 rounded-xs font-black text-[10px] flex items-center justify-center shrink-0 ${
+                              isClasswork ? 'bg-emerald-700 text-white shadow-2xs' : 'bg-slate-900 text-white'
+                            }`}
+                          >
+                            {q.order_index}
+                          </span>
+                          <span className="text-[11.5px] font-extrabold text-slate-900 tracking-tight">
+                            Question {q.order_index}
+                          </span>
+                        </div>
                       {isAnswerKey && worksheet.track_standards !== false && q.standard && (
                         <span className="text-[8.5px] font-bold text-purple-800 bg-purple-50 px-1.5 py-0.2 rounded-xs border border-purple-200">
                           {q.standard}
@@ -327,7 +348,8 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                   </div>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
       </div>

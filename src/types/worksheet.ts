@@ -1,6 +1,6 @@
 export type QuestionType = 'numeric' | 'fraction' | 'expression' | 'multiple_choice' | 'multi_step';
 
-export type StylePreset = 'homework' | 'pod' | 'quiz' | 'exit_ticket';
+export type StylePreset = 'spiral' | 'classwork' | 'pod' | 'quiz' | 'exit_ticket' | 'homework';
 
 export type SpacingMode = 'compact' | 'balanced' | 'spacious';
 

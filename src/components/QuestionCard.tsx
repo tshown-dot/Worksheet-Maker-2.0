@@ -65,7 +65,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   return (
     <div
       className={`bg-white rounded-xl border transition shadow-sm ${
-        stylePreset === 'pod'
+        stylePreset === 'classwork'
+          ? 'border-2 border-slate-700 ring-1 ring-slate-300'
+          : stylePreset === 'pod'
           ? 'border-dashed border-slate-300'
           : 'border-solid border-slate-200'
       }`}

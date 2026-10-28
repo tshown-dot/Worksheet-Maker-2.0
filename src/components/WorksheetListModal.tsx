@@ -427,13 +427,17 @@ export const WorksheetListModal: React.FC<WorksheetListModalProps> = ({
                         </span>
                       )}
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                        {ws.style_preset === 'pod'
+                        {ws.style_preset === 'spiral'
+                          ? '🔄 Spiral Review'
+                          : ws.style_preset === 'classwork'
+                          ? '✏️ Classwork'
+                          : ws.style_preset === 'pod'
                           ? '★ Problem of the Day'
                           : ws.style_preset === 'quiz'
                           ? 'Quiz / Test'
                           : ws.style_preset === 'exit_ticket'
                           ? 'Exit Ticket'
-                          : 'Homework'}
+                          : '🔄 Spiral Review'}
                       </span>
                     </div>
 

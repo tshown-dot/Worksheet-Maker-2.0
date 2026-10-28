@@ -20,7 +20,7 @@ const INITIAL_WORKSHEET: Worksheet = {
   title: 'Unit 3: Two-Step & Multi-Step Equations',
   subject: 'Mathematics',
   grade_level: '7th Grade',
-  style_preset: 'homework',
+  style_preset: 'spiral',
   total_pages: 1,
   columns: 2,
   spacing: 'balanced',

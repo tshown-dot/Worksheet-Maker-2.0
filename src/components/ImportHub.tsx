@@ -256,12 +256,17 @@ RULES:
 
         // Single assignment
         const title = items[0]?.assignmentName || undefined;
-        const isPod = title ? title.toLowerCase().includes('pod') || title.toLowerCase().includes('problem of the day') : false;
+        const lowerTitle = (title || '').toLowerCase();
+        const stylePreset: StylePreset = lowerTitle.includes('classwork')
+          ? 'classwork'
+          : lowerTitle.includes('pod') || lowerTitle.includes('problem of the day')
+          ? 'pod'
+          : 'spiral';
         const { questions, totalPages } = convertRawItemsToQuestions(items);
 
         onImportQuestions(questions, {
           title,
-          stylePreset: isPod ? 'pod' : 'homework',
+          stylePreset,
           totalPages,
           folderName: selectedFolder,
         });
@@ -317,12 +322,17 @@ RULES:
   };
 
   const handleSelectGroup = (group: AssignmentGroup) => {
-    const isPod = group.name.toLowerCase().includes('pod') || group.name.toLowerCase().includes('problem of the day');
+    const lowerName = group.name.toLowerCase();
+    const stylePreset: StylePreset = lowerName.includes('classwork')
+      ? 'classwork'
+      : lowerName.includes('pod') || lowerName.includes('problem of the day')
+      ? 'pod'
+      : 'spiral';
     const { questions, totalPages } = convertRawItemsToQuestions(group.items);
 
     onImportQuestions(questions, {
       title: group.name,
-      stylePreset: isPod ? 'pod' : 'homework',
+      stylePreset,
       totalPages,
       folderName: selectedFolder,
     });
@@ -336,7 +346,12 @@ RULES:
 
     try {
       for (const group of detectedGroups) {
-        const isPod = group.name.toLowerCase().includes('pod');
+        const lowerGrp = group.name.toLowerCase();
+        const grpPreset: StylePreset = lowerGrp.includes('classwork')
+          ? 'classwork'
+          : lowerGrp.includes('pod')
+          ? 'pod'
+          : 'spiral';
         const code = 'M' + Math.floor(1000 + Math.random() * 9000);
         const { questions, totalPages } = convertRawItemsToQuestions(group.items);
 
@@ -349,7 +364,7 @@ RULES:
             grade_level: '6th Grade',
             folder_name: selectedFolder,
             teacher_id: teacherId || null,
-            style_preset: isPod ? 'pod' : 'homework',
+            style_preset: grpPreset,
             total_pages: totalPages,
             columns: 2,
             student_id_digits: 3,
@@ -389,7 +404,7 @@ RULES:
               subject: 'Mathematics',
               grade_level: '6th Grade',
               folder_name: selectedFolder,
-              style_preset: isPod ? 'pod' : 'homework',
+              style_preset: grpPreset,
               total_pages: totalPages,
               columns: 2,
               spacing: 'balanced',

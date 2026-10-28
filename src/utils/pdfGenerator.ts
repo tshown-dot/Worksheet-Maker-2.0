@@ -177,7 +177,21 @@ function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
 
-  if (preset === 'pod') {
+  if (preset === 'spiral' || preset === 'homework') {
+    doc.setFillColor(238, 242, 255);
+    doc.setDrawColor(99, 102, 241);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y - 3.2, 28, 4.2, 0.8, 0.8, 'FD');
+    doc.setTextColor(67, 56, 202);
+    doc.text('SPIRAL REVIEW', x + 1.5, y - 0.2);
+  } else if (preset === 'classwork') {
+    doc.setFillColor(236, 253, 245);
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y - 3.2, 22, 4.2, 0.8, 0.8, 'FD');
+    doc.setTextColor(6, 95, 70);
+    doc.text('CLASSWORK', x + 1.5, y - 0.2);
+  } else if (preset === 'pod') {
     doc.setFillColor(243, 244, 246);
     doc.setDrawColor(156, 163, 175);
     doc.setLineWidth(0.3);
@@ -199,13 +213,12 @@ function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number)
     doc.setTextColor(21, 128, 61);
     doc.text('EXIT TICKET', x + 1.5, y - 0.2);
   } else {
-    // Homework (clean solid)
-    doc.setFillColor(249, 250, 251);
-    doc.setDrawColor(209, 213, 219);
+    doc.setFillColor(238, 242, 255);
+    doc.setDrawColor(99, 102, 241);
     doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 22, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(75, 85, 99);
-    doc.text('HOMEWORK', x + 1.5, y - 0.2);
+    doc.roundedRect(x, y - 3.2, 28, 4.2, 0.8, 0.8, 'FD');
+    doc.setTextColor(67, 56, 202);
+    doc.text('SPIRAL REVIEW', x + 1.5, y - 0.2);
   }
 }
 
@@ -342,22 +355,51 @@ function renderQuestionCard(
   isAnswerKey: boolean,
   trackStandards: boolean = true
 ) {
-  // 1. Unified Outer Question Container Border (Crisp Solid Border)
-  doc.setLineWidth(0.35);
-  doc.setDrawColor(180, 190, 203);
-  doc.setLineDashPattern([], 0);
-  doc.roundedRect(x, y, width, height, 1, 1, 'S');
+  const isClasswork = _preset === 'classwork';
 
-  // 2. Question Header Bar (Subtle Academic Top Strip)
+  // 1. Unified Outer Question Container Border
+  if (isClasswork) {
+    // Distinct double-line studio border for Classwork
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(30, 41, 59); // slate-800 outer
+    doc.setLineDashPattern([], 0);
+    doc.roundedRect(x, y, width, height, 1, 1, 'S');
+
+    // Inner subtle hairline frame inset by 0.7mm
+    doc.setLineWidth(0.2);
+    doc.setDrawColor(203, 213, 225); // slate-300 inner
+    doc.roundedRect(x + 0.7, y + 0.7, width - 1.4, height - 1.4, 0.6, 0.6, 'S');
+  } else {
+    // Crisp Solid Border for Spiral Review, POD & Quiz
+    doc.setLineWidth(0.35);
+    doc.setDrawColor(180, 190, 203);
+    doc.setLineDashPattern([], 0);
+    doc.roundedRect(x, y, width, height, 1, 1, 'S');
+  }
+
+  // 2. Question Header Bar
   const headerHeight = 6.5;
-  doc.setFillColor(248, 250, 252);
-  doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.25);
-  doc.line(x, y + headerHeight, x + width, y + headerHeight);
+  if (isClasswork) {
+    doc.setFillColor(241, 245, 249); // slate-100
+    doc.rect(x + 0.8, y + 0.8, width - 1.6, headerHeight - 0.4, 'F');
+    // Emerald accent line under Classwork header
+    doc.setDrawColor(16, 185, 129); // emerald-500
+    doc.setLineWidth(0.4);
+    doc.line(x + 0.7, y + headerHeight, x + width - 0.7, y + headerHeight);
+  } else {
+    doc.setFillColor(248, 250, 252);
+    doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.25);
+    doc.line(x, y + headerHeight, x + width, y + headerHeight);
+  }
 
-  // Question Number Badge (Dark Slate Pill with White Inverted Numeral)
-  doc.setFillColor(15, 23, 42); // slate-900
+  // Question Number Badge (Emerald for Classwork, Dark Slate for Spiral)
+  if (isClasswork) {
+    doc.setFillColor(5, 150, 105); // emerald-600
+  } else {
+    doc.setFillColor(15, 23, 42); // slate-900
+  }
   doc.roundedRect(x + 2.5, y + 1.4, 4.5, 4, 0.5, 0.5, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.2);

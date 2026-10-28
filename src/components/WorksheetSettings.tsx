@@ -58,15 +58,21 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
 
   const presets: { id: StylePreset; label: string; desc: string; icon: string }[] = [
     {
-      id: 'homework',
-      label: 'Homework',
-      desc: 'Solid border, clean academic style',
-      icon: '📝',
+      id: 'spiral',
+      label: 'Spiral Review',
+      desc: '6 questions • 2 columns • 1 page',
+      icon: '🔄',
+    },
+    {
+      id: 'classwork',
+      label: 'Classwork',
+      desc: '6–10 problems • 1–2 pages • Studio Frame Border',
+      icon: '✏️',
     },
     {
       id: 'pod',
       label: 'Problem of the Day',
-      desc: 'Dashed border, grey background badges',
+      desc: 'Dashed border, warm-up style',
       icon: '★',
     },
     {
@@ -78,7 +84,7 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
     {
       id: 'exit_ticket',
       label: 'Exit Ticket',
-      desc: 'Punchy 1-2 question quick assessment',
+      desc: 'Punchy quick assessment',
       icon: '🎫',
     },
   ];
@@ -206,12 +212,25 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
             Style:
           </span>
           {presets.map((p) => {
-            const isSelected = worksheet.style_preset === p.id;
+            const isSelected = worksheet.style_preset === p.id || (p.id === 'spiral' && worksheet.style_preset === 'homework');
             return (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => onChange({ style_preset: p.id })}
+                onClick={() => {
+                  if (p.id === 'spiral') {
+                    onChange({ style_preset: 'spiral', columns: 2, total_pages: 1, spacing: 'balanced' });
+                  } else if (p.id === 'classwork') {
+                    onChange({
+                      style_preset: 'classwork',
+                      columns: 2,
+                      total_pages: worksheet.questions.length > 6 ? 2 : 1,
+                      spacing: 'balanced'
+                    });
+                  } else {
+                    onChange({ style_preset: p.id });
+                  }
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition ${
                   isSelected
                     ? 'bg-blue-600 text-white shadow-xs'
