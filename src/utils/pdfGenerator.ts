@@ -47,7 +47,7 @@ export async function generateWorksheetPDF(
     // Bottom-right
     doc.rect(pageWidth - fiducialOffset - fiducialSize, pageHeight - fiducialOffset - fiducialSize, fiducialSize, fiducialSize, 'F');
 
-    // 2. GENERATE AND DRAW QR CODE (Compact Top-Right: 12mm x 12mm)
+    // 2. GENERATE AND DRAW QR CODE (Compact Top-Right: 12mm x 12mm) + LARGE STUDENT ID BOX
     const qrData = `ASG_${worksheet.short_code}:P${pageNum}`;
     const qrDataUrl = await QRCode.toDataURL(qrData, {
       margin: 1,
@@ -55,14 +55,17 @@ export async function generateWorksheetPDF(
       errorCorrectionLevel: 'M',
     });
     const qrX = pageWidth - margin - 17;
-    const qrY = margin + 2;
+    const qrY = margin + 1.5;
     doc.addImage(qrDataUrl, 'PNG', qrX, qrY, 12, 12);
 
     // QR Label below code
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6);
     doc.setTextColor(71, 85, 105);
-    doc.text(`${worksheet.short_code} • P${pageNum}`, qrX + 6, qrY + 14.5, { align: 'center' });
+    doc.text(`${worksheet.short_code} • P${pageNum}`, qrX + 6, qrY + 14.2, { align: 'center' });
+
+    // Large Student ID Box directly to the left of QR code (No Name/Date/Period strip)
+    renderLargeStudentIdBox(doc, qrX, qrY);
 
     // 3. DRAW PAGE HEADER (Publishing-Grade Academic Masthead)
     let currentY = margin + 2.5;
@@ -84,7 +87,7 @@ export async function generateWorksheetPDF(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(17, 24, 39);
-    const maxTitleWidth = qrX - margin - 10 - 36;
+    const maxTitleWidth = qrX - margin - 10 - 65;
     let displayTitle = worksheet.title || 'Untitled Math Worksheet';
     if (doc.getTextWidth(displayTitle) > maxTitleWidth) {
       displayTitle = doc.splitTextToSize(displayTitle, maxTitleWidth)[0] + '...';
@@ -99,11 +102,7 @@ export async function generateWorksheetPDF(
     doc.setFontSize(7.5);
     doc.setTextColor(107, 114, 128);
     doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin + 5, currentY + 2.5);
-    currentY += 4;
-
-    // Student Info Bar & Single Large ID Box
-    renderStudentHeader(doc, worksheet, margin + 5, currentY, pageWidth);
-    currentY += 10.5;
+    currentY = Math.max(currentY + 5, qrY + 16);
 
     // Academic Double Divider Line
     doc.setDrawColor(15, 23, 42);
@@ -223,77 +222,45 @@ function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number)
 }
 
 // ----------------------------------------------------------------------------
-// HELPER: Student Info & Single Large ID Header Box
+// HELPER: Large Student ID Header Box (Directly Left of QR Code — No Name Line)
 // ----------------------------------------------------------------------------
-function renderStudentHeader(
+function renderLargeStudentIdBox(
   doc: jsPDF,
-  _worksheet: Worksheet,
-  x: number,
-  y: number,
-  pageWidth: number
+  qrX: number,
+  qrY: number
 ) {
-  const margin = 10;
-  const qrX = pageWidth - margin - 17;
-  const idBoxWidth = 28;
-  const idBoxHeight = 7.5;
-  const idBoxX = qrX - idBoxWidth - 3;
+  const idBoxWidth = 38;
+  const idBoxHeight = 11.5;
+  const idBoxX = qrX - idBoxWidth - 3.5;
+  const idBoxY = qrY + 0.5;
 
-  // Top rule of Student Info Strip
-  doc.setDrawColor(15, 23, 42);
-  doc.setLineWidth(0.5);
-  doc.line(x, y - 0.5, qrX - 2, y - 0.5);
-
-  // 1. NAME FIELD (Crisp vector line)
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(30, 41, 59);
-  doc.text('NAME:', x, y + 5.2);
-  const nameLabelWidth = doc.getTextWidth('NAME: ') + 1;
-  const nameLineEnd = x + 60;
-  doc.setDrawColor(148, 163, 184);
-  doc.setLineWidth(0.3);
-  doc.line(x + nameLabelWidth, y + 5.7, nameLineEnd, y + 5.7);
-
-  // 2. DATE FIELD (Crisp vector line)
-  const dateStartX = nameLineEnd + 4;
-  doc.setFont('helvetica', 'bold');
-  doc.text('DATE:', dateStartX, y + 5.2);
-  const dateLabelWidth = doc.getTextWidth('DATE: ') + 1;
-  const dateLineEnd = dateStartX + 25;
-  doc.line(dateStartX + dateLabelWidth, y + 5.7, dateLineEnd, y + 5.7);
-
-  // 3. PERIOD FIELD (Crisp vector line)
-  const pdStartX = dateLineEnd + 4;
-  doc.setFont('helvetica', 'bold');
-  doc.text('PERIOD:', pdStartX, y + 5.2);
-  const pdLabelWidth = doc.getTextWidth('PERIOD: ') + 1;
-  const pdLineEnd = pdStartX + 18;
-  doc.line(pdStartX + pdLabelWidth, y + 5.7, pdLineEnd, y + 5.7);
-
-  // 4. SINGLE LARGE STUDENT ID BOX with Side Label Tab (Full Vertical Room for Handwriting)
+  // Outer 2px high-contrast Student ID box
   doc.setDrawColor(15, 23, 42);
   doc.setLineWidth(0.6);
   doc.setFillColor(255, 255, 255);
-  doc.rect(idBoxX, y + 0.8, idBoxWidth, idBoxHeight, 'FD');
+  doc.rect(idBoxX, idBoxY, idBoxWidth, idBoxHeight, 'FD');
 
   // Left side label tab inside ID box
-  const tabW = 7.5;
+  const tabW = 11.5;
   doc.setFillColor(241, 245, 249);
-  doc.rect(idBoxX + 0.3, y + 1.1, tabW, idBoxHeight - 0.6, 'F');
+  doc.rect(idBoxX + 0.3, idBoxY + 0.3, tabW, idBoxHeight - 0.6, 'F');
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
-  doc.line(idBoxX + tabW, y + 0.8, idBoxX + tabW, y + 0.8 + idBoxHeight);
+  doc.line(idBoxX + tabW, idBoxY, idBoxX + tabW, idBoxY + idBoxHeight);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(5.8);
-  doc.setTextColor(30, 41, 59);
-  doc.text('ID #', idBoxX + (tabW / 2), y + 5.4, { align: 'center' });
+  doc.setFontSize(5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('STUDENT', idBoxX + (tabW / 2), idBoxY + 4.8, { align: 'center' });
+  doc.setFontSize(7.2);
+  doc.setTextColor(15, 23, 42);
+  doc.text('ID #', idBoxX + (tabW / 2), idBoxY + 8.2, { align: 'center' });
 
   // Faint dashed handwriting baseline inside ID box
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.2);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.25);
   doc.setLineDashPattern([1, 1], 0);
-  doc.line(idBoxX + tabW + 2, y + 6.5, idBoxX + idBoxWidth - 2, y + 6.5);
+  doc.line(idBoxX + tabW + 2.5, idBoxY + idBoxHeight - 2.2, idBoxX + idBoxWidth - 2.5, idBoxY + idBoxHeight - 2.2);
   doc.setLineDashPattern([], 0);
 }
 

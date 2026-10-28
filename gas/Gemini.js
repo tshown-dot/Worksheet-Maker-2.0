@@ -35,11 +35,10 @@ Your job is to read the handwritten student submission(s) in this PDF and grade 
 
 LAYOUT & HEADER EXTRACTION RULES:
 1. STUDENT ID ("studentId"):
-   - Look in the top-right header area for the unified box labeled "ID #" (or legacy digit boxes).
+   - Look in the top-right header area directly to the left of the QR code for the large box labeled "STUDENT ID #" (or "ID #").
    - Extract the exact 2-digit or 3-digit ID number written inside the box (e.g., "14", "07", "23", "104", "215"). Strip any leading "#" or spaces. If blank or unreadable, return "".
 2. STUDENT NAME ("studentName"):
-   - Look in the top-left header area on the "Name:" line.
-   - Read the student's handwritten name if written (e.g., "Alex Rivera"). If blank, return "".
+   - Privacy-safe OCR worksheets only use the Student ID box and do not have a Name line; return "" unless a legacy worksheet has a handwritten name.
 3. ASSIGNMENT CODE ("assignmentCode"):
    - Read the printed Assignment Code in the top-right corner next to the QR code (e.g., "ALG-701", "M4821").
 4. MULTI-PAGE / COPIER BATCH SUPPORT:

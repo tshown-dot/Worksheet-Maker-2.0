@@ -64,8 +64,8 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between pb-1.5">
-          <div className="flex-1 pr-4">
+        <div className="flex items-center justify-between pb-2 border-b-2 border-b-slate-900 gap-3">
+          <div className="flex-1 min-w-0 pr-2">
             <div className="flex items-center space-x-2.5 flex-wrap">
               <h1 className="text-[17px] font-extrabold text-slate-900 tracking-tight leading-snug">
                 {worksheet.title || 'Untitled Math Worksheet'}
@@ -101,63 +101,38 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
             </p>
           </div>
 
-          {/* QR Code Block (Compact Scanner Target) */}
-          <div className="flex items-center space-x-2 shrink-0">
-            <div className="text-right">
-              <span className="text-[9.5px] font-mono font-extrabold text-slate-900 block leading-tight">
-                {worksheet.short_code}
-              </span>
-              <span className="text-[8px] font-mono font-medium text-slate-500 block leading-tight mt-0.5">
-                Page {pageNum} of {worksheet.total_pages || 1}
-              </span>
-            </div>
-            {qrUrl ? (
-              <img src={qrUrl} alt="QR Code" className="w-10 h-10 border border-slate-300 p-0.5 bg-white" />
-            ) : (
-              <div className="w-10 h-10 bg-slate-100 border border-slate-300" />
-            )}
-          </div>
-        </div>
-
-        {/* Unified Student Info Strip + Single Large Full-Height Student ID Box */}
-        <div className="py-1.5 border-t-2 border-t-slate-900 border-b border-b-slate-300 flex items-center justify-between gap-4">
-          <div className="flex-1 flex items-baseline space-x-5">
-            {/* Student Name */}
-            <div className="flex items-baseline space-x-1.5 flex-1 min-w-[150px]">
-              <span className="text-[9px] font-extrabold tracking-wider text-slate-800 uppercase shrink-0">
-                NAME:
-              </span>
-              <div className="flex-1 border-b border-slate-400 h-4" />
-            </div>
-
-            {/* Date */}
-            <div className="flex items-baseline space-x-1.5 w-28 shrink-0">
-              <span className="text-[9px] font-extrabold tracking-wider text-slate-800 uppercase shrink-0">
-                DATE:
-              </span>
-              <div className="flex-1 border-b border-slate-400 h-4" />
-            </div>
-
-            {/* Period */}
-            <div className="flex items-baseline space-x-1.5 w-20 shrink-0">
-              <span className="text-[9px] font-extrabold tracking-wider text-slate-800 uppercase shrink-0">
-                PERIOD:
-              </span>
-              <div className="flex-1 border-b border-slate-400 h-4" />
-            </div>
-          </div>
-
-          {/* Single Large Student ID Box with Side Label Tab (Full Vertical Room for Handwriting) */}
-          <div className="shrink-0 flex items-center">
-            <div className="w-32 h-[28px] border-2 border-slate-900 bg-white rounded-xs flex items-stretch overflow-hidden">
-              <div className="bg-slate-100 border-r border-slate-300 px-1.5 flex items-center justify-center shrink-0">
-                <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-800 leading-none">
+          {/* Large Student ID Box + QR Code Block */}
+          <div className="flex items-center space-x-3 shrink-0">
+            {/* Large Student ID Box to the left of QR code */}
+            <div className="w-40 h-11 border-2 border-slate-900 bg-white rounded-xs flex items-stretch overflow-hidden">
+              <div className="bg-slate-100 border-r border-slate-300 px-2 flex flex-col items-center justify-center shrink-0">
+                <span className="text-[7px] font-black uppercase tracking-wider text-slate-500 leading-none">
+                  STUDENT
+                </span>
+                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-900 leading-none mt-0.5">
                   ID #
                 </span>
               </div>
               <div className="flex-1 bg-white relative flex items-center justify-center">
-                <div className="w-4/5 border-b border-dashed border-slate-200 translate-y-2 pointer-events-none" />
+                <div className="w-4/5 border-b border-dashed border-slate-300 translate-y-3 pointer-events-none" />
               </div>
+            </div>
+
+            {/* QR Code Block (Compact Scanner Target) */}
+            <div className="flex items-center space-x-2 shrink-0">
+              <div className="text-right">
+                <span className="text-[9.5px] font-mono font-extrabold text-slate-900 block leading-tight">
+                  {worksheet.short_code}
+                </span>
+                <span className="text-[8px] font-mono font-medium text-slate-500 block leading-tight mt-0.5">
+                  Page {pageNum} of {worksheet.total_pages || 1}
+                </span>
+              </div>
+              {qrUrl ? (
+                <img src={qrUrl} alt="QR Code" className="w-11 h-11 border border-slate-300 p-0.5 bg-white" />
+              ) : (
+                <div className="w-11 h-11 bg-slate-100 border border-slate-300" />
+              )}
             </div>
           </div>
         </div>
