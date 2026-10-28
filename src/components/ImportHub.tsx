@@ -32,6 +32,9 @@ interface ImportHubProps {
   onOpenSavedList: () => void;
   teacherId?: string | null;
   providerToken?: string | null;
+  onReconnectDrive?: () => void;
+  onDriveFolderSaved?: (url: string) => void;
+  onDriveTokenExpired?: () => void;
 }
 
 export const ImportHub: React.FC<ImportHubProps> = ({
@@ -40,6 +43,8 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   onOpenSavedList,
   teacherId,
   providerToken,
+  onDriveFolderSaved,
+  onDriveTokenExpired,
 }) => {
   const [inputText, setInputText] = useState('');
   const [copiedType, setCopiedType] = useState<'convert' | 'generate' | null>(null);
@@ -377,6 +382,9 @@ RULES:
     setIsSavingAll(true);
     setSaveAllMessage(`Saving assignments to "${selectedFolder}"...`);
 
+    let driveSavedCount = 0;
+    let driveExpired = false;
+
     try {
       for (const group of detectedGroups) {
         const grpPreset = inferStylePreset(group.name, group.items);
@@ -423,7 +431,7 @@ RULES:
         }
 
         // Upload to Google Drive if OAuth session is present
-        if (providerToken) {
+        if (providerToken && !driveExpired) {
           try {
             const tempWs: any = {
               id: wsData?.id || '',
@@ -444,20 +452,34 @@ RULES:
             const sDoc = await generateWorksheetPDF(tempWs, { isAnswerKey: false });
             const kDoc = await generateWorksheetPDF(tempWs, { isAnswerKey: true });
             const baseName = `${code}_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
-            await saveWorksheetToDrive(
+            const driveRes = await saveWorksheetToDrive(
               providerToken,
               selectedFolder,
               sDoc.output('blob'),
               kDoc.output('blob'),
               baseName
             );
-          } catch (dErr) {
+            driveSavedCount++;
+            if (driveRes.folderUrl && onDriveFolderSaved) {
+              onDriveFolderSaved(driveRes.folderUrl);
+            }
+          } catch (dErr: any) {
             console.warn('Batch Drive upload warning:', dErr);
+            if (dErr?.message === 'DRIVE_AUTH_EXPIRED') {
+              driveExpired = true;
+              if (onDriveTokenExpired) onDriveTokenExpired();
+            }
           }
         }
       }
 
-      setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments successfully saved to "${selectedFolder}"${providerToken ? ' and Google Drive' : ''}!`);
+      if (driveSavedCount > 0) {
+        setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments saved to Supabase & Google Drive ("Worksheet Maker/${selectedFolder}")!`);
+      } else if (driveExpired) {
+        setSaveAllMessage(`Saved to Supabase! (Google Drive session expired — click your account menu at top-right to reconnect Drive)`);
+      } else {
+        setSaveAllMessage(`Saved to Supabase! (Sign in with Google at top-right to also sync PDFs to Google Drive)`);
+      }
       setTimeout(() => {
         setIsSavingAll(false);
         // Load the first one

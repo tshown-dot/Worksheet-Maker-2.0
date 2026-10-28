@@ -40,6 +40,10 @@ export async function findFolder(
     },
   });
 
+  if (res.status === 401) {
+    throw new Error('DRIVE_AUTH_EXPIRED');
+  }
+
   if (!res.ok) {
     const errText = await res.text();
     console.warn('Drive findFolder error:', errText);
@@ -79,6 +83,10 @@ export async function createFolder(
     body: JSON.stringify(metadata),
   });
 
+  if (res.status === 401) {
+    throw new Error('DRIVE_AUTH_EXPIRED');
+  }
+
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`Failed to create Drive folder: ${errText}`);
@@ -116,6 +124,10 @@ export async function uploadFileToDrive(
   const searchRes = await fetch(searchUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+
+  if (searchRes.status === 401) {
+    throw new Error('DRIVE_AUTH_EXPIRED');
+  }
 
   let existingId: string | null = null;
   if (searchRes.ok) {
@@ -161,6 +173,10 @@ export async function uploadFileToDrive(
     },
     body: multipartBlob,
   });
+
+  if (uploadRes.status === 401) {
+    throw new Error('DRIVE_AUTH_EXPIRED');
+  }
 
   if (!uploadRes.ok) {
     const errText = await uploadRes.text();

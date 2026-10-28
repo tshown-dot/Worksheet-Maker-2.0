@@ -51,18 +51,36 @@ export function App() {
   // Authentication & Google Drive OAuth session
   const [user, setUser] = useState<any | null>(null);
   const [session, setSession] = useState<any | null>(null);
+  const [providerToken, setProviderToken] = useState<string | null>(() => {
+    return localStorage.getItem('wm_google_provider_token');
+  });
+  const [driveFolderUrl, setDriveFolderUrl] = useState<string | null>(() => {
+    return localStorage.getItem('wm_drive_folder_url');
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
+      if (currentSession?.provider_token) {
+        localStorage.setItem('wm_google_provider_token', currentSession.provider_token);
+        setProviderToken(currentSession.provider_token);
+      }
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      if (newSession?.provider_token) {
+        localStorage.setItem('wm_google_provider_token', newSession.provider_token);
+        setProviderToken(newSession.provider_token);
+      }
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('wm_google_provider_token');
+        setProviderToken(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -96,6 +114,8 @@ export function App() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('wm_google_provider_token');
+    setProviderToken(null);
     setUser(null);
     setSession(null);
   };
@@ -275,7 +295,9 @@ export function App() {
 
       // Auto-save to Google Drive if signed in with Google OAuth
       let driveSaved = false;
-      if (session?.provider_token) {
+      let driveTokenExpired = false;
+      const activeDriveToken = session?.provider_token || providerToken;
+      if (activeDriveToken) {
         try {
           setSaveStatusText('Saving PDFs to Google Drive...');
           const studentDoc = await generateWorksheetPDF(worksheet, { isAnswerKey: false });
@@ -284,21 +306,36 @@ export function App() {
           const keyBlob = keyDoc.output('blob');
           const baseName = `${worksheet.short_code}_${worksheet.title.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
-          await saveWorksheetToDrive(
-            session.provider_token,
+          const driveRes = await saveWorksheetToDrive(
+            activeDriveToken,
             worksheet.folder_name || 'General',
             studentBlob,
             keyBlob,
             baseName
           );
+          if (driveRes.folderUrl) {
+            setDriveFolderUrl(driveRes.folderUrl);
+            localStorage.setItem('wm_drive_folder_url', driveRes.folderUrl);
+          }
           driveSaved = true;
         } catch (driveErr: any) {
           console.warn('Google Drive auto-save error:', driveErr);
+          if (driveErr?.message === 'DRIVE_AUTH_EXPIRED') {
+            localStorage.removeItem('wm_google_provider_token');
+            setProviderToken(null);
+            driveTokenExpired = true;
+          }
         }
       }
 
-      setSaveStatusText(driveSaved ? 'Saved to Supabase & Google Drive!' : 'Saved to Supabase!');
-      setTimeout(() => setSaveStatusText(''), 3000);
+      if (driveSaved) {
+        setSaveStatusText('Saved to Supabase & Google Drive!');
+      } else if (driveTokenExpired) {
+        setSaveStatusText('Saved to Supabase (Drive session expired — click account to reconnect)');
+      } else {
+        setSaveStatusText('Saved to Supabase only (Sign in with Google for Drive sync)');
+      }
+      setTimeout(() => setSaveStatusText(''), 6000);
     } catch (err: any) {
       console.error(err);
       alert('Save failed: ' + err.message);
@@ -347,6 +384,7 @@ export function App() {
   };
 
   const totalPages = worksheet.total_pages || 1;
+  const effectiveDriveToken = session?.provider_token || providerToken;
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800">
@@ -363,6 +401,8 @@ export function App() {
         isSaving={isSaving}
         saveStatusText={saveStatusText}
         user={user}
+        hasDriveToken={Boolean(effectiveDriveToken)}
+        driveFolderUrl={driveFolderUrl}
         onSignInWithGoogle={handleSignInWithGoogle}
         onSignOut={handleSignOut}
       />
@@ -375,7 +415,16 @@ export function App() {
             onOpenBlank={() => setViewMode('editor')}
             onOpenSavedList={() => setIsListModalOpen(true)}
             teacherId={user?.id}
-            providerToken={session?.provider_token}
+            providerToken={effectiveDriveToken}
+            onReconnectDrive={handleSignInWithGoogle}
+            onDriveFolderSaved={(url) => {
+              setDriveFolderUrl(url);
+              localStorage.setItem('wm_drive_folder_url', url);
+            }}
+            onDriveTokenExpired={() => {
+              localStorage.removeItem('wm_google_provider_token');
+              setProviderToken(null);
+            }}
           />
         </main>
       ) : (
