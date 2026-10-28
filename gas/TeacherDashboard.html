@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>Small Groups & Intervention Command Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white !important; padding: 0 !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col text-xs antialiased">
+
+  <!-- TOP HEADER -->
+  <header class="no-print bg-slate-900 text-white px-5 py-3.5 shadow-md flex items-center justify-between sticky top-0 z-30">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white text-base shadow-sm">
+        🎯
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <h1 class="text-sm font-bold text-white tracking-tight">Small Groups & Intervention Command Center</h1>
+          <span class="text-[9.5px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+            Worksheet Maker 2.0
+          </span>
+        </div>
+        <p class="text-[10px] text-slate-400">Targeted Tier 3, Tier 2, and Mastery grouping based on live student performance</p>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <button
+        onclick="copyGroupRosters()"
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
+        title="Copy formatted small groups for lesson plans or Google Docs"
+      >
+        <span>📋 Copy Groups for Lesson Plan</span>
+      </button>
+
+      <button
+        onclick="window.print()"
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
+        title="Print small group lists"
+      >
+        <span>🖨️ Print Groups</span>
+      </button>
+
+      <button
+        onclick="loadDashboardData()"
+        id="refreshBtn"
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition cursor-pointer shadow-sm"
+      >
+        <span id="refreshIcon">🔄</span>
+        <span>Refresh Data</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTROLS & FILTER BAR -->
+  <div class="no-print bg-white border-b border-slate-200 px-5 py-3 shadow-xs space-y-2.5">
+    <!-- Row 1: Period Selector + Presets + Cutoffs -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <!-- Period Selector -->
+      <div class="flex items-center space-x-2">
+        <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
+          Period:
+        </label>
+        <select
+          id="periodSelect"
+          onchange="onPeriodChange()"
+          class="bg-slate-50 border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
+        >
+          <option value="ALL">All Class Periods</option>
+        </select>
+      </div>
+
+      <!-- Quick Assignment Preset Buttons -->
+      <div class="flex items-center space-x-1.5 flex-wrap">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Sets:</span>
+        <button
+          onclick="applyPreset('all')"
+          class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold text-[10px] transition"
+        >
+          Select All
+        </button>
+        <button
+          onclick="applyPreset('pod')"
+          class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md font-bold text-[10px] transition"
+        >
+          ★ All PODs
+        </button>
+        <button
+          onclick="applyPreset('spiral')"
+          class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-md font-bold text-[10px] transition"
+        >
+          🔄 Spiral Reviews
+        </button>
+        <button
+          onclick="applyPreset('quiz')"
+          class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 rounded-md font-bold text-[10px] transition"
+        >
+          📋 Quizzes
+        </button>
+        <button
+          onclick="applyPreset('clear')"
+          class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-md font-medium text-[10px] transition"
+        >
+          Clear
+        </button>
+      </div>
+
+      <!-- Cutoff Adjusters -->
+      <div class="flex items-center space-x-3 text-[10px] font-semibold text-slate-600 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
+        <span class="text-slate-400 font-bold uppercase tracking-wider">Tier Cutoffs:</span>
+        <div class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-red-500"></span>
+          <span>Tier 3 &lt;</span>
+          <input
+            type="number"
+            id="cutoffTier3"
+            value="60"
+            min="10"
+            max="90"
+            step="5"
+            onchange="onCutoffChange()"
+            class="w-11 px-1 py-0.5 border border-slate-300 rounded text-center font-bold text-xs"
+          />
+          <span>%</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span>Tier 2 &lt;</span>
+          <input
+            type="number"
+            id="cutoffTier2"
+            value="80"
+            min="20"
+            max="95"
+            step="5"
+            onchange="onCutoffChange()"
+            class="w-11 px-1 py-0.5 border border-slate-300 rounded text-center font-bold text-xs"
+          />
+          <span>%</span>
+        </div>
+        <div class="flex items-center space-x-1 text-emerald-700">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Tier 1 ≥ <span id="tier1CutoffLabel">80</span>%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Selected Assignments Multi-Select Pills -->
+    <div class="space-y-1">
+      <div class="flex items-center justify-between text-[10px]">
+        <span class="font-bold text-slate-600 uppercase tracking-wider">
+          Included Assignments in this Group (<span id="selectedCountLabel">0</span> selected):
+        </span>
+        <span class="text-slate-400">Click any assignment pill to toggle it in or out</span>
+      </div>
+      <div id="assignmentPillsContainer" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scroll p-1 bg-slate-50 rounded-lg border border-slate-200">
+        <div class="text-slate-400 italic text-[11px] p-1">Loading assignments...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARY OVERVIEW CARDS -->
+  <div class="px-5 pt-3.5 pb-2">
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
+      <!-- 1. Group Average -->
+      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400">Group Average</span>
+        <div class="flex items-baseline space-x-1.5 mt-1">
+          <span id="groupAvgDisplay" class="text-2xl font-black text-slate-900">—</span>
+          <span class="text-xs font-bold text-slate-400">%</span>
+        </div>
+        <span id="groupAvgBadge" class="text-[9.5px] font-semibold text-slate-500 mt-1">Based on selected set</span>
+      </div>
+
+      <!-- 2. Graded Coverage -->
+      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400">Students Graded</span>
+        <div class="flex items-baseline space-x-1 mt-1">
+          <span id="gradedCountDisplay" class="text-2xl font-black text-slate-900">—</span>
+          <span id="rosterCountDisplay" class="text-xs font-bold text-slate-400">/ —</span>
+        </div>
+        <span id="missingBadge" class="text-[9.5px] font-semibold text-amber-600 mt-1">— missing submissions</span>
+      </div>
+
+      <!-- 3. Tier 3 Intensive -->
+      <div class="bg-red-50/70 p-3 rounded-xl border border-red-200 shadow-xs flex flex-col justify-between">
+        <span class="text-[9.5px] font-black uppercase tracking-wider text-red-800 flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-red-600"></span>
+          <span>Tier 3 Intensive</span>
+        </span>
+        <div class="flex items-baseline space-x-1.5 mt-1">
+          <span id="tier3CountDisplay" class="text-2xl font-black text-red-900">0</span>
+          <span class="text-xs font-bold text-red-700">students</span>
+        </div>
+        <span class="text-[9.5px] font-bold text-red-700 mt-1">Needs direct re-teach</span>
+      </div>
+
+      <!-- 4. Tier 2 Support -->
+      <div class="bg-amber-50/70 p-3 rounded-xl border border-amber-200 shadow-xs flex flex-col justify-between">
+        <span class="text-[9.5px] font-black uppercase tracking-wider text-amber-800 flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span>Tier 2 Strategic</span>
+        </span>
+        <div class="flex items-baseline space-x-1.5 mt-1">
+          <span id="tier2CountDisplay" class="text-2xl font-black text-amber-900">0</span>
+          <span class="text-xs font-bold text-amber-700">students</span>
+        </div>
+        <span class="text-[9.5px] font-bold text-amber-700 mt-1">Targeted error coaching</span>
+      </div>
+
+      <!-- 5. Tier 1 Mastery -->
+      <div class="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 shadow-xs flex flex-col justify-between">
+        <span class="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 flex items-center space-x-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+          <span>Tier 1 Mastery</span>
+        </span>
+        <div class="flex items-baseline space-x-1.5 mt-1">
+          <span id="tier1CountDisplay" class="text-2xl font-black text-emerald-900">0</span>
+          <span class="text-xs font-bold text-emerald-700">students</span>
+        </div>
+        <span class="text-[9.5px] font-bold text-emerald-700 mt-1">Ready for extension</span>
+      </div>
+
+      <!-- 6. Top Struggling Standard -->
+      <div class="bg-purple-50/70 p-3 rounded-xl border border-purple-200 shadow-xs flex flex-col justify-between">
+        <span class="text-[9.5px] font-black uppercase tracking-wider text-purple-800 flex items-center space-x-1">
+          <span>🎯 Top Priority Gap</span>
+        </span>
+        <div class="mt-1">
+          <span id="topStdCodeDisplay" class="text-sm font-black text-purple-950 block truncate">—</span>
+          <span id="topStdDescDisplay" class="text-[9.5px] font-semibold text-purple-700 line-clamp-1 mt-0.5">No struggle standard detected</span>
+        </div>
+        <span id="topStdMissDisplay" class="text-[9px] font-extrabold text-purple-600 mt-1 block">0 total misses</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB SWITCHER -->
+  <div class="no-print px-5 pt-2 flex items-center space-x-2 border-b border-slate-200 bg-white">
+    <button
+      id="tabBtnGroups"
+      onclick="switchTab('groups')"
+      class="px-4 py-2 border-b-2 border-purple-600 text-purple-700 font-extrabold text-xs flex items-center space-x-1.5 transition"
+    >
+      <span>👥 Small Groups & Intervention Board</span>
+      <span id="groupTabBadge" class="px-1.5 py-0.2 bg-purple-100 text-purple-800 rounded-full text-[10px] font-bold">0</span>
+    </button>
+    <button
+      id="tabBtnItems"
+      onclick="switchTab('items')"
+      class="px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center space-x-1.5 transition"
+    >
+      <span>🔍 Question & Misconception Breakdown</span>
+      <span id="itemTabBadge" class="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold">0</span>
+    </button>
+  </div>
+
+  <!-- MAIN VIEW CONTENT -->
+  <main class="flex-1 px-5 py-4 overflow-y-auto custom-scroll">
+
+    <!-- VIEW 1: SMALL GROUPS BOARD -->
+    <div id="viewGroups" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+
+        <!-- COLUMN 1: TIER 3 INTENSIVE INTERVENTION -->
+        <div class="bg-red-50/40 rounded-2xl border-2 border-red-200 p-3.5 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-red-200">
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full bg-red-600 shadow-xs"></span>
+              <h2 class="font-black text-slate-900 text-xs uppercase tracking-wide">Tier 3: Intensive Intervention</h2>
+            </div>
+            <span id="tier3BadgeCount" class="px-2 py-0.5 rounded-full bg-red-600 text-white font-extrabold text-[10px]">0</span>
+          </div>
+          <p class="text-[10px] text-red-800/80 leading-relaxed font-medium">
+            Scores &lt; <span class="font-bold cutoff3Label">60</span>%. Pull for teacher-led re-teaching and guided problem modeling.
+          </p>
+
+          <div id="tier3List" class="space-y-2.5 max-h-[58vh] overflow-y-auto custom-scroll pr-1">
+            <div class="p-4 text-center text-slate-400 italic text-xs">No students in Tier 3 🎉</div>
+          </div>
+        </div>
+
+        <!-- COLUMN 2: TIER 2 STRATEGIC SUPPORT -->
+        <div class="bg-amber-50/40 rounded-2xl border-2 border-amber-200 p-3.5 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-amber-200">
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full bg-amber-500 shadow-xs"></span>
+              <h2 class="font-black text-slate-900 text-xs uppercase tracking-wide">Tier 2: Strategic Support</h2>
+            </div>
+            <span id="tier2BadgeCount" class="px-2 py-0.5 rounded-full bg-amber-600 text-white font-extrabold text-[10px]">0</span>
+          </div>
+          <p class="text-[10px] text-amber-800/80 leading-relaxed font-medium">
+            Scores <span class="font-bold cutoff3Label">60</span>% – <span class="font-bold cutoff2Label">79</span>%. Target specific error patterns and misconception coaching.
+          </p>
+
+          <div id="tier2List" class="space-y-2.5 max-h-[58vh] overflow-y-auto custom-scroll pr-1">
+            <div class="p-4 text-center text-slate-400 italic text-xs">No students in Tier 2</div>
+          </div>
+        </div>
+
+        <!-- COLUMN 3: TIER 1 MASTERY & EXTENSION -->
+        <div class="bg-emerald-50/40 rounded-2xl border-2 border-emerald-200 p-3.5 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-emerald-200">
+            <div class="flex items-center space-x-2">
+              <span class="w-3 h-3 rounded-full bg-emerald-600 shadow-xs"></span>
+              <h2 class="font-black text-slate-900 text-xs uppercase tracking-wide">Tier 1: Mastery & Extension</h2>
+            </div>
+            <span id="tier1BadgeCount" class="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-extrabold text-[10px]">0</span>
+          </div>
+          <p class="text-[10px] text-emerald-800/80 leading-relaxed font-medium">
+            Scores ≥ <span class="font-bold cutoff2Label">80</span>%. On grade level. Ready for extension puzzles, peer coaching, or independent depth work.
+          </p>
+
+          <div id="tier1List" class="space-y-2.5 max-h-[58vh] overflow-y-auto custom-scroll pr-1">
+            <div class="p-4 text-center text-slate-400 italic text-xs">No students in Tier 1 yet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MISSING / UNGRADED STUDENTS ACCORDION -->
+      <div id="missingSection" class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+        <div class="flex items-center justify-between cursor-pointer" onclick="toggleMissingAccordion()">
+          <div class="flex items-center space-x-2">
+            <span class="text-sm">💤</span>
+            <span class="font-bold text-slate-800 text-xs">Roster Students with No Submissions on Selected Worksheets</span>
+            <span id="missingBadgeTotal" class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full font-bold text-[10px]">0</span>
+          </div>
+          <span id="missingChevron" class="text-slate-400 font-bold text-xs transition-transform">▼</span>
+        </div>
+        <div id="missingList" class="hidden mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: QUESTION & MISCONCEPTION BREAKDOWN -->
+    <div id="viewItems" class="hidden space-y-3">
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-slate-900 text-xs">Problem Accuracy Ranking across Selected Assignments</h2>
+          <p class="text-[10px] text-slate-500">Ranked from lowest accuracy to highest accuracy so you know what whole-class lesson to start with.</p>
+        </div>
+        <span class="text-[10px] font-bold text-slate-400">Click any problem row to view struggling students and written work</span>
+      </div>
+
+      <div id="itemAnalysisList" class="space-y-2">
+        <!-- Filled dynamically -->
+      </div>
+    </div>
+  </main>
+
+  <!-- SLIDE-OVER STUDENT DEEP-DIVE DRAWER -->
+  <div id="studentDrawer" class="hidden fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-2xs flex justify-end">
+    <div class="w-full max-w-lg bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
+      <!-- Drawer Header -->
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center font-bold text-sm text-white">
+            <span id="drawerAvatarInitial">S</span>
+          </div>
+          <div>
+            <h3 id="drawerStudentName" class="font-bold text-sm text-white leading-tight">Student Detail</h3>
+            <p class="text-[10px] text-slate-400">
+              ID #<span id="drawerStudentId" class="font-mono text-purple-300 font-bold">--</span> • <span id="drawerStudentPeriod">Period --</span>
+            </p>
+          </div>
+        </div>
+        <button
+          onclick="closeStudentDrawer()"
+          class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Drawer Content -->
+      <div class="flex-1 p-5 overflow-y-auto custom-scroll space-y-4">
+        <!-- Score Overview -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between">
+          <div>
+            <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400 block">Average on Selected Set</span>
+            <div class="flex items-baseline space-x-1.5 mt-0.5">
+              <span id="drawerStudentAvg" class="text-2xl font-black text-slate-900">—</span>
+              <span class="text-xs font-bold text-slate-400">%</span>
+            </div>
+          </div>
+          <div id="drawerTierBadge" class="px-2.5 py-1 rounded-full text-xs font-bold">
+            Tier --
+          </div>
+        </div>
+
+        <!-- Struggling Standards Gaps -->
+        <div id="drawerGapsSection" class="space-y-1.5">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Struggling Standards</span>
+          <div id="drawerGapsList" class="flex flex-wrap gap-1.5">
+            <!-- Badges -->
+          </div>
+        </div>
+
+        <!-- Submissions & Work breakdown -->
+        <div class="space-y-3">
+          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Submissions Breakdown</span>
+          <div id="drawerSubmissionsList" class="space-y-3">
+            <!-- Filled dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Drawer Footer -->
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button
+          onclick="closeStudentDrawer()"
+          class="px-4 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-semibold hover:bg-slate-700 transition"
+        >
+          Close Drawer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    let dashboardData = null;
+    let selectedAssignmentCodes = [];
+    let currentPeriod = 'ALL';
+    let currentTier3Cutoff = 60;
+    let currentTier2Cutoff = 80;
+    let activeTab = 'groups';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDashboardData();
+    });
+
+    function loadDashboardData() {
+      const icon = document.getElementById('refreshIcon');
+      if (icon) icon.classList.add('animate-spin');
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(renderDashboard)
+          .withFailureHandler((err) => {
+            alert('Error loading dashboard: ' + err.message);
+            if (icon) icon.classList.remove('animate-spin');
+          })
+          .getInterventionDashboardData(currentPeriod, selectedAssignmentCodes, currentTier3Cutoff, currentTier2Cutoff);
+      } else {
+        // Fallback for standalone / testing
+        fetch('?action=interventionData&period=' + encodeURIComponent(currentPeriod) + '&codes=' + encodeURIComponent(selectedAssignmentCodes.join(',')) + '&tier3=' + currentTier3Cutoff + '&tier2=' + currentTier2Cutoff)
+          .then(res => res.json())
+          .then(data => renderDashboard(data))
+          .catch(e => console.log('Standalone mode'));
+      }
+    }
+
+    function renderDashboard(data) {
+      const icon = document.getElementById('refreshIcon');
+      if (icon) icon.classList.remove('animate-spin');
+      if (!data) return;
+
+      dashboardData = data;
+      currentPeriod = data.selectedPeriod || 'ALL';
+      selectedAssignmentCodes = data.selectedCodes || [];
+
+      // 1. Populate Period Dropdown
+      const periodSelect = document.getElementById('periodSelect');
+      periodSelect.innerHTML = '<option value="ALL">All Class Periods</option>';
+      (data.periods || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        if (p === currentPeriod) opt.selected = true;
+        periodSelect.appendChild(opt);
+      });
+
+      // 2. Populate Assignment Pills
+      const container = document.getElementById('assignmentPillsContainer');
+      container.innerHTML = '';
+      const assignments = data.assignments || [];
+
+      document.getElementById('selectedCountLabel').textContent = selectedAssignmentCodes.length;
+
+      if (assignments.length === 0) {
+        container.innerHTML = '<div class="text-slate-400 italic text-xs p-1">No graded worksheets found in Gradebook. Drop scans into "Worksheet Scans" to grade them!</div>';
+      } else {
+        assignments.forEach(a => {
+          const isSelected = selectedAssignmentCodes.includes(a.code);
+          const pill = document.createElement('button');
+          pill.type = 'button';
+          pill.onclick = () => toggleAssignment(a.code);
+          pill.className = `px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition flex items-center space-x-1.5 cursor-pointer ${
+            isSelected
+              ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+          }`;
+          pill.innerHTML = `
+            <span>${isSelected ? '✓' : '+'}</span>
+            <span class="font-mono text-[9.5px] ${isSelected ? 'text-purple-200' : 'text-slate-400'}">${a.code}</span>
+            <span>${a.title}</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] ${isSelected ? 'bg-purple-700 text-purple-100' : 'bg-slate-100 text-slate-500'}">${a.averageScore}% avg (${a.submissionCount})</span>
+          `;
+          container.appendChild(pill);
+        });
+      }
+
+      // 3. Render Overview Metrics
+      const summary = data.summary || {};
+      document.getElementById('groupAvgDisplay').textContent = summary.overallAverage || '0';
+      document.getElementById('gradedCountDisplay').textContent = summary.totalStudentsGraded || '0';
+      document.getElementById('rosterCountDisplay').textContent = '/ ' + (summary.rosterCount || '0');
+      document.getElementById('missingBadge').textContent = (summary.missingCount || 0) + ' unsubmitted';
+
+      document.getElementById('tier3CountDisplay').textContent = summary.tier3Count || 0;
+      document.getElementById('tier2CountDisplay').textContent = summary.tier2Count || 0;
+      document.getElementById('tier1CountDisplay').textContent = summary.tier1Count || 0;
+
+      document.getElementById('tier3BadgeCount').textContent = summary.tier3Count || 0;
+      document.getElementById('tier2BadgeCount').textContent = summary.tier2Count || 0;
+      document.getElementById('tier1BadgeCount').textContent = summary.tier1Count || 0;
+      document.getElementById('groupTabBadge').textContent = (summary.tier3Count + summary.tier2Count + summary.tier1Count);
+
+      // Top Struggling Standard
+      if (summary.topStrugglingStandard) {
+        document.getElementById('topStdCodeDisplay').textContent = summary.topStrugglingStandard.code;
+        document.getElementById('topStdDescDisplay').textContent = summary.topStrugglingStandard.name || 'Core Curriculum Concept';
+        document.getElementById('topStdMissDisplay').textContent = `${summary.topStrugglingStandard.missCount} student misses across selected sets`;
+      } else {
+        document.getElementById('topStdCodeDisplay').textContent = 'None Detected';
+        document.getElementById('topStdDescDisplay').textContent = 'All students on level!';
+        document.getElementById('topStdMissDisplay').textContent = '0 misses';
+      }
+
+      // 4. Update Cutoff Labels
+      document.querySelectorAll('.cutoff3Label').forEach(el => el.textContent = currentTier3Cutoff);
+      document.querySelectorAll('.cutoff2Label').forEach(el => el.textContent = currentTier2Cutoff);
+      document.getElementById('tier1CutoffLabel').textContent = currentTier2Cutoff;
+
+      // 5. Render Small Groups Board
+      renderStudentList('tier3List', data.tiers?.tier3 || [], 'tier3');
+      renderStudentList('tier2List', data.tiers?.tier2 || [], 'tier2');
+      renderStudentList('tier1List', data.tiers?.tier1 || [], 'tier1');
+
+      // Missing students
+      const missingList = document.getElementById('missingList');
+      missingList.innerHTML = '';
+      const missing = data.missingStudents || [];
+      document.getElementById('missingBadgeTotal').textContent = missing.length;
+      if (missing.length === 0) {
+        missingList.innerHTML = '<span class="text-emerald-700 italic text-[11px]">All roster students have turned in their worksheets! 🎉</span>';
+      } else {
+        missing.forEach(m => {
+          const pill = document.createElement('span');
+          pill.className = 'px-2 py-1 bg-slate-100 border border-slate-200 rounded-md font-semibold text-slate-600 text-[10px]';
+          pill.textContent = `${m.fullName} (#${m.studentId}) • ${m.classPeriod}`;
+          missingList.appendChild(pill);
+        });
+      }
+
+      // 6. Render Item Analysis
+      renderItemAnalysis(data.itemAnalysis || []);
+    }
+
+    function renderStudentList(containerId, students, tierType) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+
+      if (!students || students.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-slate-400 italic text-xs">No students in this group</div>`;
+        return;
+      }
+
+      students.forEach(s => {
+        const card = document.createElement('div');
+        card.onclick = () => openStudentDrawer(s);
+        card.className = `p-3 rounded-xl border bg-white shadow-xs hover:shadow-md transition cursor-pointer space-y-2 border-slate-200 hover:border-purple-400`;
+
+        const missedBadges = (s.missedQuestions || []).slice(0, 3).map(m => {
+          return `<span class="px-1.5 py-0.2 bg-red-50 text-red-700 border border-red-200 rounded text-[9px] font-bold">
+            ${m.assignmentTitle.slice(0, 10)} Q${m.qNum} ${m.standard ? `[${m.standard}]` : ''}
+          </span>`;
+        }).join('');
+
+        const extraMissed = (s.missedQuestions || []).length > 3 ? `<span class="text-[9px] text-slate-400 font-bold">+${s.missedQuestions.length - 3} more</span>` : '';
+
+        const scoreColor = s.averageScore >= currentTier2Cutoff
+          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+          : s.averageScore >= currentTier3Cutoff
+          ? 'text-amber-800 bg-amber-50 border-amber-200'
+          : 'text-red-700 bg-red-50 border-red-200';
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="font-extrabold text-slate-900 text-xs block">${s.fullName}</span>
+              <span class="text-[9.5px] font-mono font-semibold text-slate-400">ID #${s.studentId} • ${s.classPeriod}</span>
+            </div>
+            <div class="px-2 py-0.5 rounded-lg border font-black text-xs ${scoreColor}">
+              ${s.averageScore}%
+            </div>
+          </div>
+
+          ${(s.missedQuestions && s.missedQuestions.length > 0) ? `
+            <div class="pt-1.5 border-t border-slate-100 flex items-center space-x-1 flex-wrap gap-y-1">
+              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mr-1">Missed:</span>
+              ${missedBadges}
+              ${extraMissed}
+            </div>
+          ` : `
+            <div class="pt-1 text-[9.5px] text-emerald-600 font-bold flex items-center space-x-1">
+              <span>✓ All problems solved correctly</span>
+            </div>
+          `}
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function renderItemAnalysis(items) {
+      const container = document.getElementById('itemAnalysisList');
+      container.innerHTML = '';
+      document.getElementById('itemTabBadge').textContent = items.length;
+
+      if (!items || items.length === 0) {
+        container.innerHTML = '<div class="p-6 text-center text-slate-400 italic text-xs">No questions to analyze for the selected set.</div>';
+        return;
+      }
+
+      items.forEach((item, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-2';
+
+        const barColor = item.accuracyPercent >= 80 ? 'bg-emerald-500' : item.accuracyPercent >= 60 ? 'bg-amber-500' : 'bg-red-500';
+        const badgeColor = item.accuracyPercent >= 80 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : item.accuracyPercent >= 60 ? 'text-amber-800 bg-amber-50 border-amber-200' : 'text-red-700 bg-red-50 border-red-200';
+
+        const missedNames = (item.missedStudents || []).map(st => {
+          return `<div class="p-2 bg-slate-50 rounded-lg border border-slate-200 text-[10.5px] space-y-0.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-900">${st.studentName} (#${st.studentId})</span>
+              <span class="text-[9px] font-mono text-slate-400">${st.classPeriod}</span>
+            </div>
+            <div class="text-slate-600">Answered: <span class="font-mono font-bold text-red-600">${st.studentAns || 'Blank'}</span></div>
+            ${st.feedback ? `<div class="text-[9.5px] text-slate-500 italic">${st.feedback}</div>` : ''}
+          </div>`;
+        }).join('');
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between cursor-pointer" onclick="toggleItemAccordion('item-drop-${idx}')">
+            <div class="flex-1 pr-3">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-slate-900 text-xs">${item.assignmentTitle} — Problem #${item.qNum}</span>
+                ${item.standard ? `<span class="px-1.5 py-0.2 bg-purple-50 text-purple-700 border border-purple-200 rounded font-bold text-[9px]">${item.standard}</span>` : ''}
+              </div>
+              <p class="text-[10px] text-slate-500 mt-0.5">${item.standardDescription || 'Core Math Standard'}</p>
+            </div>
+
+            <div class="flex items-center space-x-3 shrink-0">
+              <div class="w-32">
+                <div class="flex justify-between text-[9px] font-bold text-slate-500 mb-1">
+                  <span>Accuracy</span>
+                  <span>${item.accuracyPercent}%</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div class="${barColor} h-2 rounded-full" style="width: ${item.accuracyPercent}%"></div>
+                </div>
+              </div>
+              <span class="px-2 py-0.5 rounded-lg border font-extrabold text-xs ${badgeColor}">
+                ${item.correctCount}/${item.attempts} Correct
+              </span>
+              <span class="text-slate-400 font-bold text-xs">▼</span>
+            </div>
+          </div>
+
+          <div id="item-drop-${idx}" class="hidden pt-2.5 border-t border-slate-100 space-y-2">
+            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
+              Struggling Students (${(item.missedStudents || []).length}):
+            </span>
+            ${(item.missedStudents && item.missedStudents.length > 0) ? `
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                ${missedNames}
+              </div>
+            ` : `
+              <span class="text-emerald-700 italic text-[10.5px]">100% of students solved this question correctly!</span>
+            `}
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function toggleAssignment(code) {
+      if (selectedAssignmentCodes.includes(code)) {
+        selectedAssignmentCodes = selectedAssignmentCodes.filter(c => c !== code);
+      } else {
+        selectedAssignmentCodes.push(code);
+      }
+      loadDashboardData();
+    }
+
+    function applyPreset(type) {
+      if (!dashboardData || !dashboardData.assignments) return;
+      const all = dashboardData.assignments;
+      if (type === 'all') {
+        selectedAssignmentCodes = all.map(a => a.code);
+      } else if (type === 'clear') {
+        selectedAssignmentCodes = [];
+      } else if (type === 'pod') {
+        selectedAssignmentCodes = all.filter(a => a.title.toLowerCase().includes('pod')).map(a => a.code);
+      } else if (type === 'spiral') {
+        selectedAssignmentCodes = all.filter(a => a.title.toLowerCase().includes('spiral')).map(a => a.code);
+      } else if (type === 'quiz') {
+        selectedAssignmentCodes = all.filter(a => a.title.toLowerCase().includes('quiz') || a.title.toLowerCase().includes('test')).map(a => a.code);
+      }
+      loadDashboardData();
+    }
+
+    function onPeriodChange() {
+      currentPeriod = document.getElementById('periodSelect').value;
+      loadDashboardData();
+    }
+
+    function onCutoffChange() {
+      currentTier3Cutoff = Number(document.getElementById('cutoffTier3').value) || 60;
+      currentTier2Cutoff = Number(document.getElementById('cutoffTier2').value) || 80;
+      loadDashboardData();
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      const btnG = document.getElementById('tabBtnGroups');
+      const btnI = document.getElementById('tabBtnItems');
+      const viewG = document.getElementById('viewGroups');
+      const viewI = document.getElementById('viewItems');
+
+      if (tab === 'groups') {
+        btnG.className = 'px-4 py-2 border-b-2 border-purple-600 text-purple-700 font-extrabold text-xs flex items-center space-x-1.5 transition';
+        btnI.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center space-x-1.5 transition';
+        viewG.classList.remove('hidden');
+        viewI.classList.add('hidden');
+      } else {
+        btnI.className = 'px-4 py-2 border-b-2 border-purple-600 text-purple-700 font-extrabold text-xs flex items-center space-x-1.5 transition';
+        btnG.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center space-x-1.5 transition';
+        viewI.classList.remove('hidden');
+        viewG.classList.add('hidden');
+      }
+    }
+
+    function toggleMissingAccordion() {
+      const list = document.getElementById('missingList');
+      const chevron = document.getElementById('missingChevron');
+      list.classList.toggle('hidden');
+      chevron.textContent = list.classList.contains('hidden') ? '▼' : '▲';
+    }
+
+    function toggleItemAccordion(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden');
+    }
+
+    function openStudentDrawer(s) {
+      document.getElementById('drawerAvatarInitial').textContent = (s.fullName || 'S').charAt(0);
+      document.getElementById('drawerStudentName').textContent = s.fullName;
+      document.getElementById('drawerStudentId').textContent = s.studentId;
+      document.getElementById('drawerStudentPeriod').textContent = s.classPeriod;
+      document.getElementById('drawerStudentAvg').textContent = s.averageScore;
+
+      const badge = document.getElementById('drawerTierBadge');
+      if (s.averageScore < currentTier3Cutoff) {
+        badge.textContent = '🚨 Tier 3 Intensive';
+        badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200';
+      } else if (s.averageScore < currentTier2Cutoff) {
+        badge.textContent = '⚠️ Tier 2 Support';
+        badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200';
+      } else {
+        badge.textContent = '🌟 Tier 1 Mastery';
+        badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
+      }
+
+      // Standards gaps
+      const gapsContainer = document.getElementById('drawerGapsList');
+      gapsContainer.innerHTML = '';
+      if (!s.primaryGaps || s.primaryGaps.length === 0) {
+        gapsContainer.innerHTML = '<span class="text-emerald-700 italic text-[10.5px]">No standards gaps detected!</span>';
+      } else {
+        s.primaryGaps.forEach(g => {
+          const pill = document.createElement('span');
+          pill.className = 'px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded font-bold text-[9.5px]';
+          pill.textContent = g;
+          gapsContainer.appendChild(pill);
+        });
+      }
+
+      // Submissions
+      const subContainer = document.getElementById('drawerSubmissionsList');
+      subContainer.innerHTML = '';
+      (s.submissions || []).forEach(sub => {
+        const subCard = document.createElement('div');
+        subCard.className = 'bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2';
+
+        const qRows = (sub.questions || []).map(q => {
+          const qColor = q.score > 0 ? 'text-emerald-600' : 'text-red-600 font-bold';
+          return `
+            <div class="flex items-start justify-between py-1 border-b border-slate-200/50 text-[10px]">
+              <div>
+                <span class="font-bold text-slate-800">Q${q.qNum}:</span>
+                <span class="text-slate-600 ml-1">Ans: <span class="font-mono ${qColor}">${q.studentAns || '—'}</span></span>
+                ${q.standard ? `<span class="ml-1 text-purple-700 font-mono text-[9px]">[${q.standard}]</span>` : ''}
+                ${q.feedback ? `<p class="text-slate-500 italic text-[9px] mt-0.5">${q.feedback}</p>` : ''}
+              </div>
+              <span class="px-1.5 py-0.2 rounded font-mono font-bold text-[9px] ${q.score > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">
+                ${q.score} pt
+              </span>
+            </div>
+          `;
+        }).join('');
+
+        subCard.innerHTML = `
+          <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
+            <div>
+              <span class="font-bold text-slate-900 text-xs">${sub.assignmentTitle}</span>
+              <span class="text-[9px] font-mono text-slate-400 block">${sub.assignmentCode}</span>
+            </div>
+            <span class="px-2 py-0.5 rounded font-black text-xs ${sub.scorePercent >= 80 ? 'text-emerald-700 bg-emerald-50' : sub.scorePercent >= 60 ? 'text-amber-800 bg-amber-50' : 'text-red-700 bg-red-50'}">
+              ${sub.scorePercent}%
+            </span>
+          </div>
+          <div class="space-y-0.5">
+            ${qRows}
+          </div>
+        `;
+        subContainer.appendChild(subCard);
+      });
+
+      document.getElementById('studentDrawer').classList.remove('hidden');
+    }
+
+    function closeStudentDrawer() {
+      document.getElementById('studentDrawer').classList.add('hidden');
+    }
+
+    function copyGroupRosters() {
+      if (!dashboardData || !dashboardData.tiers) return;
+      const t3 = dashboardData.tiers.tier3 || [];
+      const t2 = dashboardData.tiers.tier2 || [];
+      const t1 = dashboardData.tiers.tier1 || [];
+
+      let text = `====================================================\n`;
+      text += `🎯 SMALL GROUPS & INTERVENTION ROSTER\n`;
+      text += `Period: ${currentPeriod} | Group Avg: ${dashboardData.summary?.overallAverage || 0}%\n`;
+      text += `Selected Sets: ${selectedAssignmentCodes.join(', ')}\n`;
+      text += `====================================================\n\n`;
+
+      text += `🚨 TIER 3 - INTENSIVE INTERVENTION (< ${currentTier3Cutoff}%):\n`;
+      if (t3.length === 0) text += `  (None)\n`;
+      t3.forEach((s, idx) => {
+        text += `  ${idx + 1}. ${s.fullName} (#${s.studentId}) - ${s.averageScore}% | Needs: ${s.primaryGaps.join(', ') || 'General'}\n`;
+      });
+      text += `\n`;
+
+      text += `⚠️ TIER 2 - STRATEGIC SUPPORT (${currentTier3Cutoff}% - ${currentTier2Cutoff - 1}%):\n`;
+      if (t2.length === 0) text += `  (None)\n`;
+      t2.forEach((s, idx) => {
+        text += `  ${idx + 1}. ${s.fullName} (#${s.studentId}) - ${s.averageScore}%\n`;
+      });
+      text += `\n`;
+
+      text += `🌟 TIER 1 - MASTERY & EXTENSION (≥ ${currentTier2Cutoff}%):\n`;
+      if (t1.length === 0) text += `  (None)\n`;
+      t1.forEach((s, idx) => {
+        text += `  ${idx + 1}. ${s.fullName} (#${s.studentId}) - ${s.averageScore}%\n`;
+      });
+
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Copied Small Groups to Clipboard! ✅\n\nYou can now paste directly into your lesson plans, Google Docs, or slides.');
+      }).catch(err => {
+        prompt('Copy your small groups below:', text);
+      });
+    }
+  </script>
+</body>
+</html>
