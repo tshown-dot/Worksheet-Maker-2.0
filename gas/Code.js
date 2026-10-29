@@ -1619,7 +1619,18 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     if (!code) continue;
     const title = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;
     const timestamp = row[0] instanceof Date ? row[0] : new Date(row[0] || Date.now());
-    const scoreVal = parseFloat(String(row[scorePctCol] || '').replace('%', '')) || 0;
+    const aPtsEarned = parseFloat(row[ptsCol]) || 0;
+    const aPtsTotal = parseFloat(row[totalPtsCol]) || 0;
+    const aRawScoreVal = row[scorePctCol];
+    let scoreVal = 0;
+    if (aPtsTotal > 0 && !isNaN(aPtsEarned)) {
+      scoreVal = Math.round((aPtsEarned / aPtsTotal) * 1000) / 10;
+    } else if (typeof aRawScoreVal === 'number') {
+      scoreVal = aRawScoreVal <= 1 && aRawScoreVal > 0 ? Math.round(aRawScoreVal * 1000) / 10 : Math.round(aRawScoreVal * 10) / 10;
+    } else {
+      const parsed = parseFloat(String(aRawScoreVal || '0').replace('%', '')) || 0;
+      scoreVal = parsed <= 1 && parsed > 0 ? Math.round(parsed * 1000) / 10 : Math.round(parsed * 10) / 10;
+    }
 
     if (!assignmentMap.has(code)) {
       assignmentMap.set(code, {
@@ -1701,9 +1712,18 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     }
 
     const studentObj = studentMap.get(normKey);
-    const scoreVal = parseFloat(String(row[scorePctCol] || '').replace('%', '')) || 0;
     const ptsEarned = parseFloat(row[ptsCol]) || 0;
     const ptsTotal = parseFloat(row[totalPtsCol]) || 0;
+    const rawScoreVal = row[scorePctCol];
+    let scoreVal = 0;
+    if (ptsTotal > 0 && !isNaN(ptsEarned)) {
+      scoreVal = Math.round((ptsEarned / ptsTotal) * 1000) / 10;
+    } else if (typeof rawScoreVal === 'number') {
+      scoreVal = rawScoreVal <= 1 && rawScoreVal > 0 ? Math.round(rawScoreVal * 1000) / 10 : Math.round(rawScoreVal * 10) / 10;
+    } else {
+      const parsed = parseFloat(String(rawScoreVal || '0').replace('%', '')) || 0;
+      scoreVal = parsed <= 1 && parsed > 0 ? Math.round(parsed * 1000) / 10 : Math.round(parsed * 10) / 10;
+    }
 
     const subQuestions = [];
     const assignmentTitle = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;

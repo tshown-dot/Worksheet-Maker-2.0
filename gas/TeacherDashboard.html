@@ -529,6 +529,24 @@
     }
 
     /**
+     * Helper to safely format score percentage (converting 0.0-1.0 decimals to 0-100%, or computing pointsEarned / pointsTotal)
+     */
+    function formatScorePct(sub) {
+      if (!sub) return 0;
+      if (typeof sub.pointsTotal === 'number' && sub.pointsTotal > 0 && typeof sub.pointsEarned === 'number') {
+        return Math.round((sub.pointsEarned / sub.pointsTotal) * 1000) / 10;
+      }
+      let s = sub.scorePercent;
+      if (typeof s === 'number') {
+        if (s <= 1 && s > 0) return Math.round(s * 1000) / 10;
+        return Math.round(s * 10) / 10;
+      }
+      const parsed = parseFloat(String(s || '0').replace('%', '')) || 0;
+      if (parsed <= 1 && parsed > 0) return Math.round(parsed * 1000) / 10;
+      return Math.round(parsed * 10) / 10;
+    }
+
+    /**
      * CORE CALCULATION:
      * Takes students for the active period, filters each student's scores by the selected assignment codes,
      * calculates each student's average %, sorts them, partitions them into numGroups, and renders.
@@ -546,7 +564,7 @@
         const matchingSubs = allSubs.filter(sub => checkedCodes.has(sub.assignmentCode.toUpperCase()));
 
         if (matchingSubs.length > 0) {
-          const scoreSum = matchingSubs.reduce((acc, sub) => acc + (sub.scorePercent || 0), 0);
+          const scoreSum = matchingSubs.reduce((acc, sub) => acc + formatScorePct(sub), 0);
           const avg = Math.round((scoreSum / matchingSubs.length) * 10) / 10;
           assessed.push({
             ...s,
@@ -705,9 +723,10 @@
             // Assignment score chips
             let chipsHtml = '';
             (student.matchingSubmissions || []).slice(0, 4).forEach(function(sub) {
-              const chipColor = sub.scorePercent >= 80 ? 'text-emerald-700 bg-emerald-50' : (sub.scorePercent >= 60 ? 'text-amber-700 bg-amber-50' : 'text-rose-700 bg-rose-50');
+              const chipScore = formatScorePct(sub);
+              const chipColor = chipScore >= 80 ? 'text-emerald-700 bg-emerald-50' : (chipScore >= 60 ? 'text-amber-700 bg-amber-50' : 'text-rose-700 bg-rose-50');
               chipsHtml += '<span class="px-1.5 py-0.5 rounded font-mono text-[9px] font-bold ' + chipColor + '" title="' + escapeHtml(sub.assignmentTitle) + '">' +
-                escapeHtml(sub.assignmentCode) + ': ' + sub.scorePercent + '%' +
+                escapeHtml(sub.assignmentCode) + ': ' + chipScore + '%' +
               '</span>';
             });
 
@@ -812,7 +831,8 @@
       listCont.innerHTML = '';
 
       (student.matchingSubmissions || []).forEach(function(sub) {
-        const scoreBadgeColor = sub.scorePercent >= 80 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : (sub.scorePercent >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+        const subScore = formatScorePct(sub);
+        const scoreBadgeColor = subScore >= 80 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : (subScore >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
 
         let questionsHtml = '';
         (sub.questions || []).forEach(function(q) {
@@ -843,7 +863,7 @@
               '<span class="font-extrabold text-slate-900 text-xs">' + escapeHtml(sub.assignmentTitle) + '</span>' +
             '</div>' +
             '<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + scoreBadgeColor + '">' +
-              sub.scorePercent + '% (' + sub.pointsEarned + '/' + sub.pointsTotal + ' pts)' +
+              subScore + '% (' + sub.pointsEarned + '/' + sub.pointsTotal + ' pts)' +
             '</span>' +
           '</div>' +
           (questionsHtml ? ('<div class="space-y-1.5 pt-1">' + questionsHtml + '</div>') : '<div class="text-[10px] text-slate-400 italic">No question breakdown recorded.</div>');
@@ -864,6 +884,7 @@
 
     /**
      * Copies formatted groups to clipboard for easy pasting into lesson plans
+     * (Excludes scores and percentages for student privacy when displayed or shared)
      */
     function copyGroupRosters() {
       if (!currentCalculatedGroups || currentCalculatedGroups.length === 0) {
@@ -874,20 +895,16 @@
       const pLabel = selectedPeriod === 'ALL' ? 'All Classes' : selectedPeriod;
       const codes = Array.from(selectedAssignmentCodes).join(', ');
 
-      let text = '🎯 SMALL GROUPS BY AVERAGE (' + pLabel + ')\n';
-      text += 'Included Assignments: ' + (codes || 'None') + '\n';
-      text += 'Total Students Assessed: ' + currentAssessedStudents.length + '\n';
-      text += 'Class Average: ' + document.getElementById('kpiClassAverage').innerText + '\n';
-      text += 'Grouping Method: ' + (groupingStrategy === 'ranked' ? 'Ranked by Average' : 'Balanced Teams') + '\n\n';
+      let text = '🎯 SMALL GROUPS - ' + pLabel + '\n';
+      if (codes) text += 'Assignments: ' + codes + '\n';
+      text += '\n';
 
       currentCalculatedGroups.forEach(function(group, idx) {
-        const groupScoreSum = group.reduce((acc, s) => acc + s.calculatedAverage, 0);
-        const gAvg = group.length > 0 ? Math.round((groupScoreSum / group.length) * 10) / 10 : 0;
         text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        text += 'GROUP ' + (idx + 1) + ' (Avg: ' + gAvg + '% • ' + group.length + ' Students)\n';
+        text += 'GROUP ' + (idx + 1) + ' (' + group.length + ' Students)\n';
         text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         group.forEach(function(s) {
-          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + ' (#' + s.studentId + ') — ' + s.calculatedAverage + '%\n';
+          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + '\n';
         });
         text += '\n';
       });
@@ -897,12 +914,12 @@
         text += 'UNASSESSED / ABSENT STUDENTS (' + currentUnassessedStudents.length + ')\n';
         text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         currentUnassessedStudents.forEach(function(s) {
-          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + ' (#' + s.studentId + ')\n';
+          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + '\n';
         });
       }
 
       navigator.clipboard.writeText(text).then(function() {
-        showToast('✅ Copied ' + numGroups + ' group rosters to clipboard!', '📋');
+        showToast('✅ Copied ' + numGroups + ' group rosters to clipboard (privacy-safe: no scores)!', '📋');
       }).catch(function() {
         showToast('Unable to copy automatically. Please try again.', '⚠️');
       });
