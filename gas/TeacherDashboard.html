@@ -2,7 +2,7 @@
 <html>
 <head>
   <base target="_top">
-  <title>Small Groups & Intervention Command Center</title>
+  <title>Small Groups by Average</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -19,25 +19,26 @@
     @media print {
       .no-print { display: none !important; }
       body { background: white !important; padding: 0 !important; }
+      .print-page { break-inside: avoid; }
     }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col text-xs antialiased">
 
   <!-- TOP HEADER -->
-  <header class="no-print bg-slate-900 text-white px-5 py-3.5 shadow-md flex items-center justify-between sticky top-0 z-30">
+  <header class="no-print bg-slate-900 text-white px-5 py-3 shadow-md flex items-center justify-between sticky top-0 z-30">
     <div class="flex items-center space-x-3">
       <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white text-base shadow-sm">
         🎯
       </div>
       <div>
         <div class="flex items-center space-x-2">
-          <h1 class="text-sm font-bold text-white tracking-tight">Small Groups & Intervention Command Center</h1>
+          <h1 class="text-sm font-extrabold text-white tracking-tight">Small Groups by Average</h1>
           <span class="text-[9.5px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
             Worksheet Maker 2.0
           </span>
         </div>
-        <p class="text-[10px] text-slate-400">Targeted Tier 3, Tier 2, and Mastery grouping based on live student performance</p>
+        <p class="text-[10px] text-slate-400">Filter by class, pick assignments, and group students by average into any number of groups</p>
       </div>
     </div>
 
@@ -47,7 +48,7 @@
         class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
         title="Copy formatted small groups for lesson plans or Google Docs"
       >
-        <span>📋 Copy Groups for Lesson Plan</span>
+        <span>📋 Copy Groups</span>
       </button>
 
       <button
@@ -55,7 +56,7 @@
         class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
         title="Print small group lists"
       >
-        <span>🖨️ Print Groups</span>
+        <span>🖨️ Print</span>
       </button>
 
       <button
@@ -69,783 +70,785 @@
     </div>
   </header>
 
-  <!-- CONTROLS & FILTER BAR -->
-  <div class="no-print bg-white border-b border-slate-200 px-5 py-3 shadow-xs space-y-2.5">
-    <!-- Row 1: Period Selector + Presets + Cutoffs -->
+  <!-- CONTROLS & CONFIGURATION PANEL -->
+  <div class="no-print bg-white border-b border-slate-200 px-5 py-3 shadow-xs space-y-3">
+    
+    <!-- ROW 1: STEP CONTROLS (Period, Number of Groups, Grouping Style) -->
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <!-- Period Selector -->
-      <div class="flex items-center space-x-2">
+      
+      <!-- STEP 1: CLASS / PERIOD -->
+      <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
         <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
-          Period:
+          1. Class / Period:
         </label>
         <select
           id="periodSelect"
           onchange="onPeriodChange()"
-          class="bg-slate-50 border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
+          class="bg-white border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-purple-500 transition cursor-pointer"
         >
-          <option value="ALL">All Class Periods</option>
+          <option value="ALL">🌟 All Class Periods</option>
         </select>
       </div>
 
-      <!-- Quick Assignment Preset Buttons -->
-      <div class="flex items-center space-x-1.5 flex-wrap">
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Sets:</span>
-        <button
-          onclick="applyPreset('all')"
-          class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold text-[10px] transition"
-        >
-          Select All
-        </button>
-        <button
-          onclick="applyPreset('pod')"
-          class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md font-bold text-[10px] transition"
-        >
-          ★ All PODs
-        </button>
-        <button
-          onclick="applyPreset('spiral')"
-          class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-md font-bold text-[10px] transition"
-        >
-          🔄 Spiral Reviews
-        </button>
-        <button
-          onclick="applyPreset('quiz')"
-          class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 rounded-md font-bold text-[10px] transition"
-        >
-          📋 Quizzes
-        </button>
-        <button
-          onclick="applyPreset('clear')"
-          class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-md font-medium text-[10px] transition"
-        >
-          Clear
-        </button>
+      <!-- STEP 2: NUMBER OF GROUPS -->
+      <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+        <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
+          2. Number of Groups:
+        </label>
+        <div class="flex items-center space-x-1" id="groupCountButtons">
+          <button type="button" onclick="setGroupCount(2)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">2</button>
+          <button type="button" onclick="setGroupCount(3)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">3</button>
+          <button type="button" onclick="setGroupCount(4)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-purple-600 bg-purple-600 text-white shadow-xs">4</button>
+          <button type="button" onclick="setGroupCount(5)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">5</button>
+          <button type="button" onclick="setGroupCount(6)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">6</button>
+        </div>
+        <div class="flex items-center space-x-1 pl-1 border-l border-slate-200">
+          <button type="button" onclick="adjustGroupCount(-1)" class="w-6 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 flex items-center justify-center font-bold text-slate-700">-</button>
+          <span id="currentGroupCountLabel" class="font-bold text-purple-700 text-xs px-1">4</span>
+          <button type="button" onclick="adjustGroupCount(1)" class="w-6 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 flex items-center justify-center font-bold text-slate-700">+</button>
+        </div>
       </div>
 
-      <!-- Cutoff Adjusters -->
-      <div class="flex items-center space-x-3 text-[10px] font-semibold text-slate-600 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
-        <span class="text-slate-400 font-bold uppercase tracking-wider">Tier Cutoffs:</span>
-        <div class="flex items-center space-x-1">
-          <span class="w-2 h-2 rounded-full bg-red-500"></span>
-          <span>Tier 3 &lt;</span>
-          <input
-            type="number"
-            id="cutoffTier3"
-            value="60"
-            min="10"
-            max="90"
-            step="5"
-            onchange="onCutoffChange()"
-            class="w-11 px-1 py-0.5 border border-slate-300 rounded text-center font-bold text-xs"
-          />
-          <span>%</span>
+      <!-- STEP 3: GROUPING METHOD -->
+      <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+        <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
+          3. Group By:
+        </label>
+        <select
+          id="groupingStrategy"
+          onchange="onStrategyChange()"
+          class="bg-white border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-purple-500 transition cursor-pointer"
+        >
+          <option value="ranked">📊 Ranked by Average (Ability / Tiered)</option>
+          <option value="balanced">⚖️ Balanced Teams (Mixed Ability)</option>
+        </select>
+      </div>
+
+    </div>
+
+    <!-- ROW 2: ASSIGNMENT CHECKLIST SELECTOR -->
+    <div class="border border-slate-200 rounded-xl p-3 bg-slate-50/70 space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+        <div class="flex items-center space-x-2">
+          <span class="font-black text-slate-800 text-xs flex items-center space-x-1.5">
+            <span>📝</span>
+            <span>Select Assignments to Average:</span>
+          </span>
+          <span id="selectedAssignmentsCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+            0 selected
+          </span>
         </div>
-        <div class="flex items-center space-x-1">
-          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-          <span>Tier 2 &lt;</span>
-          <input
-            type="number"
-            id="cutoffTier2"
-            value="80"
-            min="20"
-            max="95"
-            step="5"
-            onchange="onCutoffChange()"
-            class="w-11 px-1 py-0.5 border border-slate-300 rounded text-center font-bold text-xs"
-          />
-          <span>%</span>
+
+        <!-- Presets -->
+        <div class="flex items-center space-x-1.5 flex-wrap">
+          <span class="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider mr-1">Presets:</span>
+          <button onclick="applyPreset('all')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+            Select All
+          </button>
+          <button onclick="applyPreset('none')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+            Clear
+          </button>
+          <button onclick="applyPreset('last3')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+            Last 3
+          </button>
+          <button onclick="applyPreset('last5')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+            Last 5
+          </button>
+          <button onclick="applyPreset('pod')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+            PODs Only
+          </button>
+          <button onclick="applyPreset('review')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+            Reviews Only
+          </button>
         </div>
-        <div class="flex items-center space-x-1 text-emerald-700">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span>Tier 1 ≥ <span id="tier1CutoffLabel">80</span>%</span>
-        </div>
+      </div>
+
+      <!-- Checklist Items Container (Scrollable) -->
+      <div id="assignmentsChecklist" class="flex flex-wrap gap-2 max-h-28 overflow-y-auto custom-scroll pt-1">
+        <div class="text-xs text-slate-400 italic py-1">Loading graded assignments from Gradebook...</div>
       </div>
     </div>
 
-    <!-- Row 2: Selected Assignments Multi-Select Pills -->
-    <div class="space-y-1">
-      <div class="flex items-center justify-between text-[10px]">
-        <span class="font-bold text-slate-600 uppercase tracking-wider">
-          Included Assignments in this Group (<span id="selectedCountLabel">0</span> selected):
-        </span>
-        <span class="text-slate-400">Click any assignment pill to toggle it in or out</span>
+  </div>
+
+  <!-- KPI SUMMARY STRIP -->
+  <div class="no-print bg-white border-b border-slate-200 px-5 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs">
+    <div class="flex items-center space-x-5">
+      <div>
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Class Average</span>
+        <span id="kpiClassAverage" class="text-base font-black text-slate-900">—</span>
       </div>
-      <div id="assignmentPillsContainer" class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scroll p-1 bg-slate-50 rounded-lg border border-slate-200">
-        <div class="text-slate-400 italic text-[11px] p-1">Loading assignments...</div>
+      <div class="border-l border-slate-200 pl-4">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assessed Students</span>
+        <span id="kpiAssessedStudents" class="text-base font-black text-slate-900">—</span>
       </div>
+      <div class="border-l border-slate-200 pl-4">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assignments Selected</span>
+        <span id="kpiAssignmentsCount" class="text-base font-black text-purple-700">—</span>
+      </div>
+      <div class="border-l border-slate-200 pl-4">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Target Grouping</span>
+        <span id="kpiGroupingMeta" class="text-base font-black text-slate-700">4 Groups</span>
+      </div>
+    </div>
+
+    <!-- View Mode Switcher -->
+    <div class="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+      <button
+        id="btnViewCards"
+        onclick="switchView('cards')"
+        class="px-3 py-1 rounded-md font-bold text-xs bg-white text-purple-800 shadow-xs transition cursor-pointer"
+      >
+        📊 Small Group Columns
+      </button>
+      <button
+        id="btnViewTable"
+        onclick="switchView('table')"
+        class="px-3 py-1 rounded-md font-semibold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer"
+      >
+        📋 Student Roster Table
+      </button>
     </div>
   </div>
 
-  <!-- SUMMARY OVERVIEW CARDS -->
-  <div class="px-5 pt-3.5 pb-2">
-    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
-      <!-- 1. Group Average -->
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-        <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400">Group Average</span>
-        <div class="flex items-baseline space-x-1.5 mt-1">
-          <span id="groupAvgDisplay" class="text-2xl font-black text-slate-900">—</span>
-          <span class="text-xs font-bold text-slate-400">%</span>
-        </div>
-        <span id="groupAvgBadge" class="text-[9.5px] font-semibold text-slate-500 mt-1">Based on selected set</span>
+  <!-- MAIN CONTENT AREA -->
+  <main class="flex-1 p-5 overflow-y-auto custom-scroll space-y-5">
+
+    <!-- VIEW 1: DYNAMIC SMALL GROUP COLUMNS -->
+    <div id="viewCardsContainer" class="space-y-5">
+      <!-- Dynamic Columns Grid (Calculated on the fly for 2, 3, 4, 5, 6 groups) -->
+      <div id="groupsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+        <!-- Rendered via JavaScript -->
       </div>
 
-      <!-- 2. Graded Coverage -->
-      <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
-        <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400">Students Graded</span>
-        <div class="flex items-baseline space-x-1 mt-1">
-          <span id="gradedCountDisplay" class="text-2xl font-black text-slate-900">—</span>
-          <span id="rosterCountDisplay" class="text-xs font-bold text-slate-400">/ —</span>
-        </div>
-        <span id="missingBadge" class="text-[9.5px] font-semibold text-amber-600 mt-1">— missing submissions</span>
-      </div>
-
-      <!-- 3. Tier 3 Intensive -->
-      <div class="bg-red-50/70 p-3 rounded-xl border border-red-200 shadow-xs flex flex-col justify-between">
-        <span class="text-[9.5px] font-black uppercase tracking-wider text-red-800 flex items-center space-x-1">
-          <span class="w-2 h-2 rounded-full bg-red-600"></span>
-          <span>Tier 3 Intensive</span>
-        </span>
-        <div class="flex items-baseline space-x-1.5 mt-1">
-          <span id="tier3CountDisplay" class="text-2xl font-black text-red-900">0</span>
-          <span class="text-xs font-bold text-red-700">students</span>
-        </div>
-        <span class="text-[9.5px] font-bold text-red-700 mt-1">Needs direct re-teach</span>
-      </div>
-
-      <!-- 4. Tier 2 Support -->
-      <div class="bg-amber-50/70 p-3 rounded-xl border border-amber-200 shadow-xs flex flex-col justify-between">
-        <span class="text-[9.5px] font-black uppercase tracking-wider text-amber-800 flex items-center space-x-1">
-          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-          <span>Tier 2 Strategic</span>
-        </span>
-        <div class="flex items-baseline space-x-1.5 mt-1">
-          <span id="tier2CountDisplay" class="text-2xl font-black text-amber-900">0</span>
-          <span class="text-xs font-bold text-amber-700">students</span>
-        </div>
-        <span class="text-[9.5px] font-bold text-amber-700 mt-1">Targeted error coaching</span>
-      </div>
-
-      <!-- 5. Tier 1 Mastery -->
-      <div class="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 shadow-xs flex flex-col justify-between">
-        <span class="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 flex items-center space-x-1">
-          <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
-          <span>Tier 1 Mastery</span>
-        </span>
-        <div class="flex items-baseline space-x-1.5 mt-1">
-          <span id="tier1CountDisplay" class="text-2xl font-black text-emerald-900">0</span>
-          <span class="text-xs font-bold text-emerald-700">students</span>
-        </div>
-        <span class="text-[9.5px] font-bold text-emerald-700 mt-1">Ready for extension</span>
-      </div>
-
-      <!-- 6. Top Struggling Standard -->
-      <div class="bg-purple-50/70 p-3 rounded-xl border border-purple-200 shadow-xs flex flex-col justify-between">
-        <span class="text-[9.5px] font-black uppercase tracking-wider text-purple-800 flex items-center space-x-1">
-          <span>🎯 Top Priority Gap</span>
-        </span>
-        <div class="mt-1">
-          <span id="topStdCodeDisplay" class="text-sm font-black text-purple-950 block truncate">—</span>
-          <span id="topStdDescDisplay" class="text-[9.5px] font-semibold text-purple-700 line-clamp-1 mt-0.5">No struggle standard detected</span>
-        </div>
-        <span id="topStdMissDisplay" class="text-[9px] font-extrabold text-purple-600 mt-1 block">0 total misses</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- TAB SWITCHER -->
-  <div class="no-print px-5 pt-2 flex items-center space-x-2 border-b border-slate-200 bg-white">
-    <button
-      id="tabBtnGroups"
-      onclick="switchTab('groups')"
-      class="px-4 py-2 border-b-2 border-purple-600 text-purple-700 font-extrabold text-xs flex items-center space-x-1.5 transition"
-    >
-      <span>👥 Small Groups & Intervention Board</span>
-      <span id="groupTabBadge" class="px-1.5 py-0.2 bg-purple-100 text-purple-800 rounded-full text-[10px] font-bold">0</span>
-    </button>
-    <button
-      id="tabBtnItems"
-      onclick="switchTab('items')"
-      class="px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center space-x-1.5 transition"
-    >
-      <span>🔍 Question & Misconception Breakdown</span>
-      <span id="itemTabBadge" class="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold">0</span>
-    </button>
-  </div>
-
-  <!-- MAIN VIEW CONTENT -->
-  <main class="flex-1 px-5 py-4 overflow-y-auto custom-scroll">
-
-    <!-- VIEW 1: SMALL GROUPS BOARD -->
-    <div id="viewGroups" class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-
-        <!-- COLUMN 1: TIER 3 INTENSIVE INTERVENTION -->
-        <div class="bg-red-50/40 rounded-2xl border-2 border-red-200 p-3.5 space-y-3">
-          <div class="flex items-center justify-between pb-2 border-b border-red-200">
-            <div class="flex items-center space-x-2">
-              <span class="w-3 h-3 rounded-full bg-red-600 shadow-xs"></span>
-              <h2 class="font-black text-slate-900 text-xs uppercase tracking-wide">Tier 3: Intensive Intervention</h2>
-            </div>
-            <span id="tier3BadgeCount" class="px-2 py-0.5 rounded-full bg-red-600 text-white font-extrabold text-[10px]">0</span>
-          </div>
-          <p class="text-[10px] text-red-800/80 leading-relaxed font-medium">
-            Scores &lt; <span class="font-bold cutoff3Label">60</span>%. Pull for teacher-led re-teaching and guided problem modeling.
-          </p>
-
-          <div id="tier3List" class="space-y-2.5 max-h-[58vh] overflow-y-auto custom-scroll pr-1">
-            <div class="p-4 text-center text-slate-400 italic text-xs">No students in Tier 3 🎉</div>
-          </div>
-        </div>
-
-        <!-- COLUMN 2: TIER 2 STRATEGIC SUPPORT -->
-        <div class="bg-amber-50/40 rounded-2xl border-2 border-amber-200 p-3.5 space-y-3">
-          <div class="flex items-center justify-between pb-2 border-b border-amber-200">
-            <div class="flex items-center space-x-2">
-              <span class="w-3 h-3 rounded-full bg-amber-500 shadow-xs"></span>
-              <h2 class="font-black text-slate-900 text-xs uppercase tracking-wide">Tier 2: Strategic Support</h2>
-            </div>
-            <span id="tier2BadgeCount" class="px-2 py-0.5 rounded-full bg-amber-600 text-white font-extrabold text-[10px]">0</span>
-          </div>
-          <p class="text-[10px] text-amber-800/80 leading-relaxed font-medium">
-            Scores <span class="font-bold cutoff3Label">60</span>% – <span class="font-bold cutoff2Label">79</span>%. Target specific error patterns and misconception coaching.
-          </p>
-
-          <div id="tier2List" class="space-y-2.5 max-h-[58vh] overflow-y-auto custom-scroll pr-1">
-            <div class="p-4 text-center text-slate-400 italic text-xs">No students in Tier 2</div>
-          </div>
-        </div>
-
-        <!-- COLUMN 3: TIER 1 MASTERY & EXTENSION -->
-        <div class="bg-emerald-50/40 rounded-2xl border-2 border-emerald-200 p-3.5 space-y-3">
-          <div class="flex items-center justify-between pb-2 border-b border-emerald-200">
-            <div class="flex items-center space-x-2">
-              <span class="w-3 h-3 rounded-full bg-emerald-600 shadow-xs"></span>
-              <h2 class="font-black text-slate-900 text-xs uppercase tracking-wide">Tier 1: Mastery & Extension</h2>
-            </div>
-            <span id="tier1BadgeCount" class="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-extrabold text-[10px]">0</span>
-          </div>
-          <p class="text-[10px] text-emerald-800/80 leading-relaxed font-medium">
-            Scores ≥ <span class="font-bold cutoff2Label">80</span>%. On grade level. Ready for extension puzzles, peer coaching, or independent depth work.
-          </p>
-
-          <div id="tier1List" class="space-y-2.5 max-h-[58vh] overflow-y-auto custom-scroll pr-1">
-            <div class="p-4 text-center text-slate-400 italic text-xs">No students in Tier 1 yet</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MISSING / UNGRADED STUDENTS ACCORDION -->
-      <div id="missingSection" class="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
-        <div class="flex items-center justify-between cursor-pointer" onclick="toggleMissingAccordion()">
+      <!-- UNASSESSED / ABSENT STUDENTS DRAWER -->
+      <div id="unassessedStudentsCard" class="bg-white rounded-xl border border-slate-200 shadow-xs p-3.5 space-y-2">
+        <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <span class="text-sm">💤</span>
-            <span class="font-bold text-slate-800 text-xs">Roster Students with No Submissions on Selected Worksheets</span>
-            <span id="missingBadgeTotal" class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full font-bold text-[10px]">0</span>
+            <span class="text-sm">⚠️</span>
+            <span class="font-extrabold text-slate-800 text-xs">Unassessed / Absent Students on Selected Assignments:</span>
+            <span id="unassessedCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+              0
+            </span>
           </div>
-          <span id="missingChevron" class="text-slate-400 font-bold text-xs transition-transform">▼</span>
+          <span class="text-[10px] text-slate-400">Rostered in period but no scores recorded for these specific assignments</span>
         </div>
-        <div id="missingList" class="hidden mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
-          <!-- Filled dynamically -->
+        <div id="unassessedStudentsList" class="flex flex-wrap gap-1.5 pt-1">
+          <span class="text-xs text-slate-400 italic">None. All students have submissions for the selected assignments.</span>
         </div>
       </div>
     </div>
 
-    <!-- VIEW 2: QUESTION & MISCONCEPTION BREAKDOWN -->
-    <div id="viewItems" class="hidden space-y-3">
-      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+    <!-- VIEW 2: FULL STUDENT PERFORMANCE TABLE -->
+    <div id="viewTableContainer" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-3.5 border-b border-slate-200 flex items-center justify-between">
         <div>
-          <h2 class="font-bold text-slate-900 text-xs">Problem Accuracy Ranking across Selected Assignments</h2>
-          <p class="text-[10px] text-slate-500">Ranked from lowest accuracy to highest accuracy so you know what whole-class lesson to start with.</p>
+          <h2 class="font-extrabold text-slate-900 text-xs uppercase tracking-wide">Student Performance & Group Allocation</h2>
+          <p class="text-[11px] text-slate-500">Individual student scores across selected assignments and assigned group</p>
         </div>
-        <span class="text-[10px] font-bold text-slate-400">Click any problem row to view struggling students and written work</span>
+        <span id="tableStudentCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">0 students</span>
       </div>
-
-      <div id="itemAnalysisList" class="space-y-2">
-        <!-- Filled dynamically -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[10px]">
+            <tr>
+              <th class="p-3">Rank</th>
+              <th class="p-3">ID #</th>
+              <th class="p-3">Student Name</th>
+              <th class="p-3">Period</th>
+              <th class="p-3 text-right">Combined Average</th>
+              <th class="p-3 text-center">Assigned Group</th>
+              <th class="p-3 text-right">Assignments Completed</th>
+            </tr>
+          </thead>
+          <tbody id="studentTableBody" class="divide-y divide-slate-100 text-slate-800">
+            <!-- Populated via JavaScript -->
+          </tbody>
+        </table>
       </div>
     </div>
+
   </main>
 
-  <!-- SLIDE-OVER STUDENT DEEP-DIVE DRAWER -->
-  <div id="studentDrawer" class="hidden fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-2xs flex justify-end">
-    <div class="w-full max-w-lg bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
-      <!-- Drawer Header -->
-      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-          <div class="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center font-bold text-sm text-white">
-            <span id="drawerAvatarInitial">S</span>
-          </div>
-          <div>
-            <h3 id="drawerStudentName" class="font-bold text-sm text-white leading-tight">Student Detail</h3>
-            <p class="text-[10px] text-slate-400">
-              ID #<span id="drawerStudentId" class="font-mono text-purple-300 font-bold">--</span> • <span id="drawerStudentPeriod">Period --</span>
-            </p>
-          </div>
-        </div>
-        <button
-          onclick="closeStudentDrawer()"
-          class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
-        >
-          ✕
-        </button>
-      </div>
-
-      <!-- Drawer Content -->
-      <div class="flex-1 p-5 overflow-y-auto custom-scroll space-y-4">
-        <!-- Score Overview -->
-        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between">
-          <div>
-            <span class="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400 block">Average on Selected Set</span>
-            <div class="flex items-baseline space-x-1.5 mt-0.5">
-              <span id="drawerStudentAvg" class="text-2xl font-black text-slate-900">—</span>
-              <span class="text-xs font-bold text-slate-400">%</span>
+  <!-- SLIDE-OVER DRAWER: STUDENT PERFORMANCE DEEP-DIVE -->
+  <div id="studentDrawer" class="no-print fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeStudentDrawer()"></div>
+    <div class="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+        <!-- Drawer Header -->
+        <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center font-bold text-white text-sm">
+              🎓
+            </div>
+            <div>
+              <h2 id="drawerStudentName" class="font-black text-sm text-white leading-tight">Student Name</h2>
+              <div class="flex items-center space-x-2 text-[10px] text-purple-200">
+                <span id="drawerStudentId">ID #--</span>
+                <span>•</span>
+                <span id="drawerStudentPeriod">Period --</span>
+              </div>
             </div>
           </div>
-          <div id="drawerTierBadge" class="px-2.5 py-1 rounded-full text-xs font-bold">
-            Tier --
+          <button onclick="closeStudentDrawer()" class="text-slate-400 hover:text-white text-xl p-1 cursor-pointer">✕</button>
+        </div>
+
+        <!-- Drawer Content -->
+        <div class="flex-1 overflow-y-auto custom-scroll p-5 space-y-4">
+          <!-- Summary Card -->
+          <div class="p-3.5 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] font-bold text-purple-700 uppercase block">Selected Assignments Average</span>
+              <span id="drawerStudentAverage" class="text-2xl font-black text-purple-900">—</span>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] font-bold text-slate-500 uppercase block">Assigned Group</span>
+              <span id="drawerStudentGroup" class="px-2.5 py-1 rounded-lg bg-purple-600 text-white font-black text-xs inline-block mt-0.5">Group 1</span>
+            </div>
+          </div>
+
+          <!-- Assignment List Breakdown -->
+          <div>
+            <h3 class="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Assignment Scores & Items</h3>
+            <div id="drawerAssignmentsList" class="space-y-3">
+              <!-- Rendered via JS -->
+            </div>
           </div>
         </div>
 
-        <!-- Struggling Standards Gaps -->
-        <div id="drawerGapsSection" class="space-y-1.5">
-          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Struggling Standards</span>
-          <div id="drawerGapsList" class="flex flex-wrap gap-1.5">
-            <!-- Badges -->
-          </div>
+        <!-- Drawer Footer -->
+        <div class="p-3.5 border-t border-slate-200 bg-slate-50 flex justify-end">
+          <button onclick="closeStudentDrawer()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-xs cursor-pointer">
+            Close Drawer
+          </button>
         </div>
-
-        <!-- Submissions & Work breakdown -->
-        <div class="space-y-3">
-          <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 block">Submissions Breakdown</span>
-          <div id="drawerSubmissionsList" class="space-y-3">
-            <!-- Filled dynamically -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Drawer Footer -->
-      <div class="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
-        <button
-          onclick="closeStudentDrawer()"
-          class="px-4 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-semibold hover:bg-slate-700 transition"
-        >
-          Close Drawer
-        </button>
       </div>
     </div>
   </div>
 
-  <!-- JAVASCRIPT LOGIC -->
-  <script>
-    let dashboardData = null;
-    let selectedAssignmentCodes = [];
-    let currentPeriod = 'ALL';
-    let currentTier3Cutoff = 60;
-    let currentTier2Cutoff = 80;
-    let activeTab = 'groups';
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastNotification" class="no-print fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center space-x-2 text-xs font-bold transition transform translate-y-20 opacity-0 duration-200">
+    <span id="toastIcon">📋</span>
+    <span id="toastMessage">Notification message</span>
+  </div>
 
-    window.addEventListener('DOMContentLoaded', () => {
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    // State
+    let rawDashboardData = null;
+    let selectedPeriod = 'ALL';
+    let selectedAssignmentCodes = new Set();
+    let numGroups = 4;
+    let groupingStrategy = 'ranked'; // 'ranked' or 'balanced'
+    let currentCalculatedGroups = [];
+    let currentAssessedStudents = [];
+    let currentUnassessedStudents = [];
+
+    // Distinct Theme Colors for Group Cards
+    const GROUP_THEMES = [
+      { name: 'Purple', bg: 'bg-purple-50/70', border: 'border-purple-200', text: 'text-purple-900', badge: 'bg-purple-600 text-white', ring: 'ring-purple-400' },
+      { name: 'Blue',   bg: 'bg-blue-50/70',   border: 'border-blue-200',   text: 'text-blue-900',   badge: 'bg-blue-600 text-white',   ring: 'ring-blue-400' },
+      { name: 'Emerald',bg: 'bg-emerald-50/70',border: 'border-emerald-200',text: 'text-emerald-900',badge: 'bg-emerald-600 text-white',ring: 'ring-emerald-400' },
+      { name: 'Amber',  bg: 'bg-amber-50/70',  border: 'border-amber-200',  text: 'text-amber-900',  badge: 'bg-amber-600 text-white',  ring: 'ring-amber-400' },
+      { name: 'Rose',   bg: 'bg-rose-50/70',   border: 'border-rose-200',   text: 'text-rose-900',   badge: 'bg-rose-600 text-white',   ring: 'ring-rose-400' },
+      { name: 'Cyan',   bg: 'bg-cyan-50/70',   border: 'border-cyan-200',   text: 'text-cyan-900',   badge: 'bg-cyan-600 text-white',   ring: 'ring-cyan-400' },
+      { name: 'Indigo', bg: 'bg-indigo-50/70', border: 'border-indigo-200', text: 'text-indigo-900', badge: 'bg-indigo-600 text-white', ring: 'ring-indigo-400' }
+    ];
+
+    window.addEventListener('load', function() {
       loadDashboardData();
     });
 
     function loadDashboardData() {
-      const icon = document.getElementById('refreshIcon');
-      if (icon) icon.classList.add('animate-spin');
+      const refreshIcon = document.getElementById('refreshIcon');
+      refreshIcon.classList.add('animate-spin');
 
-      if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(renderDashboard)
-          .withFailureHandler((err) => {
-            alert('Error loading dashboard: ' + err.message);
-            if (icon) icon.classList.remove('animate-spin');
-          })
-          .getInterventionDashboardData(currentPeriod, selectedAssignmentCodes, currentTier3Cutoff, currentTier2Cutoff);
-      } else {
-        // Fallback for standalone / testing
-        fetch('?action=interventionData&period=' + encodeURIComponent(currentPeriod) + '&codes=' + encodeURIComponent(selectedAssignmentCodes.join(',')) + '&tier3=' + currentTier3Cutoff + '&tier2=' + currentTier2Cutoff)
-          .then(res => res.json())
-          .then(data => renderDashboard(data))
-          .catch(e => console.log('Standalone mode'));
-      }
+      google.script.run
+        .withSuccessHandler(function(data) {
+          refreshIcon.classList.remove('animate-spin');
+          rawDashboardData = data;
+          initDashboard(data);
+        })
+        .withFailureHandler(function(err) {
+          refreshIcon.classList.remove('animate-spin');
+          alert('Error loading gradebook data: ' + (err.message || err));
+        })
+        .getInterventionDashboardData(selectedPeriod, Array.from(selectedAssignmentCodes));
     }
 
-    function renderDashboard(data) {
-      const icon = document.getElementById('refreshIcon');
-      if (icon) icon.classList.remove('animate-spin');
+    function initDashboard(data) {
       if (!data) return;
 
-      dashboardData = data;
-      currentPeriod = data.selectedPeriod || 'ALL';
-      selectedAssignmentCodes = data.selectedCodes || [];
-
-      // 1. Populate Period Dropdown
+      // 1. Populate Class / Period selector
       const periodSelect = document.getElementById('periodSelect');
-      periodSelect.innerHTML = '<option value="ALL">All Class Periods</option>';
-      (data.periods || []).forEach(p => {
+      const curPeriodVal = periodSelect.value;
+      periodSelect.innerHTML = '<option value="ALL">🌟 All Class Periods</option>';
+      (data.periods || []).forEach(function(p) {
         const opt = document.createElement('option');
         opt.value = p;
         opt.textContent = p;
-        if (p === currentPeriod) opt.selected = true;
         periodSelect.appendChild(opt);
       });
+      periodSelect.value = curPeriodVal || data.selectedPeriod || 'ALL';
+      selectedPeriod = periodSelect.value;
 
-      // 2. Populate Assignment Pills
-      const container = document.getElementById('assignmentPillsContainer');
-      container.innerHTML = '';
-      const assignments = data.assignments || [];
-
-      document.getElementById('selectedCountLabel').textContent = selectedAssignmentCodes.length;
-
-      if (assignments.length === 0) {
-        container.innerHTML = '<div class="text-slate-400 italic text-xs p-1">No graded worksheets found in Gradebook. Drop scans into "Worksheet Scans" to grade them!</div>';
-      } else {
-        assignments.forEach(a => {
-          const isSelected = selectedAssignmentCodes.includes(a.code);
-          const pill = document.createElement('button');
-          pill.type = 'button';
-          pill.onclick = () => toggleAssignment(a.code);
-          pill.className = `px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition flex items-center space-x-1.5 cursor-pointer ${
-            isSelected
-              ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
-              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-          }`;
-          pill.innerHTML = `
-            <span>${isSelected ? '✓' : '+'}</span>
-            <span class="font-mono text-[9.5px] ${isSelected ? 'text-purple-200' : 'text-slate-400'}">${a.code}</span>
-            <span>${a.title}</span>
-            <span class="px-1.5 py-0.2 rounded text-[9px] ${isSelected ? 'bg-purple-700 text-purple-100' : 'bg-slate-100 text-slate-500'}">${a.averageScore}% avg (${a.submissionCount})</span>
-          `;
-          container.appendChild(pill);
-        });
+      // 2. Initialize assignment selection
+      // If none selected yet, default to all assignments (or whatever server selected)
+      if (selectedAssignmentCodes.size === 0 && data.assignments && data.assignments.length > 0) {
+        const defaults = (data.selectedCodes && data.selectedCodes.length > 0)
+          ? data.selectedCodes
+          : data.assignments.map(a => a.code);
+        defaults.forEach(c => selectedAssignmentCodes.add(String(c).trim().toUpperCase()));
       }
 
-      // 3. Render Overview Metrics
-      const summary = data.summary || {};
-      document.getElementById('groupAvgDisplay').textContent = summary.overallAverage || '0';
-      document.getElementById('gradedCountDisplay').textContent = summary.totalStudentsGraded || '0';
-      document.getElementById('rosterCountDisplay').textContent = '/ ' + (summary.rosterCount || '0');
-      document.getElementById('missingBadge').textContent = (summary.missingCount || 0) + ' unsubmitted';
+      // 3. Render Checklist
+      renderAssignmentsChecklist();
 
-      document.getElementById('tier3CountDisplay').textContent = summary.tier3Count || 0;
-      document.getElementById('tier2CountDisplay').textContent = summary.tier2Count || 0;
-      document.getElementById('tier1CountDisplay').textContent = summary.tier1Count || 0;
-
-      document.getElementById('tier3BadgeCount').textContent = summary.tier3Count || 0;
-      document.getElementById('tier2BadgeCount').textContent = summary.tier2Count || 0;
-      document.getElementById('tier1BadgeCount').textContent = summary.tier1Count || 0;
-      document.getElementById('groupTabBadge').textContent = (summary.tier3Count + summary.tier2Count + summary.tier1Count);
-
-      // Top Struggling Standard
-      if (summary.topStrugglingStandard) {
-        document.getElementById('topStdCodeDisplay').textContent = summary.topStrugglingStandard.code;
-        document.getElementById('topStdDescDisplay').textContent = summary.topStrugglingStandard.name || 'Core Curriculum Concept';
-        document.getElementById('topStdMissDisplay').textContent = `${summary.topStrugglingStandard.missCount} student misses across selected sets`;
-      } else {
-        document.getElementById('topStdCodeDisplay').textContent = 'None Detected';
-        document.getElementById('topStdDescDisplay').textContent = 'All students on level!';
-        document.getElementById('topStdMissDisplay').textContent = '0 misses';
-      }
-
-      // 4. Update Cutoff Labels
-      document.querySelectorAll('.cutoff3Label').forEach(el => el.textContent = currentTier3Cutoff);
-      document.querySelectorAll('.cutoff2Label').forEach(el => el.textContent = currentTier2Cutoff);
-      document.getElementById('tier1CutoffLabel').textContent = currentTier2Cutoff;
-
-      // 5. Render Small Groups Board
-      renderStudentList('tier3List', data.tiers?.tier3 || [], 'tier3');
-      renderStudentList('tier2List', data.tiers?.tier2 || [], 'tier2');
-      renderStudentList('tier1List', data.tiers?.tier1 || [], 'tier1');
-
-      // Missing students
-      const missingList = document.getElementById('missingList');
-      missingList.innerHTML = '';
-      const missing = data.missingStudents || [];
-      document.getElementById('missingBadgeTotal').textContent = missing.length;
-      if (missing.length === 0) {
-        missingList.innerHTML = '<span class="text-emerald-700 italic text-[11px]">All roster students have turned in their worksheets! 🎉</span>';
-      } else {
-        missing.forEach(m => {
-          const pill = document.createElement('span');
-          pill.className = 'px-2 py-1 bg-slate-100 border border-slate-200 rounded-md font-semibold text-slate-600 text-[10px]';
-          pill.textContent = `${m.fullName} (#${m.studentId}) • ${m.classPeriod}`;
-          missingList.appendChild(pill);
-        });
-      }
-
-      // 6. Render Item Analysis
-      renderItemAnalysis(data.itemAnalysis || []);
+      // 4. Calculate averages and render groups
+      recalculateAndRenderGroups();
     }
 
-    function renderStudentList(containerId, students, tierType) {
-      const container = document.getElementById(containerId);
-      container.innerHTML = '';
-
-      if (!students || students.length === 0) {
-        container.innerHTML = `<div class="p-4 text-center text-slate-400 italic text-xs">No students in this group</div>`;
+    function renderAssignmentsChecklist() {
+      const container = document.getElementById('assignmentsChecklist');
+      if (!rawDashboardData || !rawDashboardData.assignments || rawDashboardData.assignments.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-400 italic py-1">No graded assignments found in Gradebook.</div>';
         return;
       }
 
-      students.forEach(s => {
-        const card = document.createElement('div');
-        card.onclick = () => openStudentDrawer(s);
-        card.className = `p-3 rounded-xl border bg-white shadow-xs hover:shadow-md transition cursor-pointer space-y-2 border-slate-200 hover:border-purple-400`;
-
-        const missedBadges = (s.missedQuestions || []).slice(0, 3).map(m => {
-          return `<span class="px-1.5 py-0.2 bg-red-50 text-red-700 border border-red-200 rounded text-[9px] font-bold">
-            ${m.assignmentTitle.slice(0, 10)} Q${m.qNum} ${m.standard ? `[${m.standard}]` : ''}
-          </span>`;
-        }).join('');
-
-        const extraMissed = (s.missedQuestions || []).length > 3 ? `<span class="text-[9px] text-slate-400 font-bold">+${s.missedQuestions.length - 3} more</span>` : '';
-
-        const scoreColor = s.averageScore >= currentTier2Cutoff
-          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-          : s.averageScore >= currentTier3Cutoff
-          ? 'text-amber-800 bg-amber-50 border-amber-200'
-          : 'text-red-700 bg-red-50 border-red-200';
-
-        card.innerHTML = `
-          <div class="flex items-center justify-between">
-            <div>
-              <span class="font-extrabold text-slate-900 text-xs block">${s.fullName}</span>
-              <span class="text-[9.5px] font-mono font-semibold text-slate-400">ID #${s.studentId} • ${s.classPeriod}</span>
-            </div>
-            <div class="px-2 py-0.5 rounded-lg border font-black text-xs ${scoreColor}">
-              ${s.averageScore}%
-            </div>
-          </div>
-
-          ${(s.missedQuestions && s.missedQuestions.length > 0) ? `
-            <div class="pt-1.5 border-t border-slate-100 flex items-center space-x-1 flex-wrap gap-y-1">
-              <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mr-1">Missed:</span>
-              ${missedBadges}
-              ${extraMissed}
-            </div>
-          ` : `
-            <div class="pt-1 text-[9.5px] text-emerald-600 font-bold flex items-center space-x-1">
-              <span>✓ All problems solved correctly</span>
-            </div>
-          `}
-        `;
-
-        container.appendChild(card);
-      });
-    }
-
-    function renderItemAnalysis(items) {
-      const container = document.getElementById('itemAnalysisList');
       container.innerHTML = '';
-      document.getElementById('itemTabBadge').textContent = items.length;
+      rawDashboardData.assignments.forEach(function(assign) {
+        const isChecked = selectedAssignmentCodes.has(assign.code);
+        const card = document.createElement('label');
+        card.className = 'flex items-center space-x-2 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition ' +
+          (isChecked ? 'bg-purple-50/90 border-purple-300 text-purple-950 font-bold shadow-xs' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 font-medium');
 
-      if (!items || items.length === 0) {
-        container.innerHTML = '<div class="p-6 text-center text-slate-400 italic text-xs">No questions to analyze for the selected set.</div>';
-        return;
-      }
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.value = assign.code;
+        chk.checked = isChecked;
+        chk.className = 'w-3.5 h-3.5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer';
+        chk.onchange = function() {
+          if (chk.checked) {
+            selectedAssignmentCodes.add(assign.code);
+          } else {
+            selectedAssignmentCodes.delete(assign.code);
+          }
+          renderAssignmentsChecklist();
+          recalculateAndRenderGroups();
+        };
 
-      items.forEach((item, idx) => {
-        const card = document.createElement('div');
-        card.className = 'bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs space-y-2';
+        const codeBadge = '<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700 font-bold">' + escapeHtml(assign.code) + '</span>';
+        const titleSpan = '<span class="truncate max-w-[140px]">' + escapeHtml(assign.title || assign.code) + '</span>';
+        const avgSpan = '<span class="text-[10px] font-bold text-slate-400">(' + assign.averageScore + '%)</span>';
 
-        const barColor = item.accuracyPercent >= 80 ? 'bg-emerald-500' : item.accuracyPercent >= 60 ? 'bg-amber-500' : 'bg-red-500';
-        const badgeColor = item.accuracyPercent >= 80 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : item.accuracyPercent >= 60 ? 'text-amber-800 bg-amber-50 border-amber-200' : 'text-red-700 bg-red-50 border-red-200';
-
-        const missedNames = (item.missedStudents || []).map(st => {
-          return `<div class="p-2 bg-slate-50 rounded-lg border border-slate-200 text-[10.5px] space-y-0.5">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-slate-900">${st.studentName} (#${st.studentId})</span>
-              <span class="text-[9px] font-mono text-slate-400">${st.classPeriod}</span>
-            </div>
-            <div class="text-slate-600">Answered: <span class="font-mono font-bold text-red-600">${st.studentAns || 'Blank'}</span></div>
-            ${st.feedback ? `<div class="text-[9.5px] text-slate-500 italic">${st.feedback}</div>` : ''}
-          </div>`;
-        }).join('');
-
-        card.innerHTML = `
-          <div class="flex items-center justify-between cursor-pointer" onclick="toggleItemAccordion('item-drop-${idx}')">
-            <div class="flex-1 pr-3">
-              <div class="flex items-center space-x-2">
-                <span class="font-bold text-slate-900 text-xs">${item.assignmentTitle} — Problem #${item.qNum}</span>
-                ${item.standard ? `<span class="px-1.5 py-0.2 bg-purple-50 text-purple-700 border border-purple-200 rounded font-bold text-[9px]">${item.standard}</span>` : ''}
-              </div>
-              <p class="text-[10px] text-slate-500 mt-0.5">${item.standardDescription || 'Core Math Standard'}</p>
-            </div>
-
-            <div class="flex items-center space-x-3 shrink-0">
-              <div class="w-32">
-                <div class="flex justify-between text-[9px] font-bold text-slate-500 mb-1">
-                  <span>Accuracy</span>
-                  <span>${item.accuracyPercent}%</span>
-                </div>
-                <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                  <div class="${barColor} h-2 rounded-full" style="width: ${item.accuracyPercent}%"></div>
-                </div>
-              </div>
-              <span class="px-2 py-0.5 rounded-lg border font-extrabold text-xs ${badgeColor}">
-                ${item.correctCount}/${item.attempts} Correct
-              </span>
-              <span class="text-slate-400 font-bold text-xs">▼</span>
-            </div>
-          </div>
-
-          <div id="item-drop-${idx}" class="hidden pt-2.5 border-t border-slate-100 space-y-2">
-            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
-              Struggling Students (${(item.missedStudents || []).length}):
-            </span>
-            ${(item.missedStudents && item.missedStudents.length > 0) ? `
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                ${missedNames}
-              </div>
-            ` : `
-              <span class="text-emerald-700 italic text-[10.5px]">100% of students solved this question correctly!</span>
-            `}
-          </div>
-        `;
-
+        card.appendChild(chk);
+        card.innerHTML += codeBadge + ' ' + titleSpan + ' ' + avgSpan;
         container.appendChild(card);
       });
+
+      document.getElementById('selectedAssignmentsCountBadge').innerText =
+        selectedAssignmentCodes.size + ' of ' + rawDashboardData.assignments.length + ' selected';
+      document.getElementById('kpiAssignmentsCount').innerText = selectedAssignmentCodes.size;
     }
 
-    function toggleAssignment(code) {
-      if (selectedAssignmentCodes.includes(code)) {
-        selectedAssignmentCodes = selectedAssignmentCodes.filter(c => c !== code);
-      } else {
-        selectedAssignmentCodes.push(code);
-      }
-      loadDashboardData();
-    }
+    function applyPreset(preset) {
+      if (!rawDashboardData || !rawDashboardData.assignments) return;
+      const all = rawDashboardData.assignments;
+      selectedAssignmentCodes.clear();
 
-    function applyPreset(type) {
-      if (!dashboardData || !dashboardData.assignments) return;
-      const all = dashboardData.assignments;
-      if (type === 'all') {
-        selectedAssignmentCodes = all.map(a => a.code);
-      } else if (type === 'clear') {
-        selectedAssignmentCodes = [];
-      } else if (type === 'pod') {
-        selectedAssignmentCodes = all.filter(a => a.title.toLowerCase().includes('pod')).map(a => a.code);
-      } else if (type === 'spiral') {
-        selectedAssignmentCodes = all.filter(a => a.title.toLowerCase().includes('spiral')).map(a => a.code);
-      } else if (type === 'quiz') {
-        selectedAssignmentCodes = all.filter(a => a.title.toLowerCase().includes('quiz') || a.title.toLowerCase().includes('test')).map(a => a.code);
+      if (preset === 'all') {
+        all.forEach(a => selectedAssignmentCodes.add(a.code));
+      } else if (preset === 'none') {
+        // empty
+      } else if (preset === 'last3') {
+        all.slice(0, 3).forEach(a => selectedAssignmentCodes.add(a.code));
+      } else if (preset === 'last5') {
+        all.slice(0, 5).forEach(a => selectedAssignmentCodes.add(a.code));
+      } else if (preset === 'pod') {
+        all.filter(a => a.code.toUpperCase().includes('POD') || (a.title && a.title.toUpperCase().includes('POD'))).forEach(a => selectedAssignmentCodes.add(a.code));
+      } else if (preset === 'review') {
+        all.filter(a => a.code.toUpperCase().includes('REV') || (a.title && a.title.toUpperCase().includes('REVIEW'))).forEach(a => selectedAssignmentCodes.add(a.code));
       }
-      loadDashboardData();
+
+      renderAssignmentsChecklist();
+      recalculateAndRenderGroups();
     }
 
     function onPeriodChange() {
-      currentPeriod = document.getElementById('periodSelect').value;
+      selectedPeriod = document.getElementById('periodSelect').value;
       loadDashboardData();
     }
 
-    function onCutoffChange() {
-      currentTier3Cutoff = Number(document.getElementById('cutoffTier3').value) || 60;
-      currentTier2Cutoff = Number(document.getElementById('cutoffTier2').value) || 80;
-      loadDashboardData();
+    function setGroupCount(count) {
+      numGroups = Math.max(2, Math.min(count, 12));
+      updateGroupCountUI();
+      recalculateAndRenderGroups();
     }
 
-    function switchTab(tab) {
-      activeTab = tab;
-      const btnG = document.getElementById('tabBtnGroups');
-      const btnI = document.getElementById('tabBtnItems');
-      const viewG = document.getElementById('viewGroups');
-      const viewI = document.getElementById('viewItems');
+    function adjustGroupCount(delta) {
+      setGroupCount(numGroups + delta);
+    }
 
-      if (tab === 'groups') {
-        btnG.className = 'px-4 py-2 border-b-2 border-purple-600 text-purple-700 font-extrabold text-xs flex items-center space-x-1.5 transition';
-        btnI.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center space-x-1.5 transition';
-        viewG.classList.remove('hidden');
-        viewI.classList.add('hidden');
+    function updateGroupCountUI() {
+      document.getElementById('currentGroupCountLabel').innerText = numGroups;
+      document.getElementById('kpiGroupingMeta').innerText = numGroups + ' Groups';
+
+      const btns = document.querySelectorAll('#groupCountButtons .grp-btn');
+      btns.forEach(function(btn) {
+        const val = parseInt(btn.innerText.trim(), 10);
+        if (val === numGroups) {
+          btn.className = 'grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-purple-600 bg-purple-600 text-white shadow-xs';
+        } else {
+          btn.className = 'grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100';
+        }
+      });
+    }
+
+    function onStrategyChange() {
+      groupingStrategy = document.getElementById('groupingStrategy').value;
+      recalculateAndRenderGroups();
+    }
+
+    function switchView(view) {
+      const cardsCont = document.getElementById('viewCardsContainer');
+      const tableCont = document.getElementById('viewTableContainer');
+      const btnCards = document.getElementById('btnViewCards');
+      const btnTable = document.getElementById('btnViewTable');
+
+      if (view === 'cards') {
+        cardsCont.classList.remove('hidden');
+        tableCont.classList.add('hidden');
+        btnCards.className = 'px-3 py-1 rounded-md font-bold text-xs bg-white text-purple-800 shadow-xs transition cursor-pointer';
+        btnTable.className = 'px-3 py-1 rounded-md font-semibold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer';
       } else {
-        btnI.className = 'px-4 py-2 border-b-2 border-purple-600 text-purple-700 font-extrabold text-xs flex items-center space-x-1.5 transition';
-        btnG.className = 'px-4 py-2 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-bold text-xs flex items-center space-x-1.5 transition';
-        viewI.classList.remove('hidden');
-        viewG.classList.add('hidden');
+        cardsCont.classList.add('hidden');
+        tableCont.classList.remove('hidden');
+        btnCards.className = 'px-3 py-1 rounded-md font-semibold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer';
+        btnTable.className = 'px-3 py-1 rounded-md font-bold text-xs bg-white text-purple-800 shadow-xs transition cursor-pointer';
       }
     }
 
-    function toggleMissingAccordion() {
-      const list = document.getElementById('missingList');
-      const chevron = document.getElementById('missingChevron');
-      list.classList.toggle('hidden');
-      chevron.textContent = list.classList.contains('hidden') ? '▼' : '▲';
-    }
+    /**
+     * CORE CALCULATION:
+     * Takes students for the active period, filters each student's scores by the selected assignment codes,
+     * calculates each student's average %, sorts them, partitions them into numGroups, and renders.
+     */
+    function recalculateAndRenderGroups() {
+      if (!rawDashboardData || !rawDashboardData.students) return;
 
-    function toggleItemAccordion(id) {
-      const el = document.getElementById(id);
-      if (el) el.classList.toggle('hidden');
-    }
+      const checkedCodes = selectedAssignmentCodes;
+      const assessed = [];
+      const unassessed = [];
 
-    function openStudentDrawer(s) {
-      document.getElementById('drawerAvatarInitial').textContent = (s.fullName || 'S').charAt(0);
-      document.getElementById('drawerStudentName').textContent = s.fullName;
-      document.getElementById('drawerStudentId').textContent = s.studentId;
-      document.getElementById('drawerStudentPeriod').textContent = s.classPeriod;
-      document.getElementById('drawerStudentAvg').textContent = s.averageScore;
+      rawDashboardData.students.forEach(function(s) {
+        // Find submissions matching the checked assignment codes
+        const allSubs = s.allSubmissions || s.submissions || [];
+        const matchingSubs = allSubs.filter(sub => checkedCodes.has(sub.assignmentCode.toUpperCase()));
 
-      const badge = document.getElementById('drawerTierBadge');
-      if (s.averageScore < currentTier3Cutoff) {
-        badge.textContent = '🚨 Tier 3 Intensive';
-        badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200';
-      } else if (s.averageScore < currentTier2Cutoff) {
-        badge.textContent = '⚠️ Tier 2 Support';
-        badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200';
+        if (matchingSubs.length > 0) {
+          const scoreSum = matchingSubs.reduce((acc, sub) => acc + (sub.scorePercent || 0), 0);
+          const avg = Math.round((scoreSum / matchingSubs.length) * 10) / 10;
+          assessed.push({
+            ...s,
+            calculatedAverage: avg,
+            matchingSubmissions: matchingSubs
+          });
+        } else {
+          unassessed.push(s);
+        }
+      });
+
+      // Also merge any roster students who had 0 submissions overall
+      (rawDashboardData.missingStudents || []).forEach(function(m) {
+        if (!unassessed.some(u => String(u.studentId) === String(m.studentId))) {
+          unassessed.push({
+            studentId: m.studentId,
+            fullName: m.fullName,
+            classPeriod: m.classPeriod,
+            calculatedAverage: 0,
+            matchingSubmissions: []
+          });
+        }
+      });
+
+      // Sort assessed students descending by calculated average
+      assessed.sort((a, b) => b.calculatedAverage - a.calculatedAverage);
+
+      currentAssessedStudents = assessed;
+      currentUnassessedStudents = unassessed;
+
+      // KPI calculations
+      const totalScoreSum = assessed.reduce((acc, s) => acc + s.calculatedAverage, 0);
+      const overallAvg = assessed.length > 0 ? Math.round((totalScoreSum / assessed.length) * 10) / 10 : 0;
+      document.getElementById('kpiClassAverage').innerText = overallAvg + '%';
+      document.getElementById('kpiAssessedStudents').innerText = assessed.length + ' (' + (assessed.length + unassessed.length) + ' enrolled)';
+      document.getElementById('tableStudentCountBadge').innerText = (assessed.length + unassessed.length) + ' students';
+
+      // Partition into N Groups
+      if (groupingStrategy === 'balanced') {
+        currentCalculatedGroups = partitionBalanced(assessed, numGroups);
       } else {
-        badge.textContent = '🌟 Tier 1 Mastery';
-        badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
+        currentCalculatedGroups = partitionRanked(assessed, numGroups);
       }
 
-      // Standards gaps
-      const gapsContainer = document.getElementById('drawerGapsList');
-      gapsContainer.innerHTML = '';
-      if (!s.primaryGaps || s.primaryGaps.length === 0) {
-        gapsContainer.innerHTML = '<span class="text-emerald-700 italic text-[10.5px]">No standards gaps detected!</span>';
+      // Render View 1: Columns
+      renderGroupColumns(currentCalculatedGroups);
+
+      // Render View 2: Table
+      renderStudentTable(assessed, unassessed, currentCalculatedGroups);
+
+      // Render Unassessed Students
+      renderUnassessedStudents(unassessed);
+    }
+
+    /**
+     * Partition method: Ranked (Ability / Quantile)
+     */
+    function partitionRanked(students, count) {
+      const groups = Array.from({ length: count }, () => []);
+      if (students.length === 0) return groups;
+
+      const baseSize = Math.floor(students.length / count);
+      const remainder = students.length % count;
+
+      let curIdx = 0;
+      for (let g = 0; g < count; g++) {
+        const size = baseSize + (g < remainder ? 1 : 0);
+        groups[g] = students.slice(curIdx, curIdx + size);
+        curIdx += size;
+      }
+      return groups;
+    }
+
+    /**
+     * Partition method: Balanced (Snake-draft distribution)
+     */
+    function partitionBalanced(students, count) {
+      const groups = Array.from({ length: count }, () => []);
+      if (students.length === 0) return groups;
+
+      let forward = true;
+      let g = 0;
+      for (let i = 0; i < students.length; i++) {
+        groups[g].push(students[i]);
+        if (forward) {
+          if (g === count - 1) forward = false;
+          else g++;
+        } else {
+          if (g === 0) forward = true;
+          else g--;
+        }
+      }
+      return groups;
+    }
+
+    function renderGroupColumns(groups) {
+      const grid = document.getElementById('groupsGrid');
+      grid.innerHTML = '';
+
+      // Adjust grid columns depending on numGroups
+      if (numGroups <= 2) {
+        grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 items-start';
+      } else if (numGroups === 3) {
+        grid.className = 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start';
+      } else if (numGroups === 4) {
+        grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start';
+      } else if (numGroups === 5) {
+        grid.className = 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 items-start';
       } else {
-        s.primaryGaps.forEach(g => {
+        grid.className = 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 items-start';
+      }
+
+      groups.forEach(function(studentsInGroup, gIdx) {
+        const theme = GROUP_THEMES[gIdx % GROUP_THEMES.length];
+        const groupScoreSum = studentsInGroup.reduce((acc, s) => acc + s.calculatedAverage, 0);
+        const groupAvg = studentsInGroup.length > 0 ? Math.round((groupScoreSum / studentsInGroup.length) * 10) / 10 : 0;
+        
+        let minScore = 0;
+        let maxScore = 0;
+        if (studentsInGroup.length > 0) {
+          const scores = studentsInGroup.map(s => s.calculatedAverage);
+          minScore = Math.min(...scores);
+          maxScore = Math.max(...scores);
+        }
+
+        const col = document.createElement('div');
+        col.className = 'bg-white rounded-xl border ' + theme.border + ' shadow-sm overflow-hidden flex flex-col space-y-3 p-3.5 print-page';
+
+        // Column Header
+        let colHeaderHtml =
+          '<div class="flex items-center justify-between border-b ' + theme.border + ' pb-2.5">' +
+            '<div>' +
+              '<div class="flex items-center space-x-2">' +
+                '<span class="px-2 py-0.5 rounded-md font-black text-xs ' + theme.badge + '">Group ' + (gIdx + 1) + '</span>' +
+                '<span class="font-extrabold text-xs ' + theme.text + '">' + groupAvg + '% avg</span>' +
+              '</div>' +
+              '<div class="text-[10px] text-slate-500 font-medium mt-0.5">' +
+                (studentsInGroup.length > 0 ? ('Range: ' + minScore + '% – ' + maxScore + '%') : 'No students') +
+              '</div>' +
+            '</div>' +
+            '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">' +
+              studentsInGroup.length + ' students' +
+            '</span>' +
+          '</div>';
+
+        // Student Cards
+        let studentsHtml = '<div class="space-y-2">';
+        if (studentsInGroup.length === 0) {
+          studentsHtml += '<div class="text-xs text-slate-400 italic py-2 text-center">Empty Group</div>';
+        } else {
+          studentsInGroup.forEach(function(student) {
+            const avgBadgeColor = student.calculatedAverage >= 80
+              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+              : (student.calculatedAverage >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+
+            // Assignment score chips
+            let chipsHtml = '';
+            (student.matchingSubmissions || []).slice(0, 4).forEach(function(sub) {
+              const chipColor = sub.scorePercent >= 80 ? 'text-emerald-700 bg-emerald-50' : (sub.scorePercent >= 60 ? 'text-amber-700 bg-amber-50' : 'text-rose-700 bg-rose-50');
+              chipsHtml += '<span class="px-1.5 py-0.5 rounded font-mono text-[9px] font-bold ' + chipColor + '" title="' + escapeHtml(sub.assignmentTitle) + '">' +
+                escapeHtml(sub.assignmentCode) + ': ' + sub.scorePercent + '%' +
+              '</span>';
+            });
+
+            studentsHtml +=
+              '<div onclick="openStudentDrawer(\'' + student.studentId + '\', ' + (gIdx + 1) + ')" class="p-2.5 rounded-xl border border-slate-200 hover:border-purple-300 hover:shadow-xs bg-slate-50/50 hover:bg-white transition cursor-pointer space-y-1.5">' +
+                '<div class="flex items-center justify-between">' +
+                  '<div>' +
+                    '<span class="font-extrabold text-slate-900 text-xs block">' + escapeHtml(student.fullName || ('Student #' + student.studentId)) + '</span>' +
+                    '<span class="text-[10px] text-slate-400 font-mono font-medium">ID #' + escapeHtml(student.studentId) + '</span>' +
+                  '</div>' +
+                  '<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + avgBadgeColor + '">' +
+                    student.calculatedAverage + '%' +
+                  '</span>' +
+                '</div>' +
+                (chipsHtml ? ('<div class="flex flex-wrap gap-1 pt-0.5">' + chipsHtml + '</div>') : '') +
+              '</div>';
+          });
+        }
+        studentsHtml += '</div>';
+
+        col.innerHTML = colHeaderHtml + studentsHtml;
+        grid.appendChild(col);
+      });
+    }
+
+    function renderStudentTable(assessed, unassessed, groups) {
+      const tbody = document.getElementById('studentTableBody');
+      tbody.innerHTML = '';
+
+      // Build studentId -> GroupNumber map
+      const studentGroupMap = new Map();
+      groups.forEach(function(stList, gIdx) {
+        stList.forEach(s => studentGroupMap.set(String(s.studentId), gIdx + 1));
+      });
+
+      let rank = 1;
+      assessed.forEach(function(s) {
+        const groupNum = studentGroupMap.get(String(s.studentId)) || '—';
+        const avgColor = s.calculatedAverage >= 80 ? 'text-emerald-700 font-black' : (s.calculatedAverage >= 60 ? 'text-amber-700 font-black' : 'text-rose-700 font-black');
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 cursor-pointer transition';
+        tr.onclick = function() { openStudentDrawer(s.studentId, groupNum); };
+        tr.innerHTML =
+          '<td class="p-3 font-bold text-slate-400">#' + rank++ + '</td>' +
+          '<td class="p-3 font-mono font-bold text-slate-600">' + escapeHtml(s.studentId) + '</td>' +
+          '<td class="p-3 font-extrabold text-slate-900">' + escapeHtml(s.fullName || ('Student #' + s.studentId)) + '</td>' +
+          '<td class="p-3 text-slate-500">' + escapeHtml(s.classPeriod || '—') + '</td>' +
+          '<td class="p-3 text-right ' + avgColor + '">' + s.calculatedAverage + '%</td>' +
+          '<td class="p-3 text-center"><span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-extrabold text-[10px]">Group ' + groupNum + '</span></td>' +
+          '<td class="p-3 text-right text-slate-500 font-medium">' + s.matchingSubmissions.length + ' / ' + selectedAssignmentCodes.size + '</td>';
+        tbody.appendChild(tr);
+      });
+
+      unassessed.forEach(function(s) {
+        const tr = document.createElement('tr');
+        tr.className = 'bg-amber-50/30 hover:bg-amber-50/60 transition';
+        tr.innerHTML =
+          '<td class="p-3 font-bold text-slate-400">—</td>' +
+          '<td class="p-3 font-mono font-bold text-slate-600">' + escapeHtml(s.studentId) + '</td>' +
+          '<td class="p-3 font-bold text-slate-700">' + escapeHtml(s.fullName || ('Student #' + s.studentId)) + '</td>' +
+          '<td class="p-3 text-slate-500">' + escapeHtml(s.classPeriod || '—') + '</td>' +
+          '<td class="p-3 text-right text-slate-400 italic">No submissions</td>' +
+          '<td class="p-3 text-center"><span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold text-[10px]">Unassigned</span></td>' +
+          '<td class="p-3 text-right text-amber-700 font-bold">0 / ' + selectedAssignmentCodes.size + '</td>';
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderUnassessedStudents(unassessed) {
+      const card = document.getElementById('unassessedStudentsCard');
+      const countBadge = document.getElementById('unassessedCountBadge');
+      const list = document.getElementById('unassessedStudentsList');
+
+      countBadge.innerText = unassessed.length;
+      if (unassessed.length === 0) {
+        list.innerHTML = '<span class="text-xs text-slate-400 italic">None. All students have submissions for the selected assignments.</span>';
+        card.classList.add('opacity-70');
+      } else {
+        card.classList.remove('opacity-70');
+        list.innerHTML = '';
+        unassessed.forEach(function(s) {
           const pill = document.createElement('span');
-          pill.className = 'px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded font-bold text-[9.5px]';
-          pill.textContent = g;
-          gapsContainer.appendChild(pill);
+          pill.className = 'px-2 py-1 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-semibold flex items-center space-x-1';
+          pill.innerHTML = '<span>👤</span><span>' + escapeHtml(s.fullName || ('Student #' + s.studentId)) + ' (#' + escapeHtml(s.studentId) + ')</span>';
+          list.appendChild(pill);
         });
       }
+    }
 
-      // Submissions
-      const subContainer = document.getElementById('drawerSubmissionsList');
-      subContainer.innerHTML = '';
-      (s.submissions || []).forEach(sub => {
+    function openStudentDrawer(studentId, groupNum) {
+      const student = currentAssessedStudents.find(s => String(s.studentId) === String(studentId));
+      if (!student) return;
+
+      document.getElementById('drawerStudentName').innerText = student.fullName || ('Student #' + student.studentId);
+      document.getElementById('drawerStudentId').innerText = 'ID #' + student.studentId;
+      document.getElementById('drawerStudentPeriod').innerText = student.classPeriod || 'No Period';
+      document.getElementById('drawerStudentAverage').innerText = student.calculatedAverage + '%';
+      document.getElementById('drawerStudentGroup').innerText = 'Group ' + (groupNum || '—');
+
+      const listCont = document.getElementById('drawerAssignmentsList');
+      listCont.innerHTML = '';
+
+      (student.matchingSubmissions || []).forEach(function(sub) {
+        const scoreBadgeColor = sub.scorePercent >= 80 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : (sub.scorePercent >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+
+        let questionsHtml = '';
+        (sub.questions || []).forEach(function(q) {
+          const isCorrect = q.score > 0;
+          const icon = isCorrect ? '✅' : '❌';
+          const border = isCorrect ? 'border-emerald-200 bg-emerald-50/40' : 'border-rose-200 bg-rose-50/40';
+
+          questionsHtml +=
+            '<div class="p-2.5 rounded-lg border ' + border + ' text-[11px] space-y-1">' +
+              '<div class="flex items-center justify-between font-bold">' +
+                '<span>' + icon + ' Q' + q.qNum + (q.standard ? (' • ' + q.standard) : '') + '</span>' +
+                '<span>' + q.score + ' pt</span>' +
+              '</div>' +
+              '<div class="text-slate-700">' +
+                '<span class="font-semibold text-slate-500">Student Answer: </span>' +
+                '<span class="font-mono font-bold">' + escapeHtml(q.studentAns || '—') + '</span>' +
+              '</div>' +
+              (q.feedback ? ('<div class="text-[10px] text-blue-900 bg-blue-50 border border-blue-100 p-1.5 rounded italic">Feedback: ' + escapeHtml(q.feedback) + '</div>') : '') +
+            '</div>';
+        });
+
         const subCard = document.createElement('div');
-        subCard.className = 'bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2';
+        subCard.className = 'border border-slate-200 rounded-xl p-3 bg-white space-y-2';
+        subCard.innerHTML =
+          '<div class="flex items-center justify-between border-b border-slate-100 pb-2">' +
+            '<div>' +
+              '<span class="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono font-bold text-[10px] mr-1.5">' + escapeHtml(sub.assignmentCode) + '</span>' +
+              '<span class="font-extrabold text-slate-900 text-xs">' + escapeHtml(sub.assignmentTitle) + '</span>' +
+            '</div>' +
+            '<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + scoreBadgeColor + '">' +
+              sub.scorePercent + '% (' + sub.pointsEarned + '/' + sub.pointsTotal + ' pts)' +
+            '</span>' +
+          '</div>' +
+          (questionsHtml ? ('<div class="space-y-1.5 pt-1">' + questionsHtml + '</div>') : '<div class="text-[10px] text-slate-400 italic">No question breakdown recorded.</div>');
 
-        const qRows = (sub.questions || []).map(q => {
-          const qColor = q.score > 0 ? 'text-emerald-600' : 'text-red-600 font-bold';
-          return `
-            <div class="flex items-start justify-between py-1 border-b border-slate-200/50 text-[10px]">
-              <div>
-                <span class="font-bold text-slate-800">Q${q.qNum}:</span>
-                <span class="text-slate-600 ml-1">Ans: <span class="font-mono ${qColor}">${q.studentAns || '—'}</span></span>
-                ${q.standard ? `<span class="ml-1 text-purple-700 font-mono text-[9px]">[${q.standard}]</span>` : ''}
-                ${q.feedback ? `<p class="text-slate-500 italic text-[9px] mt-0.5">${q.feedback}</p>` : ''}
-              </div>
-              <span class="px-1.5 py-0.2 rounded font-mono font-bold text-[9px] ${q.score > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">
-                ${q.score} pt
-              </span>
-            </div>
-          `;
-        }).join('');
-
-        subCard.innerHTML = `
-          <div class="flex items-center justify-between pb-1.5 border-b border-slate-200">
-            <div>
-              <span class="font-bold text-slate-900 text-xs">${sub.assignmentTitle}</span>
-              <span class="text-[9px] font-mono text-slate-400 block">${sub.assignmentCode}</span>
-            </div>
-            <span class="px-2 py-0.5 rounded font-black text-xs ${sub.scorePercent >= 80 ? 'text-emerald-700 bg-emerald-50' : sub.scorePercent >= 60 ? 'text-amber-800 bg-amber-50' : 'text-red-700 bg-red-50'}">
-              ${sub.scorePercent}%
-            </span>
-          </div>
-          <div class="space-y-0.5">
-            ${qRows}
-          </div>
-        `;
-        subContainer.appendChild(subCard);
+        listCont.appendChild(subCard);
       });
 
       document.getElementById('studentDrawer').classList.remove('hidden');
@@ -855,43 +858,74 @@
       document.getElementById('studentDrawer').classList.add('hidden');
     }
 
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeStudentDrawer();
+    });
+
+    /**
+     * Copies formatted groups to clipboard for easy pasting into lesson plans
+     */
     function copyGroupRosters() {
-      if (!dashboardData || !dashboardData.tiers) return;
-      const t3 = dashboardData.tiers.tier3 || [];
-      const t2 = dashboardData.tiers.tier2 || [];
-      const t1 = dashboardData.tiers.tier1 || [];
+      if (!currentCalculatedGroups || currentCalculatedGroups.length === 0) {
+        showToast('⚠️ No student groups calculated yet.', '⚠️');
+        return;
+      }
 
-      let text = `====================================================\n`;
-      text += `🎯 SMALL GROUPS & INTERVENTION ROSTER\n`;
-      text += `Period: ${currentPeriod} | Group Avg: ${dashboardData.summary?.overallAverage || 0}%\n`;
-      text += `Selected Sets: ${selectedAssignmentCodes.join(', ')}\n`;
-      text += `====================================================\n\n`;
+      const pLabel = selectedPeriod === 'ALL' ? 'All Classes' : selectedPeriod;
+      const codes = Array.from(selectedAssignmentCodes).join(', ');
 
-      text += `🚨 TIER 3 - INTENSIVE INTERVENTION (< ${currentTier3Cutoff}%):\n`;
-      if (t3.length === 0) text += `  (None)\n`;
-      t3.forEach((s, idx) => {
-        text += `  ${idx + 1}. ${s.fullName} (#${s.studentId}) - ${s.averageScore}% | Needs: ${s.primaryGaps.join(', ') || 'General'}\n`;
-      });
-      text += `\n`;
+      let text = '🎯 SMALL GROUPS BY AVERAGE (' + pLabel + ')\n';
+      text += 'Included Assignments: ' + (codes || 'None') + '\n';
+      text += 'Total Students Assessed: ' + currentAssessedStudents.length + '\n';
+      text += 'Class Average: ' + document.getElementById('kpiClassAverage').innerText + '\n';
+      text += 'Grouping Method: ' + (groupingStrategy === 'ranked' ? 'Ranked by Average' : 'Balanced Teams') + '\n\n';
 
-      text += `⚠️ TIER 2 - STRATEGIC SUPPORT (${currentTier3Cutoff}% - ${currentTier2Cutoff - 1}%):\n`;
-      if (t2.length === 0) text += `  (None)\n`;
-      t2.forEach((s, idx) => {
-        text += `  ${idx + 1}. ${s.fullName} (#${s.studentId}) - ${s.averageScore}%\n`;
-      });
-      text += `\n`;
-
-      text += `🌟 TIER 1 - MASTERY & EXTENSION (≥ ${currentTier2Cutoff}%):\n`;
-      if (t1.length === 0) text += `  (None)\n`;
-      t1.forEach((s, idx) => {
-        text += `  ${idx + 1}. ${s.fullName} (#${s.studentId}) - ${s.averageScore}%\n`;
+      currentCalculatedGroups.forEach(function(group, idx) {
+        const groupScoreSum = group.reduce((acc, s) => acc + s.calculatedAverage, 0);
+        const gAvg = group.length > 0 ? Math.round((groupScoreSum / group.length) * 10) / 10 : 0;
+        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        text += 'GROUP ' + (idx + 1) + ' (Avg: ' + gAvg + '% • ' + group.length + ' Students)\n';
+        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        group.forEach(function(s) {
+          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + ' (#' + s.studentId + ') — ' + s.calculatedAverage + '%\n';
+        });
+        text += '\n';
       });
 
-      navigator.clipboard.writeText(text).then(() => {
-        alert('Copied Small Groups to Clipboard! ✅\n\nYou can now paste directly into your lesson plans, Google Docs, or slides.');
-      }).catch(err => {
-        prompt('Copy your small groups below:', text);
+      if (currentUnassessedStudents.length > 0) {
+        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        text += 'UNASSESSED / ABSENT STUDENTS (' + currentUnassessedStudents.length + ')\n';
+        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        currentUnassessedStudents.forEach(function(s) {
+          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + ' (#' + s.studentId + ')\n';
+        });
+      }
+
+      navigator.clipboard.writeText(text).then(function() {
+        showToast('✅ Copied ' + numGroups + ' group rosters to clipboard!', '📋');
+      }).catch(function() {
+        showToast('Unable to copy automatically. Please try again.', '⚠️');
       });
+    }
+
+    function showToast(msg, icon) {
+      const toast = document.getElementById('toastNotification');
+      document.getElementById('toastIcon').innerText = icon || 'ℹ️';
+      document.getElementById('toastMessage').innerText = msg;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(function() {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3500);
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
     }
   </script>
 </body>

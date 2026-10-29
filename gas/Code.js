@@ -10,7 +10,7 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('📐 Math Autograder')
-    .addItem('🎯 Small Groups & Intervention Popout', 'openInterventionDashboard')
+    .addItem('🎯 Small Groups by Average Popout', 'openInterventionDashboard')
     .addItem('📱 Open Autograder Sidebar', 'showSidebar')
     .addItem('🎓 Preview / Share Student Progress Portal', 'openStudentPortalPreview')
     .addSeparator()
@@ -63,13 +63,13 @@ function doGet(e) {
 }
 
 /**
- * Opens the Small Groups & Intervention Command Center popout dialog inside Google Sheets
+ * Opens the Small Groups by Average popout dialog inside Google Sheets
  */
 function openInterventionDashboard() {
   const html = HtmlService.createHtmlOutputFromFile('TeacherDashboard')
     .setWidth(1150)
     .setHeight(820);
-  SpreadsheetApp.getUi().showModalDialog(html, '🎯 Small Groups & Intervention Command Center');
+  SpreadsheetApp.getUi().showModalDialog(html, '🎯 Small Groups by Average');
 }
 
 /**
@@ -1661,7 +1661,7 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
 
   for (const row of rows) {
     const code = String(row[codeCol] || '').trim().toUpperCase();
-    if (!activeCodesSet.has(code)) continue;
+    if (!code) continue;
 
     const rawId = String(row[idCol] || '???').trim();
     const rawFirst = firstCol !== -1 ? String(row[firstCol] || '').trim() : '';
@@ -1692,6 +1692,7 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
         fullName: studentName,
         classPeriod: studentPeriod,
         submissions: [],
+        allSubmissions: [],
         totalPointsEarned: 0,
         totalPointsPossible: 0,
         missedQuestions: [],
@@ -1703,9 +1704,6 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     const scoreVal = parseFloat(String(row[scorePctCol] || '').replace('%', '')) || 0;
     const ptsEarned = parseFloat(row[ptsCol]) || 0;
     const ptsTotal = parseFloat(row[totalPtsCol]) || 0;
-
-    studentObj.totalPointsEarned += ptsEarned;
-    studentObj.totalPointsPossible += ptsTotal;
 
     const subQuestions = [];
     const assignmentTitle = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;
@@ -1729,50 +1727,52 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
       const stdMatch = qFeedback.match(/\[([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)\]/);
       if (stdMatch) stdCode = stdMatch[1];
 
-      const itemKey = `${code}_Q${q}`;
-      if (!itemAnalysisMap.has(itemKey)) {
-        itemAnalysisMap.set(itemKey, {
-          assignmentCode: code,
-          assignmentTitle,
-          qNum: q,
-          standard: stdCode,
-          standardDescription: (typeof getStandardDescription === 'function')
-            ? getStandardDescription(stdCode)
-            : (typeof STANDARDS_DICTIONARY !== 'undefined' && STANDARDS_DICTIONARY[stdCode] ? STANDARDS_DICTIONARY[stdCode] : ''),
-          attempts: 0,
-          earnedSum: 0,
-          correctCount: 0,
-          missedStudents: []
-        });
-      }
-      const itemStat = itemAnalysisMap.get(itemKey);
-      itemStat.attempts++;
-      itemStat.earnedSum += qScore;
-      if (qScore > 0) itemStat.correctCount++;
+      if (activeCodesSet.has(code)) {
+        const itemKey = `${code}_Q${q}`;
+        if (!itemAnalysisMap.has(itemKey)) {
+          itemAnalysisMap.set(itemKey, {
+            assignmentCode: code,
+            assignmentTitle,
+            qNum: q,
+            standard: stdCode,
+            standardDescription: (typeof getStandardDescription === 'function')
+              ? getStandardDescription(stdCode)
+              : (typeof STANDARDS_DICTIONARY !== 'undefined' && STANDARDS_DICTIONARY[stdCode] ? STANDARDS_DICTIONARY[stdCode] : ''),
+            attempts: 0,
+            earnedSum: 0,
+            correctCount: 0,
+            missedStudents: []
+          });
+        }
+        const itemStat = itemAnalysisMap.get(itemKey);
+        itemStat.attempts++;
+        itemStat.earnedSum += qScore;
+        if (qScore > 0) itemStat.correctCount++;
 
-      // If missed or partial credit
-      if (qScore === 0 || (ptsTotal > 0 && qScore < (ptsTotal / 10))) {
-        itemStat.missedStudents.push({
-          studentName,
-          studentId,
-          classPeriod: studentPeriod,
-          studentAns: qAns,
-          feedback: qFeedback
-        });
+        // If missed or partial credit
+        if (qScore === 0 || (ptsTotal > 0 && qScore < (ptsTotal / 10))) {
+          itemStat.missedStudents.push({
+            studentName,
+            studentId,
+            classPeriod: studentPeriod,
+            studentAns: qAns,
+            feedback: qFeedback
+          });
 
-        studentObj.missedQuestions.push({
-          assignmentTitle,
-          assignmentCode: code,
-          qNum: q,
-          score: qScore,
-          studentAns: qAns,
-          feedback: qFeedback,
-          standard: stdCode
-        });
+          studentObj.missedQuestions.push({
+            assignmentTitle,
+            assignmentCode: code,
+            qNum: q,
+            score: qScore,
+            studentAns: qAns,
+            feedback: qFeedback,
+            standard: stdCode
+          });
 
-        if (stdCode) {
-          studentObj.strugglingStandards[stdCode] = (studentObj.strugglingStandards[stdCode] || 0) + 1;
-          stdMissCount.set(stdCode, (stdMissCount.get(stdCode) || 0) + 1);
+          if (stdCode) {
+            studentObj.strugglingStandards[stdCode] = (studentObj.strugglingStandards[stdCode] || 0) + 1;
+            stdMissCount.set(stdCode, (stdMissCount.get(stdCode) || 0) + 1);
+          }
         }
       }
 
@@ -1785,14 +1785,22 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
       });
     }
 
-    studentObj.submissions.push({
+    const subItem = {
       assignmentCode: code,
       assignmentTitle,
       scorePercent: scoreVal,
       pointsEarned: ptsEarned,
       pointsTotal: ptsTotal,
       questions: subQuestions
-    });
+    };
+
+    studentObj.allSubmissions.push(subItem);
+
+    if (activeCodesSet.has(code)) {
+      studentObj.totalPointsEarned += ptsEarned;
+      studentObj.totalPointsPossible += ptsTotal;
+      studentObj.submissions.push(subItem);
+    }
   }
 
   // 4. Compute Student Averages & Assign to Intervention Tiers
@@ -1896,6 +1904,7 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
       tier2: tier2Students,
       tier1: tier1Students
     },
+    students: Array.from(studentMap.values()).sort((a, b) => b.averageScore - a.averageScore),
     missingStudents,
     itemAnalysis
   };
