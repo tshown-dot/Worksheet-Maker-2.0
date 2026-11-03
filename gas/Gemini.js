@@ -40,8 +40,10 @@ LAYOUT & HEADER EXTRACTION RULES:
 2. STUDENT NAME ("studentName"):
    - Privacy-safe OCR worksheets only use the Student ID box and do not have a Name line; return "" unless a legacy worksheet has a handwritten name.
 3. ASSIGNMENT CODE ("assignmentCode"):
-   - Read the printed Assignment Code in the top-right corner next to the QR code (e.g., "ALG-701", "M4821").
-4. MULTI-PAGE / COPIER BATCH SUPPORT:
+   - Read the printed Assignment Code in the top-right corner next to the QR code or in the header (e.g., "ALG-701", "M4821", "M8539", "M6287").
+4. ASSIGNMENT TITLE ("assignmentTitle"):
+   - Read the exact printed assignment title in the header (e.g., "Math 6 POD Mon 11/2", "Math 6 POD Tue 11/3", "Accelerated POD Mon 11/2", "Accelerated POD Tue 11/3").
+5. MULTI-PAGE / COPIER BATCH SUPPORT:
    - A single PDF file may contain ONE student's worksheet (1 or 2 pages) OR a stack of MULTIPLE students' worksheets scanned together at the copier.
    - Group pages belonging to the same student together, and output one entry per student in the "submissions" array.
 
@@ -57,11 +59,13 @@ For each question on the student's worksheet:
 Output ONLY valid JSON matching this exact schema:
 {
   "assignmentCode": "ALG-701",
+  "assignmentTitle": "Accelerated POD Mon 11/2",
   "submissions": [
     {
       "studentId": "104",
       "studentName": "Alex Rivera",
       "assignmentCode": "ALG-701",
+      "assignmentTitle": "Accelerated POD Mon 11/2",
       "confidence": "high",
       "questions": [
         {
@@ -138,19 +142,31 @@ Output ONLY valid JSON matching this exact schema:
 
   const parsed = JSON.parse(candidate);
 
-  // Normalize response so callers always receive { assignmentCode, submissions: [...] }
+  // Normalize response so callers always receive { assignmentCode, assignmentTitle, submissions: [...] }
+  const topTitle = parsed.assignmentTitle || (parsed.submissions && parsed.submissions[0] && parsed.submissions[0].assignmentTitle) || '';
   if (Array.isArray(parsed.submissions) && parsed.submissions.length > 0) {
     const topCode = parsed.assignmentCode || parsed.submissions[0].assignmentCode || 'ALG-701';
     return {
       assignmentCode: String(topCode).trim().toUpperCase(),
-      submissions: parsed.submissions
+      assignmentTitle: String(topTitle).trim(),
+      submissions: parsed.submissions.map(s => ({
+        ...s,
+        assignmentCode: String(s.assignmentCode || topCode).trim().toUpperCase(),
+        assignmentTitle: String(s.assignmentTitle || topTitle).trim()
+      }))
     };
   }
 
   // Fallback if model returned single flat submission object
+  const singleCode = String(parsed.assignmentCode || 'ALG-701').trim().toUpperCase();
   return {
-    assignmentCode: String(parsed.assignmentCode || 'ALG-701').trim().toUpperCase(),
-    submissions: [parsed]
+    assignmentCode: singleCode,
+    assignmentTitle: String(topTitle).trim(),
+    submissions: [{
+      ...parsed,
+      assignmentCode: singleCode,
+      assignmentTitle: String(topTitle).trim()
+    }]
   };
 }
 

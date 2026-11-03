@@ -1089,16 +1089,19 @@ function getStudentPortalData(rawStudentId, rawPassword) {
       }
       if (!resolvedPeriod && periodCol !== -1 && r[periodCol]) resolvedPeriod = String(r[periodCol]).trim();
 
-      const rawScoreVal = r[scorePctCol];
-      let scorePct = 0;
-      if (typeof rawScoreVal === 'number') {
-        scorePct = rawScoreVal <= 1 && rawScoreVal > 0 ? Math.round(rawScoreVal * 100) : Math.round(rawScoreVal);
-      } else {
-        scorePct = parseFloat(String(rawScoreVal || '0').replace('%', '')) || 0;
-      }
-
       const pts = parseFloat(r[ptsCol]) || 0;
       const poss = parseFloat(r[totalPtsCol]) || 0;
+      const rawScoreVal = r[scorePctCol];
+      let scorePct = 0;
+      if (poss > 0 && !isNaN(pts)) {
+        scorePct = Math.round((pts / poss) * 100);
+      } else if (typeof rawScoreVal === 'number') {
+        scorePct = rawScoreVal <= 1 && rawScoreVal > 0 ? Math.round(rawScoreVal * 100) : Math.round(rawScoreVal);
+      } else {
+        const parsed = parseFloat(String(rawScoreVal || '0').replace('%', '')) || 0;
+        scorePct = parsed <= 1 && parsed > 0 ? Math.round(parsed * 100) : Math.round(parsed);
+      }
+
       totalEarned += pts;
       totalPossible += poss;
 
@@ -1649,6 +1652,50 @@ function ensureAutograderScanFolders_() {
   }
 }
 
+function fixMisnamedGradebookAssignments_() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Gradebook');
+    if (!sheet) return { success: false, error: 'No Gradebook sheet' };
+
+    // Rows 97-113: Accelerated POD Tue 11/3 (17 students)
+    for (let r = 97; r <= 113; r++) {
+      sheet.getRange(r, 6).setValue('ACC-1103');
+      sheet.getRange(r, 7).setValue('Accelerated POD Tue 11/3');
+    }
+
+    // Rows 114-130: Accelerated POD Mon 11/2 (17 students)
+    for (let r = 114; r <= 130; r++) {
+      sheet.getRange(r, 6).setValue('ALG-701');
+      sheet.getRange(r, 7).setValue('Accelerated POD Mon 11/2');
+    }
+
+    // Rows 131-152: Math 6 POD Tue 11/3 (22 students)
+    for (let r = 131; r <= 152; r++) {
+      sheet.getRange(r, 6).setValue('M8539');
+      sheet.getRange(r, 7).setValue('Math 6 POD Tue 11/3');
+    }
+
+    // Rows 153-175: Math 6 POD Mon 11/2 (23 students)
+    for (let r = 153; r <= 175; r++) {
+      sheet.getRange(r, 6).setValue('M6287');
+      sheet.getRange(r, 7).setValue('Math 6 POD Mon 11/2');
+    }
+
+    return {
+      success: true,
+      updated: {
+        'ACC-1103': 'Rows 97-113 (17 rows) -> Accelerated POD Tue 11/3',
+        'ALG-701': 'Rows 114-130 (17 rows) -> Accelerated POD Mon 11/2',
+        'M8539': 'Rows 131-152 (22 rows) -> Math 6 POD Tue 11/3',
+        'M6287': 'Rows 153-175 (23 rows) -> Math 6 POD Mon 11/2'
+      }
+    };
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
 /**
  * Sidebar API: Runs the autograder directly from the sidebar button.
  * Scans https://drive.google.com/drive/u/0/folders/15ZdjhTl_CRi_BRFeGa2wMAU3PwvUbi8T
@@ -1686,7 +1733,6 @@ function runGradingFromSidebar(selectedAssignmentCode) {
   let gradedSubmissionsCount = 0;
   let gradedFilesCount = 0;
   const manifestCache = {};
-  let batchDetectedCode = selectedAssignmentCode ? String(selectedAssignmentCode).trim().toUpperCase() : null;
 
   const getManifestCached = function(code) {
     if (!code) return null;
@@ -1703,23 +1749,22 @@ function runGradingFromSidebar(selectedAssignmentCode) {
   for (const file of filesToGrade) {
     try {
       const pdfBlob = file.getBlob();
+      const fileNameClean = file.getName().replace(/\.pdf$/i, '').trim();
       const fileCodeHint = typeof detectAssignmentCodeFromFileName === 'function'
         ? detectAssignmentCodeFromFileName(file.getName())
         : null;
 
-      const knownCode = selectedAssignmentCode || fileCodeHint || batchDetectedCode;
+      // When the teacher did not lock to a specific assignment, detect each file independently
+      const knownCode = selectedAssignmentCode || fileCodeHint;
       let manifest = knownCode ? getManifestCached(knownCode) : null;
 
       let gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
       const assignmentCode = String(gradeResult.assignmentCode || knownCode || 'ALG-701').trim().toUpperCase();
 
-      if (!batchDetectedCode && assignmentCode) {
-        batchDetectedCode = assignmentCode;
-      }
-
       if (!manifest && assignmentCode) {
         manifest = getManifestCached(assignmentCode);
-        if (manifest) {
+        // Only re-grade if the manifest title matches the detected assignmentTitle or no title detected
+        if (manifest && (!gradeResult.assignmentTitle || !manifest.worksheet || !manifest.worksheet.title || manifest.worksheet.title.toLowerCase() === gradeResult.assignmentTitle.toLowerCase())) {
           gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
         }
       }
@@ -1757,14 +1802,23 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         const lastFormula = buildRosterVlookupFormula(nextRowNum, 3, fallbackLast);
         const periodFormula = buildRosterVlookupFormula(nextRowNum, 4, fallbackPeriod);
 
+        const rowAssignmentCode = String(sub.assignmentCode || assignmentCode || 'ALG-701').trim().toUpperCase();
+        const rowAssignmentTitle = String(
+          sub.assignmentTitle ||
+          gradeResult.assignmentTitle ||
+          (manifest && manifest.worksheet ? manifest.worksheet.title : '') ||
+          fileNameClean ||
+          'Scanned Assignment'
+        ).trim();
+
         const row = [
           Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
           finalStudentId,
           firstFormula,
           lastFormula,
           periodFormula,
-          assignmentCode,
-          manifest && manifest.worksheet ? manifest.worksheet.title : 'Scanned Assignment',
+          rowAssignmentCode,
+          rowAssignmentTitle,
           `${scorePct}%`,
           totalScore,
           totalPossible,
