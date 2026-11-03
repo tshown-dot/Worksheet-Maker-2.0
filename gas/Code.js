@@ -53,6 +53,11 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify(res))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    if (e.parameter.action === 'ensureScanFolder') {
+      const res = ensureAutograderScanFolders_();
+      return ContentService.createTextOutput(JSON.stringify(res))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
       return HtmlService.createHtmlOutputFromFile('TeacherDashboard')
         .setTitle('Small Groups & Intervention Dashboard')
@@ -1583,7 +1588,71 @@ function clearGradebookFilter() {
 }
 
 /**
+ * Target Google Drive Folder ID where copier scans are dropped for autograding
+ * URL: https://drive.google.com/drive/u/0/folders/15ZdjhTl_CRi_BRFeGa2wMAU3PwvUbi8T
+ */
+const AUTOGRADER_SCAN_FOLDER_ID = '15ZdjhTl_CRi_BRFeGa2wMAU3PwvUbi8T';
+const AUTOGRADER_SCANNED_SUBFOLDER_NAME = 'Scanned';
+
+/**
+ * Ensures the target scan folder and its "Scanned" archive subfolder exist and returns both
+ */
+function getAutograderScanFolders_() {
+  let scanFolder = null;
+  try {
+    scanFolder = DriveApp.getFolderById(AUTOGRADER_SCAN_FOLDER_ID);
+  } catch (e) {
+    // Fallback by name if needed
+    const folders = DriveApp.getFoldersByName('Worksheet Scans');
+    scanFolder = folders.hasNext() ? folders.next() : DriveApp.createFolder('Worksheet Scans');
+  }
+
+  let scannedFolder = null;
+  const subIter = scanFolder.getFoldersByName(AUTOGRADER_SCANNED_SUBFOLDER_NAME);
+  while (subIter.hasNext()) {
+    const f = subIter.next();
+    if (!f.isTrashed()) {
+      scannedFolder = f;
+      break;
+    }
+  }
+  if (!scannedFolder) {
+    scannedFolder = scanFolder.createFolder(AUTOGRADER_SCANNED_SUBFOLDER_NAME);
+  }
+
+  return {
+    scanFolder,
+    scannedFolder
+  };
+}
+
+/**
+ * JSON helper to verify & initialize the scan folder and its "Scanned" subfolder
+ */
+function ensureAutograderScanFolders_() {
+  try {
+    const { scanFolder, scannedFolder } = getAutograderScanFolders_();
+    return {
+      success: true,
+      scanFolderId: scanFolder.getId(),
+      scanFolderName: scanFolder.getName(),
+      scanFolderUrl: scanFolder.getUrl(),
+      scannedFolderId: scannedFolder.getId(),
+      scannedFolderName: scannedFolder.getName(),
+      scannedFolderUrl: scannedFolder.getUrl()
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message || String(err)
+    };
+  }
+}
+
+/**
  * Sidebar API: Runs the autograder directly from the sidebar button.
+ * Scans https://drive.google.com/drive/u/0/folders/15ZdjhTl_CRi_BRFeGa2wMAU3PwvUbi8T
+ * and moves graded PDFs into the "Scanned" subfolder inside it.
  * @param {string} [selectedAssignmentCode] - Optional short code selected by teacher in Sidebar
  */
 function runGradingFromSidebar(selectedAssignmentCode) {
@@ -1596,34 +1665,23 @@ function runGradingFromSidebar(selectedAssignmentCode) {
     throw new Error("Gemini API key is not set. Click '⚙️ Set Gemini Key' at the bottom of the panel.");
   }
 
-  const folderName = 'Worksheet Scans';
-  let folders = DriveApp.getFoldersByName(folderName);
-  let scanFolder;
-
-  if (!folders.hasNext()) {
-    scanFolder = DriveApp.createFolder(folderName);
-    throw new Error(`Created folder "${folderName}" in your Google Drive. Drop your scanned PDFs there and click Grade again!`);
-  } else {
-    scanFolder = folders.next();
-  }
+  const { scanFolder, scannedFolder } = getAutograderScanFolders_();
+  const folderName = scanFolder.getName();
 
   const pdfFiles = scanFolder.getFilesByType(MimeType.PDF);
   const filesToGrade = [];
   while (pdfFiles.hasNext()) {
-    filesToGrade.push(pdfFiles.next());
+    const f = pdfFiles.next();
+    if (!f.isTrashed()) {
+      filesToGrade.push(f);
+    }
   }
 
   if (filesToGrade.length === 0) {
-    throw new Error(`No scanned PDFs found in "${folderName}". Upload your copier scans and try again.`);
+    throw new Error(`No new scanned PDFs found in "${folderName}". Drop your copier scans into the folder and try again.`);
   }
 
-  let processedFolder;
-  const processedSubfolders = scanFolder.getFoldersByName('Processed');
-  if (processedSubfolders.hasNext()) {
-    processedFolder = processedSubfolders.next();
-  } else {
-    processedFolder = scanFolder.createFolder('Processed');
-  }
+  let processedFolder = scannedFolder;
 
   let gradedSubmissionsCount = 0;
   let gradedFilesCount = 0;
