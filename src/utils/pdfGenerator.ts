@@ -19,13 +19,48 @@ export async function generateWorksheetPDF(
     format: 'letter',
   });
 
+  await renderWorksheetIntoPDF(doc, worksheet, { isAnswerKey, addInitialPage: false });
+  return doc;
+}
+
+export async function generateBatchWorksheetsPDF(
+  worksheets: Worksheet[],
+  mode: 'student' | 'key' | 'both' = 'student'
+): Promise<jsPDF> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'letter',
+  });
+
+  let isFirstSheet = true;
+  for (const ws of worksheets) {
+    if (mode === 'student' || mode === 'both') {
+      await renderWorksheetIntoPDF(doc, ws, { isAnswerKey: false, addInitialPage: !isFirstSheet });
+      isFirstSheet = false;
+    }
+    if (mode === 'key' || mode === 'both') {
+      await renderWorksheetIntoPDF(doc, ws, { isAnswerKey: true, addInitialPage: !isFirstSheet });
+      isFirstSheet = false;
+    }
+  }
+  return doc;
+}
+
+async function renderWorksheetIntoPDF(
+  doc: jsPDF,
+  worksheet: Worksheet,
+  options: { isAnswerKey?: boolean; addInitialPage?: boolean } = {}
+): Promise<void> {
+  const { isAnswerKey = false, addInitialPage = false } = options;
+
   const pageWidth = 215.9;
   const pageHeight = 279.4;
   const margin = 9.5; // tightened printable margin in mm (~0.37")
   const totalPages = worksheet.total_pages || 1;
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-    if (pageNum > 1) {
+    if (pageNum > 1 || addInitialPage) {
       doc.addPage('letter', 'portrait');
     }
 
@@ -165,8 +200,6 @@ export async function generateWorksheetPDF(
     doc.setFont('helvetica', 'normal');
     doc.text('Standardized OCR Assessment Layout', pageWidth - margin, pageHeight - 6.5, { align: 'right' });
   }
-
-  return doc;
 }
 
 // ----------------------------------------------------------------------------

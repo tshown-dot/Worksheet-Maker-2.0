@@ -1,8 +1,16 @@
 /**
- * Google Drive API v3 Client
- * Uses the OAuth provider_token granted during "Sign in with Google"
- * with the 'https://www.googleapis.com/auth/drive.file' scope.
+ * Google Drive API v3 & Permanent Apps Script Drive Bridge Client
+ *
+ * Uses the permanent Google Apps Script Web App Bridge (`GAS_DRIVE_BRIDGE_URL`)
+ * as the primary zero-login, never-expiring Drive connector, with optional
+ * browser OAuth token fallback.
  */
+
+export const GAS_DRIVE_BRIDGE_URL =
+  'https://script.google.com/macros/s/AKfycbzJdtuEFvlv50TPVntAHSeK9MwwXR-WwF3SPyO5GMBy-vCmplS3aNDPNYD1Tv-4CHNp/exec';
+
+export const DEFAULT_WORKSHEET_DRIVE_FOLDER_URL =
+  'https://drive.google.com/drive/folders/1zz_WMrQttk70mFJNTkqQ2GcXD5HiZMAq';
 
 interface DriveFolder {
   id: string;
@@ -14,6 +22,45 @@ interface UploadResult {
   id: string;
   name: string;
   webViewLink?: string;
+}
+
+/**
+ * Helper: Converts a Blob to a raw base64 string (without data:... prefix)
+ */
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const res = String(reader.result || '');
+      const base64 = res.includes(',') ? res.split(',')[1] : res;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Calls the permanent Apps Script Drive Bridge over CORS-safe POST (Content-Type: text/plain)
+ */
+async function callGasDriveBridge(payload: Record<string, any>): Promise<any> {
+  const res = await fetch(GAS_DRIVE_BRIDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Drive Bridge HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (!data || data.success === false) {
+    throw new Error(data?.error || 'Drive Bridge request failed');
+  }
+  return data;
 }
 
 /**
@@ -117,7 +164,6 @@ export async function uploadFileToDrive(
   fileName: string,
   parentFolderId: string
 ): Promise<UploadResult> {
-  // Check if file already exists with same name in folder
   const query = `name = '${fileName.replace(/'/g, "\\'")}' and '${parentFolderId}' in parents and trashed = false`;
   const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&pageSize=1`;
 
@@ -150,14 +196,8 @@ export async function uploadFileToDrive(
   const metadataPart = `${delimiter}Content-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}`;
   const fileHeader = `${delimiter}Content-Type: application/pdf\r\n\r\n`;
 
-  // Combine into a single body
   const multipartBlob = new Blob(
-    [
-      metadataPart,
-      fileHeader,
-      blob,
-      closeDelimiter
-    ],
+    [metadataPart, fileHeader, blob, closeDelimiter],
     { type: `multipart/related; boundary=${boundary}` }
   );
 
@@ -189,9 +229,11 @@ export async function uploadFileToDrive(
 /**
  * Saves both Student and Answer Key PDFs to the teacher's Drive:
  * Path: Google Drive / Worksheet Maker / [Folder Name] / ...
+ *
+ * Uses the permanent Apps Script Drive Bridge so it NEVER fails due to expired OAuth tokens!
  */
 export async function saveWorksheetToDrive(
-  accessToken: string,
+  accessToken: string | null | undefined,
   folderName: string,
   studentPdfBlob: Blob,
   keyPdfBlob: Blob,
@@ -203,23 +245,48 @@ export async function saveWorksheetToDrive(
   studentFileId?: string;
   keyFileId?: string;
 }> {
-  // 1. Get or create root "Worksheet Maker" folder
-  const rootFolder = await getOrCreateFolder(accessToken, 'Worksheet Maker');
+  // 1. Try permanent Apps Script Drive Bridge first (no expiring token needed!)
+  try {
+    const [studentPdfBase64, keyPdfBase64] = await Promise.all([
+      blobToBase64(studentPdfBlob),
+      blobToBase64(keyPdfBlob),
+    ]);
 
-  // 2. Get or create subfolder (e.g. "Daily Warm-Ups (POD)")
-  const subFolder = await getOrCreateFolder(accessToken, folderName || 'General', rootFolder.id);
+    const bridgeRes = await callGasDriveBridge({
+      action: 'saveWorksheetToDrive',
+      folderName: folderName || 'General',
+      baseFilename,
+      studentPdfBase64,
+      keyPdfBase64,
+    });
 
-  // 3. Upload Student PDF
+    return {
+      folderUrl: bridgeRes.folderUrl || DEFAULT_WORKSHEET_DRIVE_FOLDER_URL,
+      studentFileUrl: bridgeRes.studentFileUrl,
+      keyFileUrl: bridgeRes.keyFileUrl,
+      studentFileId: bridgeRes.studentFileId,
+      keyFileId: bridgeRes.keyFileId,
+    };
+  } catch (bridgeErr) {
+    console.warn('Apps Script Drive Bridge fallback to OAuth:', bridgeErr);
+    if (!accessToken) {
+      throw bridgeErr;
+    }
+  }
+
+  // 2. Fallback to browser OAuth token if provided
+  const rootFolder = await getOrCreateFolder(accessToken!, 'Worksheet Maker');
+  const subFolder = await getOrCreateFolder(accessToken!, folderName || 'General', rootFolder.id);
+
   const studentResult = await uploadFileToDrive(
-    accessToken,
+    accessToken!,
     studentPdfBlob,
     `${baseFilename}_Student.pdf`,
     subFolder.id
   );
 
-  // 4. Upload Teacher Answer Key PDF
   const keyResult = await uploadFileToDrive(
-    accessToken,
+    accessToken!,
     keyPdfBlob,
     `${baseFilename}_AnswerKey.pdf`,
     subFolder.id
@@ -238,11 +305,25 @@ export async function saveWorksheetToDrive(
  * Moves a worksheet's Google Drive PDF files to Trash when deleted from the app.
  */
 export async function trashWorksheetInDrive(
-  accessToken: string,
+  accessToken: string | null | undefined,
   shortCode: string,
   driveStudentFileId?: string,
   driveKeyFileId?: string
 ): Promise<void> {
+  // 1. Permanent Apps Script Drive Bridge
+  try {
+    await callGasDriveBridge({
+      action: 'trashWorksheetInDrive',
+      shortCode,
+      driveStudentFileId,
+      driveKeyFileId,
+    });
+    return;
+  } catch (bridgeErr) {
+    if (!accessToken) return;
+  }
+
+  // 2. Fallback to OAuth
   const fileIdsToTrash = new Set<string>();
   if (driveStudentFileId) fileIdsToTrash.add(driveStudentFileId);
   if (driveKeyFileId) fileIdsToTrash.add(driveKeyFileId);
@@ -281,14 +362,36 @@ export async function trashWorksheetInDrive(
  * deleted/trashed in Google Drive, and returns the Supabase worksheet IDs to delete.
  */
 export async function findWorksheetsDeletedInDrive(
-  accessToken: string,
+  accessToken: string | null | undefined,
   supabaseWorksheets: any[]
 ): Promise<{ idsToDelete: string[]; codesDeleted: string[] }> {
   if (!supabaseWorksheets || supabaseWorksheets.length === 0) {
     return { idsToDelete: [], codesDeleted: [] };
   }
 
-  // 1. Fetch all folders created by this app (active and trashed) to detect trashed parent folders
+  // 1. Permanent Apps Script Drive Bridge
+  try {
+    const slimList = supabaseWorksheets.map((w) => ({
+      id: w.id,
+      short_code: w.short_code,
+      layout_config: w.layout_config || {},
+    }));
+    const bridgeRes = await callGasDriveBridge({
+      action: 'reconcileDrive',
+      worksheets: slimList,
+    });
+    return {
+      idsToDelete: bridgeRes.idsToDelete || [],
+      codesDeleted: bridgeRes.codesDeleted || [],
+    };
+  } catch (bridgeErr) {
+    console.warn('Bridge reconcile fallback:', bridgeErr);
+    if (!accessToken) {
+      return { idsToDelete: [], codesDeleted: [] };
+    }
+  }
+
+  // 2. Fallback to OAuth if token is present
   const folderUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     "mimeType = 'application/vnd.google-apps.folder'"
   )}&fields=files(id,name,trashed,parents)&pageSize=500`;
@@ -308,7 +411,6 @@ export async function findWorksheetsDeletedInDrive(
         trashedFolderIds.add(folder.id);
       }
     }
-    // Propagate trashed status to child folders whose parent is trashed
     let added = true;
     while (added) {
       added = false;
@@ -321,7 +423,6 @@ export async function findWorksheetsDeletedInDrive(
     }
   }
 
-  // 2. Fetch all worksheet PDFs (both active and trashed)
   const filesUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     "name contains '_Student.pdf' or name contains '_AnswerKey.pdf'"
   )}&fields=files(id,name,trashed,parents)&pageSize=1000`;
@@ -366,7 +467,6 @@ export async function findWorksheetsDeletedInDrive(
     const code = String(ws.short_code || '').toUpperCase();
     const syncedFileId = ws.layout_config?.drive_student_file_id;
 
-    // Case 1: Worksheet has a recorded Drive file ID, and that file is either trashed or permanently gone
     if (syncedFileId) {
       if (trashedFileIds.has(syncedFileId) || !activeFileIds.has(syncedFileId)) {
         idsToDelete.push(ws.id);
@@ -375,7 +475,6 @@ export async function findWorksheetsDeletedInDrive(
       }
     }
 
-    // Case 2: Any worksheet whose PDF (or parent folder) is in Google Drive Trash and has no active copy
     if (code && trashedCodes.has(code) && !activeCodes.has(code)) {
       idsToDelete.push(ws.id);
       codesDeleted.push(code);

@@ -10,7 +10,7 @@ import { ImportHub } from './components/ImportHub';
 import { AIImportModal } from './components/AIImportModal';
 import { WorksheetListModal } from './components/WorksheetListModal';
 import { generateWorksheetPDF } from './utils/pdfGenerator';
-import { saveWorksheetToDrive } from './utils/googleDrive';
+import { saveWorksheetToDrive, DEFAULT_WORKSHEET_DRIVE_FOLDER_URL } from './utils/googleDrive';
 import { Plus, Eye, Edit3, Sparkles, ArrowLeft } from 'lucide-react';
 
 const INITIAL_WORKSHEET: Worksheet = {
@@ -47,6 +47,10 @@ export function App() {
   const [isAIImportOpen, setIsAIImportOpen] = useState(false);
   const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [printIsAnswerKey, setPrintIsAnswerKey] = useState<boolean>(false);
+  const [batchPrintQueue, setBatchPrintQueue] = useState<{
+    worksheets: Worksheet[];
+    mode: 'student' | 'key' | 'both';
+  } | null>(null);
 
   // Authentication & Google Drive OAuth session
   const [user, setUser] = useState<any | null>(null);
@@ -55,7 +59,7 @@ export function App() {
     return localStorage.getItem('wm_google_provider_token');
   });
   const [driveFolderUrl, setDriveFolderUrl] = useState<string | null>(() => {
-    return localStorage.getItem('wm_drive_folder_url');
+    return localStorage.getItem('wm_drive_folder_url') || DEFAULT_WORKSHEET_DRIVE_FOLDER_URL;
   });
 
   useEffect(() => {
@@ -293,22 +297,24 @@ export function App() {
         if (qError) throw qError;
       }
 
-      // Auto-save to Google Drive if signed in with Google OAuth
-      let driveSaved = false;
-      let driveTokenExpired = false;
+      // Immediately release UI Save button — Supabase save is complete!
+      setIsSaving(false);
+      setSaveStatusText('Saved to Library! Syncing PDFs to Google Drive...');
+
+      // Non-blocking background sync to Google Drive via permanent Apps Script Bridge
       const activeDriveToken = session?.provider_token || providerToken;
-      if (activeDriveToken) {
+      const wsSnapshot: Worksheet = { ...worksheet, id: savedId || worksheet.id };
+      (async () => {
         try {
-          setSaveStatusText('Saving PDFs to Google Drive...');
-          const studentDoc = await generateWorksheetPDF(worksheet, { isAnswerKey: false });
-          const keyDoc = await generateWorksheetPDF(worksheet, { isAnswerKey: true });
+          const studentDoc = await generateWorksheetPDF(wsSnapshot, { isAnswerKey: false });
+          const keyDoc = await generateWorksheetPDF(wsSnapshot, { isAnswerKey: true });
           const studentBlob = studentDoc.output('blob');
           const keyBlob = keyDoc.output('blob');
-          const baseName = `${worksheet.short_code}_${worksheet.title.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          const baseName = `${wsSnapshot.short_code}_${wsSnapshot.title.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
           const driveRes = await saveWorksheetToDrive(
             activeDriveToken,
-            worksheet.folder_name || 'General',
+            wsSnapshot.folder_name || 'General',
             studentBlob,
             keyBlob,
             baseName
@@ -317,53 +323,56 @@ export function App() {
             setDriveFolderUrl(driveRes.folderUrl);
             localStorage.setItem('wm_drive_folder_url', driveRes.folderUrl);
           }
-          if (wsId && (driveRes.studentFileId || driveRes.keyFileId)) {
+          if (savedId && (driveRes.studentFileId || driveRes.keyFileId)) {
             await supabase
               .from('worksheets')
               .update({
                 layout_config: {
-                  ...worksheet.layout_config,
-                  columns: worksheet.columns,
-                  spacing: worksheet.spacing,
-                  track_standards: worksheet.track_standards !== false,
+                  ...wsSnapshot.layout_config,
+                  columns: wsSnapshot.columns,
+                  spacing: wsSnapshot.spacing,
+                  track_standards: wsSnapshot.track_standards !== false,
                   drive_student_file_id: driveRes.studentFileId,
                   drive_key_file_id: driveRes.keyFileId,
                 },
               })
-              .eq('id', wsId);
+              .eq('id', savedId);
           }
-          driveSaved = true;
+          setSaveStatusText('Saved to Library & Google Drive!');
         } catch (driveErr: any) {
-          console.warn('Google Drive auto-save error:', driveErr);
+          console.warn('Google Drive background sync warning:', driveErr);
           if (driveErr?.message === 'DRIVE_AUTH_EXPIRED') {
             localStorage.removeItem('wm_google_provider_token');
             setProviderToken(null);
-            driveTokenExpired = true;
           }
+          setSaveStatusText('Saved to Library!');
         }
-      }
-
-      if (driveSaved) {
-        setSaveStatusText('Saved to Supabase & Google Drive!');
-      } else if (driveTokenExpired) {
-        setSaveStatusText('Saved to Supabase (Drive session expired — click account to reconnect)');
-      } else {
-        setSaveStatusText('Saved to Supabase only (Sign in with Google for Drive sync)');
-      }
-      setTimeout(() => setSaveStatusText(''), 6000);
+        setTimeout(() => setSaveStatusText(''), 5000);
+      })();
     } catch (err: any) {
       console.error(err);
       alert('Save failed: ' + err.message);
-    } finally {
       setIsSaving(false);
     }
   };
 
   const handlePrint = (isKey: boolean) => {
+    setBatchPrintQueue(null);
     setPrintIsAnswerKey(isKey);
     setTimeout(() => {
       window.print();
     }, 150);
+  };
+
+  const handleBatchPrint = (
+    worksheetsToPrint: Worksheet[],
+    mode: 'student' | 'key' | 'both'
+  ) => {
+    setBatchPrintQueue({ worksheets: worksheetsToPrint, mode });
+    // Allow 400ms for all QR codes across all batch pages to render before opening browser print dialog
+    setTimeout(() => {
+      window.print();
+    }, 450);
   };
 
   const handleDownloadStudentPDF = async () => {
@@ -424,9 +433,14 @@ export function App() {
 
       {/* VIEW MODE 1: THE LEADING IMPORT & CONVERSION HUB */}
       {viewMode === 'import' ? (
-        <main className="flex-1 flex items-center justify-center">
+        <main className="no-print flex-1 flex items-center justify-center">
           <ImportHub
             onImportQuestions={handleHubImport}
+            onSelectSavedWorksheet={(ws) => {
+              setWorksheet(ws);
+              setViewMode('editor');
+            }}
+            onBatchPrint={handleBatchPrint}
             onOpenBlank={() => setViewMode('editor')}
             onOpenSavedList={() => setIsListModalOpen(true)}
             teacherId={user?.id}
@@ -585,14 +599,49 @@ export function App() {
 
       {/* DEDICATED PRINTABLE CONTAINER (Only visible during print) */}
       <div className="printable-area hidden print:block">
-        {Array.from({ length: totalPages }).map((_, idx) => (
-          <WorksheetPage
-            key={idx + 1}
-            worksheet={worksheet}
-            pageNum={idx + 1}
-            isAnswerKey={printIsAnswerKey}
-          />
-        ))}
+        {batchPrintQueue && batchPrintQueue.worksheets.length > 0 ? (
+          batchPrintQueue.worksheets.map((ws) => {
+            const pages = ws.total_pages || 1;
+            const elements: JSX.Element[] = [];
+
+            if (batchPrintQueue.mode === 'student' || batchPrintQueue.mode === 'both') {
+              for (let p = 1; p <= pages; p++) {
+                elements.push(
+                  <WorksheetPage
+                    key={`${ws.id}-student-p${p}`}
+                    worksheet={ws}
+                    pageNum={p}
+                    isAnswerKey={false}
+                  />
+                );
+              }
+            }
+
+            if (batchPrintQueue.mode === 'key' || batchPrintQueue.mode === 'both') {
+              for (let p = 1; p <= pages; p++) {
+                elements.push(
+                  <WorksheetPage
+                    key={`${ws.id}-key-p${p}`}
+                    worksheet={ws}
+                    pageNum={p}
+                    isAnswerKey={true}
+                  />
+                );
+              }
+            }
+
+            return elements;
+          })
+        ) : (
+          Array.from({ length: totalPages }).map((_, idx) => (
+            <WorksheetPage
+              key={idx + 1}
+              worksheet={worksheet}
+              pageNum={idx + 1}
+              isAnswerKey={printIsAnswerKey}
+            />
+          ))
+        )}
       </div>
 
       {/* Modals */}
@@ -612,9 +661,11 @@ export function App() {
           setProviderToken(null);
         }}
         onSelectWorksheet={(ws) => {
+          setBatchPrintQueue(null);
           setWorksheet(ws);
           setViewMode('editor');
         }}
+        onBatchPrint={handleBatchPrint}
         onNew={handleNewWorksheet}
       />
     </div>

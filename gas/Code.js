@@ -48,6 +48,11 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify(data))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    if (e.parameter.action === 'reconcileDrive') {
+      const res = handleDriveBridgeReconcile_({});
+      return ContentService.createTextOutput(JSON.stringify(res))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
       return HtmlService.createHtmlOutputFromFile('TeacherDashboard')
         .setTitle('Small Groups & Intervention Dashboard')
@@ -60,6 +65,223 @@ function doGet(e) {
     .setTitle('Math Progress Portal')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Handles zero-auth Google Drive operations directly from Worksheet Maker 2.0
+ * (saving PDFs, trashing deleted worksheets, and two-way Drive sync without expiring browser OAuth tokens!)
+ */
+function doPost(e) {
+  try {
+    const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
+    const body = JSON.parse(raw);
+    const action = body.action || (e && e.parameter && e.parameter.action) || '';
+
+    let result = { success: false, error: 'Unknown action: ' + action };
+    if (action === 'saveWorksheetToDrive') {
+      result = handleDriveBridgeSave_(body);
+    } else if (action === 'trashWorksheetInDrive') {
+      result = handleDriveBridgeTrash_(body);
+    } else if (action === 'reconcileDrive') {
+      result = handleDriveBridgeReconcile_(body);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.message || String(err)
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * Gets or creates a Google Drive folder by name under an optional parent Folder
+ */
+function getOrCreateDriveBridgeFolder_(folderName, parentFolder) {
+  const safeName = String(folderName || 'General').trim() || 'General';
+  const parent = parentFolder || DriveApp.getRootFolder();
+  const iter = parent.getFoldersByName(safeName);
+  while (iter.hasNext()) {
+    const f = iter.next();
+    if (!f.isTrashed()) return f;
+  }
+  return parent.createFolder(safeName);
+}
+
+/**
+ * Saves or updates a PDF file inside a target Drive folder from base64 bytes
+ */
+function upsertDriveBridgePdf_(folder, fileName, base64Data) {
+  if (!base64Data) return null;
+  const cleanB64 = String(base64Data).replace(/^data:application\/pdf;base64,/, '');
+  const bytes = Utilities.base64Decode(cleanB64);
+  const blob = Utilities.newBlob(bytes, 'application/pdf', fileName);
+
+  // Trash any existing active file with the exact same name in this folder to avoid duplicates
+  const existing = folder.getFilesByName(fileName);
+  while (existing.hasNext()) {
+    const f = existing.next();
+    if (!f.isTrashed()) {
+      f.setTrashed(true);
+    }
+  }
+
+  const created = folder.createFile(blob);
+  return {
+    id: created.getId(),
+    name: created.getName(),
+    webViewLink: created.getUrl()
+  };
+}
+
+/**
+ * Saves both Student and Answer Key PDFs into Google Drive / Worksheet Maker / [Folder Name]
+ */
+function handleDriveBridgeSave_(body) {
+  const rootFolder = getOrCreateDriveBridgeFolder_('Worksheet Maker', DriveApp.getRootFolder());
+  const subFolder = getOrCreateDriveBridgeFolder_(body.folderName || 'General', rootFolder);
+  const baseFilename = String(body.baseFilename || 'Worksheet').trim();
+
+  const studentRes = upsertDriveBridgePdf_(subFolder, `${baseFilename}_Student.pdf`, body.studentPdfBase64);
+  const keyRes = upsertDriveBridgePdf_(subFolder, `${baseFilename}_AnswerKey.pdf`, body.keyPdfBase64);
+
+  return {
+    success: true,
+    folderUrl: subFolder.getUrl(),
+    studentFileUrl: studentRes ? studentRes.webViewLink : null,
+    keyFileUrl: keyRes ? keyRes.webViewLink : null,
+    studentFileId: studentRes ? studentRes.id : null,
+    keyFileId: keyRes ? keyRes.id : null
+  };
+}
+
+/**
+ * Moves a worksheet's Google Drive PDFs to Trash when deleted in Worksheet Maker
+ */
+function handleDriveBridgeTrash_(body) {
+  const ids = [body.driveStudentFileId, body.driveKeyFileId].filter(Boolean);
+  for (let i = 0; i < ids.length; i++) {
+    try {
+      DriveApp.getFileById(ids[i]).setTrashed(true);
+    } catch (e) {}
+  }
+
+  const shortCode = String(body.shortCode || '').trim();
+  if (shortCode) {
+    try {
+      const files = DriveApp.searchFiles(`title contains '${shortCode.replace(/'/g, "\\'")}_' and trashed = false`);
+      while (files.hasNext()) {
+        files.next().setTrashed(true);
+      }
+    } catch (e) {}
+  }
+
+  return { success: true };
+}
+
+/**
+ * Two-way reconciliation: Scans Google Drive for trashed/deleted worksheet PDFs
+ * so Supabase stays in sync without needing browser OAuth tokens
+ */
+function handleDriveBridgeReconcile_(body) {
+  const supabaseWorksheets = Array.isArray(body.worksheets) ? body.worksheets : [];
+  if (supabaseWorksheets.length === 0) {
+    return { success: true, idsToDelete: [], codesDeleted: [] };
+  }
+
+  const activeFileIds = new Set();
+  const trashedFileIds = new Set();
+  const activeCodes = new Set();
+  const trashedCodes = new Set();
+
+  // Check all PDFs inside Worksheet Maker folders
+  try {
+    const rootIter = DriveApp.getRootFolder().getFoldersByName('Worksheet Maker');
+    while (rootIter.hasNext()) {
+      const rootF = rootIter.next();
+      const rootTrashed = rootF.isTrashed();
+
+      // Check files directly in root
+      const rFiles = rootF.getFiles();
+      while (rFiles.hasNext()) {
+        const f = rFiles.next();
+        const isTr = rootTrashed || f.isTrashed();
+        const m = f.getName().match(/^([A-Za-z0-9-]+?)_/);
+        const c = m ? m[1].toUpperCase() : null;
+        if (isTr) {
+          trashedFileIds.add(f.getId());
+          if (c) trashedCodes.add(c);
+        } else {
+          activeFileIds.add(f.getId());
+          if (c) activeCodes.add(c);
+        }
+      }
+
+      // Check subfolders
+      const subIter = rootF.getFolders();
+      while (subIter.hasNext()) {
+        const subF = subIter.next();
+        const subTrashed = rootTrashed || subF.isTrashed();
+        const sFiles = subF.getFiles();
+        while (sFiles.hasNext()) {
+          const f = sFiles.next();
+          const isTr = subTrashed || f.isTrashed();
+          const m = f.getName().match(/^([A-Za-z0-9-]+?)_/);
+          const c = m ? m[1].toUpperCase() : null;
+          if (isTr) {
+            trashedFileIds.add(f.getId());
+            if (c) trashedCodes.add(c);
+          } else {
+            activeFileIds.add(f.getId());
+            if (c) activeCodes.add(c);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Reconcile scan warning:', e);
+  }
+
+  const idsToDelete = [];
+  const codesDeleted = [];
+
+  for (let i = 0; i < supabaseWorksheets.length; i++) {
+    const ws = supabaseWorksheets[i];
+    const code = String(ws.short_code || '').toUpperCase();
+    const syncedFileId = ws.layout_config && ws.layout_config.drive_student_file_id;
+
+    if (syncedFileId) {
+      let fileStillActive = activeFileIds.has(syncedFileId);
+      if (!fileStillActive && !trashedFileIds.has(syncedFileId)) {
+        try {
+          const df = DriveApp.getFileById(syncedFileId);
+          if (df && !df.isTrashed()) {
+            fileStillActive = true;
+          }
+        } catch (err) {
+          fileStillActive = false;
+        }
+      }
+      if (!fileStillActive) {
+        idsToDelete.push(ws.id);
+        codesDeleted.push(code);
+        continue;
+      }
+    }
+
+    if (code && trashedCodes.has(code) && !activeCodes.has(code)) {
+      idsToDelete.push(ws.id);
+      codesDeleted.push(code);
+    }
+  }
+
+  return {
+    success: true,
+    idsToDelete,
+    codesDeleted
+  };
 }
 
 /**

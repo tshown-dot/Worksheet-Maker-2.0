@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Question, StylePreset } from '../types/worksheet';
+import { Question, StylePreset, Worksheet } from '../types/worksheet';
 import { supabase } from '../lib/supabase';
 import { generateWorksheetPDF } from '../utils/pdfGenerator';
 import { saveWorksheetToDrive } from '../utils/googleDrive';
@@ -15,7 +15,12 @@ import {
   Calendar,
   Layers,
   Folder,
-  Plus
+  Plus,
+  Printer,
+  Key,
+  CheckSquare,
+  Square,
+  Loader2
 } from 'lucide-react';
 
 interface AssignmentGroup {
@@ -28,6 +33,8 @@ interface ImportHubProps {
     questions: Question[],
     metadata?: { title?: string; stylePreset?: StylePreset; totalPages?: 1 | 2; folderName?: string }
   ) => void;
+  onSelectSavedWorksheet?: (ws: Worksheet) => void;
+  onBatchPrint?: (worksheets: Worksheet[], mode: 'student' | 'key' | 'both') => void;
   onOpenBlank: () => void;
   onOpenSavedList: () => void;
   teacherId?: string | null;
@@ -39,6 +46,8 @@ interface ImportHubProps {
 
 export const ImportHub: React.FC<ImportHubProps> = ({
   onImportQuestions,
+  onSelectSavedWorksheet,
+  onBatchPrint,
   onOpenBlank,
   onOpenSavedList,
   teacherId,
@@ -64,9 +73,135 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  // Quick-access Saved Worksheets & Batch Print Shelf
+  const [savedWorksheets, setSavedWorksheets] = useState<any[]>([]);
+  const [shelfFolder, setShelfFolder] = useState<string>('ALL');
+  const [selectedShelfIds, setSelectedShelfIds] = useState<string[]>([]);
+  const [loadingShelf, setLoadingShelf] = useState(false);
+
   useEffect(() => {
     fetchFolders();
+    fetchSavedWorksheets();
   }, []);
+
+  const fetchSavedWorksheets = async () => {
+    try {
+      const { data } = await supabase
+        .from('worksheets')
+        .select('id, short_code, title, subject, grade_level, folder_name, style_preset, total_pages, columns, spacing, track_standards, student_id_digits, layout_config, created_at')
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (data) {
+        setSavedWorksheets(data);
+      }
+    } catch {}
+  };
+
+  const fetchFullShelfWorksheets = async (wsIds: string[]): Promise<Worksheet[]> => {
+    const { data: wsRows, error: wsError } = await supabase
+      .from('worksheets')
+      .select('*')
+      .in('id', wsIds);
+    if (wsError) throw wsError;
+
+    const { data: qRows, error: qError } = await supabase
+      .from('questions')
+      .select('*')
+      .in('worksheet_id', wsIds)
+      .order('page_number', { ascending: true })
+      .order('order_index', { ascending: true });
+    if (qError) throw qError;
+
+    const qByWs = new Map<string, any[]>();
+    for (const q of qRows || []) {
+      const list = qByWs.get(q.worksheet_id) || [];
+      list.push(q);
+      qByWs.set(q.worksheet_id, list);
+    }
+
+    const rowMap = new Map<string, any>((wsRows || []).map((r: any) => [r.id, r]));
+
+    return wsIds
+      .map((id) => rowMap.get(id))
+      .filter(Boolean)
+      .map((wsData: any) => ({
+        id: wsData.id,
+        short_code: wsData.short_code,
+        title: wsData.title,
+        subject: wsData.subject,
+        grade_level: wsData.grade_level,
+        folder_name: wsData.folder_name || 'General',
+        style_preset: wsData.style_preset,
+        total_pages: wsData.total_pages || 1,
+        columns: wsData.columns || wsData.layout_config?.columns || 2,
+        spacing: wsData.spacing || wsData.layout_config?.spacing || 'balanced',
+        track_standards: wsData.track_standards !== false,
+        student_id_digits: wsData.student_id_digits || 3,
+        layout_config: wsData.layout_config || {
+          border_style: 'solid',
+          header_style: 'clean',
+          show_dot_grid: false,
+          columns: 2,
+          show_honor_pledge: false,
+        },
+        questions: (qByWs.get(wsData.id) || []).map((q: any) => ({
+          id: q.id,
+          order_index: q.order_index,
+          page_number: q.page_number,
+          prompt: q.prompt,
+          diagram_url: q.diagram_url,
+          question_type: q.question_type,
+          options: q.options || [],
+          correct_answer: q.correct_answer,
+          acceptable_alternatives: q.acceptable_alternatives || [],
+          points: q.points || 1,
+          rubric_notes: q.rubric_notes || '',
+          standard: q.standard || undefined,
+          bounding_box: q.bounding_box,
+        })),
+      }));
+  };
+
+  const handleOpenSavedFromShelf = async (wsId: string) => {
+    if (!onSelectSavedWorksheet) return;
+    setLoadingShelf(true);
+    try {
+      const list = await fetchFullShelfWorksheets([wsId]);
+      if (list.length > 0) {
+        onSelectSavedWorksheet(list[0]);
+      }
+    } catch (err: any) {
+      alert('Failed to open worksheet: ' + err.message);
+    } finally {
+      setLoadingShelf(false);
+    }
+  };
+
+  const handleBatchPrintShelf = async (mode: 'student' | 'key' | 'both', targetIds?: string[]) => {
+    const idsToPrint = targetIds || selectedShelfIds;
+    if (idsToPrint.length === 0 || !onBatchPrint) return;
+    setLoadingShelf(true);
+    try {
+      const orderedIds = savedWorksheets
+        .filter((w) => idsToPrint.includes(w.id))
+        .map((w) => w.id);
+      const list = await fetchFullShelfWorksheets(orderedIds.length > 0 ? orderedIds : idsToPrint);
+      if (list.length > 0) {
+        onBatchPrint(list, mode);
+      }
+    } catch (err: any) {
+      alert('Batch print failed: ' + err.message);
+    } finally {
+      setLoadingShelf(false);
+    }
+  };
+
+  const toggleShelfSelect = (wsId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedShelfIds((prev) =>
+      prev.includes(wsId) ? prev.filter((id) => id !== wsId) : [...prev, wsId]
+    );
+  };
 
   const fetchFolders = async () => {
     try {
@@ -376,14 +511,13 @@ RULES:
     });
   };
 
-  // One-click batch save all assignments to Supabase!
-  const handleSaveAllGroups = async () => {
+  // One-click batch save all assignments to Supabase! (Plus optional immediate Batch Print)
+  const handleSaveAllGroups = async (andPrintMode?: 'student' | 'key' | 'both') => {
     if (!detectedGroups || detectedGroups.length === 0) return;
     setIsSavingAll(true);
-    setSaveAllMessage(`Saving assignments to "${selectedFolder}"...`);
+    setSaveAllMessage(`Saving ${detectedGroups.length} assignments to "${selectedFolder}"...`);
 
-    let driveSavedCount = 0;
-    let driveExpired = false;
+    const savedBatchWorksheets: Worksheet[] = [];
 
     try {
       for (const group of detectedGroups) {
@@ -430,27 +564,37 @@ RULES:
           await supabase.from('questions').insert(qPayload);
         }
 
-        // Upload to Google Drive if OAuth session is present
-        if (providerToken && !driveExpired) {
+        const fullWs: Worksheet = {
+          id: wsData?.id || crypto.randomUUID(),
+          short_code: code,
+          title: group.name,
+          subject: 'Mathematics',
+          grade_level: '6th Grade',
+          folder_name: selectedFolder,
+          style_preset: grpPreset,
+          total_pages: totalPages,
+          columns: 2,
+          spacing: 'balanced',
+          student_id_digits: 3,
+          track_standards: true,
+          layout_config: {
+            border_style: 'solid',
+            header_style: 'clean',
+            show_dot_grid: false,
+            columns: 2,
+            spacing: 'balanced',
+            show_honor_pledge: false,
+            track_standards: true,
+          },
+          questions,
+        };
+        savedBatchWorksheets.push(fullWs);
+
+        // Non-blocking background sync to Google Drive via permanent Apps Script Bridge
+        (async () => {
           try {
-            const tempWs: any = {
-              id: wsData?.id || '',
-              short_code: code,
-              title: group.name,
-              subject: 'Mathematics',
-              grade_level: '6th Grade',
-              folder_name: selectedFolder,
-              style_preset: grpPreset,
-              total_pages: totalPages,
-              columns: 2,
-              spacing: 'balanced',
-              student_id_digits: 3,
-              track_standards: true,
-              layout_config: { border_style: 'solid', header_style: 'clean', show_dot_grid: false, columns: 2, spacing: 'balanced', show_honor_pledge: false, track_standards: true },
-              questions,
-            };
-            const sDoc = await generateWorksheetPDF(tempWs, { isAnswerKey: false });
-            const kDoc = await generateWorksheetPDF(tempWs, { isAnswerKey: true });
+            const sDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: false });
+            const kDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: true });
             const baseName = `${code}_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
             const driveRes = await saveWorksheetToDrive(
               providerToken,
@@ -459,7 +603,6 @@ RULES:
               kDoc.output('blob'),
               baseName
             );
-            driveSavedCount++;
             if (wsData?.id && (driveRes.studentFileId || driveRes.keyFileId)) {
               await supabase
                 .from('worksheets')
@@ -478,27 +621,27 @@ RULES:
               onDriveFolderSaved(driveRes.folderUrl);
             }
           } catch (dErr: any) {
-            console.warn('Batch Drive upload warning:', dErr);
-            if (dErr?.message === 'DRIVE_AUTH_EXPIRED') {
-              driveExpired = true;
-              if (onDriveTokenExpired) onDriveTokenExpired();
+            console.warn('Background Drive upload warning:', dErr);
+            if (dErr?.message === 'DRIVE_AUTH_EXPIRED' && onDriveTokenExpired) {
+              onDriveTokenExpired();
             }
           }
-        }
+        })();
       }
 
-      if (driveSavedCount > 0) {
-        setSaveAllMessage(`🎉 All ${detectedGroups.length} assignments saved to Supabase & Google Drive ("Worksheet Maker/${selectedFolder}")!`);
-      } else if (driveExpired) {
-        setSaveAllMessage(`Saved to Supabase! (Google Drive session expired — click your account menu at top-right to reconnect Drive)`);
+      fetchSavedWorksheets();
+      setSaveAllMessage(
+        `🎉 Saved all ${detectedGroups.length} assignments to "${selectedFolder}" (syncing PDFs to Google Drive in background)!`
+      );
+      setIsSavingAll(false);
+
+      if (andPrintMode && onBatchPrint && savedBatchWorksheets.length > 0) {
+        onBatchPrint(savedBatchWorksheets, andPrintMode);
       } else {
-        setSaveAllMessage(`Saved to Supabase! (Sign in with Google at top-right to also sync PDFs to Google Drive)`);
+        setTimeout(() => {
+          handleSelectGroup(detectedGroups[0]);
+        }, 900);
       }
-      setTimeout(() => {
-        setIsSavingAll(false);
-        // Load the first one
-        handleSelectGroup(detectedGroups[0]);
-      }, 1500);
     } catch (err: any) {
       alert('Save all failed: ' + err.message);
       setIsSavingAll(false);
@@ -562,17 +705,35 @@ RULES:
               </div>
               <button
                 type="button"
-                onClick={handleSaveAllGroups}
+                onClick={() => handleSaveAllGroups()}
                 disabled={isSavingAll}
                 className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer flex items-center space-x-1"
               >
-                <span>{isSavingAll ? 'Saving to Cloud...' : `💾 Save All ${detectedGroups.length} to Folder`}</span>
+                <span>{isSavingAll ? 'Saving...' : `💾 Save All ${detectedGroups.length}`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveAllGroups('student')}
+                disabled={isSavingAll}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-extrabold shadow-xs transition cursor-pointer flex items-center space-x-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>{`🖨️ Save & Print All ${detectedGroups.length} Student Copies`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveAllGroups('both')}
+                disabled={isSavingAll}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-extrabold shadow-xs transition cursor-pointer flex items-center space-x-1.5"
+              >
+                <Key className="w-3.5 h-3.5" />
+                <span>Save & Print All + Keys</span>
               </button>
             </div>
           </div>
 
           <p className="text-xs text-slate-600">
-            Click any day below to open and print it immediately, or save all 5 directly into your worksheets folder:
+            Click any day below to open and edit it individually, or click <strong>Save & Print All {detectedGroups.length}</strong> above to print the entire week in one single print job:
           </p>
 
           {saveAllMessage && (
@@ -605,6 +766,190 @@ RULES:
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* QUICK-ACCESS SAVED WORKSHEETS & MULTI-SELECT BATCH PRINT SHELF */}
+      {savedWorksheets.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm mb-6 space-y-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center space-x-2">
+              <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                <FolderOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Saved Worksheets & Multi-Worksheet Batch Print
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Check multiple assignments below to print several worksheets at once, or click any card to open
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* Folder Filter */}
+              <select
+                value={shelfFolder}
+                onChange={(e) => setShelfFolder(e.target.value)}
+                className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 cursor-pointer"
+              >
+                <option value="ALL">All Folders ({savedWorksheets.length})</option>
+                {Array.from(new Set(savedWorksheets.map((w) => w.folder_name || 'General')))
+                  .sort()
+                  .map((f) => (
+                    <option key={f} value={f}>
+                      📁 {f}
+                    </option>
+                  ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={onOpenSavedList}
+                className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer"
+              >
+                Full Library ({savedWorksheets.length}) ↗
+              </button>
+            </div>
+          </div>
+
+          {/* Batch Print Bar when items are checked on the home shelf */}
+          {selectedShelfIds.length > 0 && (
+            <div className="p-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl flex flex-wrap items-center justify-between gap-2 shadow-sm">
+              <div className="flex items-center space-x-2">
+                <Layers className="w-4 h-4 text-blue-200" />
+                <span className="text-xs font-extrabold">
+                  {selectedShelfIds.length} Worksheet{selectedShelfIds.length > 1 ? 's' : ''} Selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedShelfIds([])}
+                  className="text-[11px] text-blue-200 hover:text-white underline ml-1 cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={loadingShelf}
+                  onClick={() => handleBatchPrintShelf('student')}
+                  className="px-3 py-1.5 bg-white text-blue-700 hover:bg-blue-50 rounded-lg text-xs font-extrabold flex items-center space-x-1 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  {loadingShelf ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Printer className="w-3.5 h-3.5" />
+                  )}
+                  <span>Print {selectedShelfIds.length} Student Copies</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={loadingShelf}
+                  onClick={() => handleBatchPrintShelf('key')}
+                  className="px-2.5 py-1.5 bg-amber-400 text-slate-950 hover:bg-amber-300 rounded-lg text-xs font-extrabold flex items-center space-x-1 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Print {selectedShelfIds.length} Keys</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={loadingShelf}
+                  onClick={() => handleBatchPrintShelf('both')}
+                  className="px-2.5 py-1.5 bg-blue-800 hover:bg-blue-900 text-white border border-blue-400/40 rounded-lg text-xs font-bold flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Both (Student + Key)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Grid of recent worksheets */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
+            {savedWorksheets
+              .filter((w) => shelfFolder === 'ALL' || (w.folder_name || 'General') === shelfFolder)
+              .slice(0, 12)
+              .map((ws) => {
+                const isChecked = selectedShelfIds.includes(ws.id);
+                return (
+                  <div
+                    key={ws.id}
+                    onClick={() => handleOpenSavedFromShelf(ws.id)}
+                    className={`p-3 rounded-xl border transition cursor-pointer flex flex-col justify-between group ${
+                      isChecked
+                        ? 'bg-blue-50/80 border-blue-400 ring-1 ring-blue-300'
+                        : 'bg-slate-50/70 hover:bg-blue-50/30 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className="flex items-start space-x-2.5">
+                      <button
+                        type="button"
+                        onClick={(e) => toggleShelfSelect(ws.id, e)}
+                        className="mt-0.5 text-slate-400 hover:text-blue-600 shrink-0 cursor-pointer"
+                        title="Check to batch print multiple worksheets at once"
+                      >
+                        {isChecked ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-1.5 mb-0.5">
+                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded">
+                            {ws.short_code}
+                          </span>
+                          <span className="text-[10px] text-slate-500 truncate">
+                            {ws.folder_name || 'General'}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-xs text-slate-900 group-hover:text-blue-700 truncate">
+                          {ws.title}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div
+                      className="mt-2.5 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center space-x-1">
+                        <button
+                          type="button"
+                          disabled={loadingShelf}
+                          onClick={() => handleBatchPrintShelf('student', [ws.id])}
+                          className="px-2 py-0.5 bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 rounded font-bold flex items-center space-x-1 transition cursor-pointer"
+                          title="Print Student Copy right now"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>Print</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={loadingShelf}
+                          onClick={() => handleBatchPrintShelf('key', [ws.id])}
+                          className="px-1.5 py-0.5 bg-white hover:bg-amber-500 hover:text-white text-amber-800 border border-amber-200 rounded font-semibold flex items-center space-x-0.5 transition cursor-pointer"
+                          title="Print Answer Key right now"
+                        >
+                          <Key className="w-3 h-3" />
+                          <span>Key</span>
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSavedFromShelf(ws.id)}
+                        className="font-bold text-slate-600 hover:text-blue-700 flex items-center space-x-0.5 cursor-pointer"
+                      >
+                        <span>Open</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
