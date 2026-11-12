@@ -129,7 +129,7 @@
         class="px-3.5 py-1.5 rounded-lg font-bold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center space-x-1.5"
       >
         <span>📊</span>
-        <span>Class Gradebook Grid</span>
+        <span>Multi-Assignment Averages & Gradebook</span>
       </button>
       <button
         id="tabBtnGroups"
@@ -184,6 +184,16 @@
               />
               <span>Show assignments from other periods</span>
             </label>
+
+            <button
+              type="button"
+              onclick="switchMainTab('gradebook')"
+              class="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-extrabold text-[10px] transition cursor-pointer flex items-center space-x-1"
+              title="Check off multiple assignments (e.g. 4 weekly spirals) to calculate student averages"
+            >
+              <span>☑️</span>
+              <span>Check Multiple Assignments to Average ↗</span>
+            </button>
           </div>
 
           <!-- Class Snapshot Metrics for Selected Assignment -->
@@ -366,27 +376,153 @@
     </div>
 
     <!-- =================================================================== -->
-    <!-- TAB 2: CLASS GRADEBOOK GRID (MULTI-ASSIGNMENT MATRIX)               -->
+    <!-- TAB 2: MULTI-ASSIGNMENT AVERAGES & GRADEBOOK GRID                   -->
     <!-- =================================================================== -->
     <div id="tabGradebookContainer" class="hidden space-y-4">
-      <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <!-- Gradebook Toolbar -->
-        <div class="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
-          <div>
-            <h2 class="font-extrabold text-slate-900 text-sm tracking-tight">Class Gradebook Matrix (Students × Assignments)</h2>
-            <p class="text-[11px] text-slate-500">Click any assignment header to jump to its Deep-Dive, or click any student score to inspect their work</p>
+
+      <!-- CHECK-OFF ASSIGNMENTS TO AVERAGE CARD -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+          <div class="space-y-0.5">
+            <div class="flex items-center space-x-2">
+              <span class="text-base">☑️</span>
+              <h2 class="font-extrabold text-slate-900 text-sm tracking-tight">Check Assignments to Calculate Student Averages</h2>
+              <span id="gbSelectedCountBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-800 border border-indigo-200">
+                4 Checked
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-500">Check off the assignments you want to average (e.g., your 4 weekly spiral/POD assignments) to get each student's combined score</p>
           </div>
 
-          <div class="flex items-center space-x-3 flex-wrap gap-y-1.5">
-            <label class="inline-flex items-center space-x-1.5 text-xs text-slate-600 font-semibold cursor-pointer select-none">
+          <!-- KPI Summary for Checked Assignments -->
+          <div class="flex items-center space-x-4 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200/80">
+            <div>
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">Class Avg (Checked)</span>
+              <span id="gbKpiClassAvg" class="text-base font-black text-indigo-700">—</span>
+            </div>
+            <div class="border-l border-slate-200 pl-3.5">
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">Assessed Students</span>
+              <span id="gbKpiStudentCount" class="text-sm font-extrabold text-slate-800">—</span>
+            </div>
+            <div class="border-l border-slate-200 pl-3.5">
+              <button
+                type="button"
+                onclick="copyGradebookAverages()"
+                class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs transition cursor-pointer shadow-xs flex items-center space-x-1.5"
+                title="Copy student names and their calculated averages to clipboard"
+              >
+                <span>📋</span>
+                <span>Copy Averages</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Presets & Options Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">Quick Select:</span>
+            <button type="button" onclick="applyGbPreset('last4')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-lg font-extrabold text-[10px] transition cursor-pointer">
+              ✨ Last 4 (Weekly Spiral)
+            </button>
+            <button type="button" onclick="applyGbPreset('last3')" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-semibold text-[10px] transition cursor-pointer">
+              Last 3
+            </button>
+            <button type="button" onclick="applyGbPreset('last5')" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-semibold text-[10px] transition cursor-pointer">
+              Last 5
+            </button>
+            <button type="button" onclick="applyGbPreset('pod')" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-semibold text-[10px] transition cursor-pointer">
+              All PODs
+            </button>
+            <button type="button" onclick="applyGbPreset('all')" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-semibold text-[10px] transition cursor-pointer">
+              Select All
+            </button>
+            <button type="button" onclick="applyGbPreset('none')" class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg font-semibold text-[10px] transition cursor-pointer">
+              Clear
+            </button>
+          </div>
+
+          <div class="flex items-center space-x-3 flex-wrap gap-y-1">
+            <label class="inline-flex items-center space-x-1.5 text-[11px] text-slate-600 font-semibold cursor-pointer select-none">
               <input
                 type="checkbox"
                 id="chkGbShowAllAssignments"
+                onchange="onToggleGbShowAllPeriods()"
+                class="rounded text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Show assignments from other periods</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Checkable Assignment Cards Strip -->
+        <div id="gbAssignmentsChecklist" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-44 overflow-y-auto custom-scroll pt-1">
+          <!-- Populated via JS -->
+        </div>
+      </div>
+
+      <!-- STUDENT AVERAGES & GRADEBOOK TABLE -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <!-- Table Controls Bar -->
+        <div class="p-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+          <div class="flex items-center space-x-3 flex-wrap gap-y-1.5">
+            <h3 class="font-extrabold text-slate-900 text-xs uppercase tracking-wide">Student Averages Table</h3>
+
+            <!-- Missing Score Rule Selector -->
+            <div class="flex items-center space-x-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1">
+              <span class="text-[10px] font-bold text-slate-500 uppercase">If Missing Scan:</span>
+              <select
+                id="gbMissingRuleSelect"
+                onchange="renderGradebookGrid()"
+                class="text-xs font-extrabold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+              >
+                <option value="excuse">Excuse (Average completed only)</option>
+                <option value="zero">Count missing as 0%</option>
+              </select>
+            </div>
+
+            <!-- Show Only Checked Columns Toggle -->
+            <label class="inline-flex items-center space-x-1.5 text-xs text-slate-700 font-bold cursor-pointer select-none bg-white border border-slate-300 rounded-lg px-2.5 py-1">
+              <input
+                type="checkbox"
+                id="chkGbOnlyCheckedCols"
+                checked
                 onchange="renderGradebookGrid()"
                 class="rounded text-indigo-600 focus:ring-indigo-500"
               />
-              <span>Include assignments from other periods</span>
+              <span>Show only checked assignment columns</span>
             </label>
+          </div>
+
+          <div class="flex items-center space-x-2.5 flex-wrap gap-y-1.5">
+            <!-- Sort Buttons for Easy Gradebook Entry -->
+            <div class="flex items-center bg-slate-200/80 p-0.5 rounded-lg border border-slate-300/80">
+              <button
+                type="button"
+                id="gbSortBtnLast"
+                onclick="setGbSortQuick('last')"
+                class="px-2.5 py-1 rounded-md font-extrabold text-[10px] bg-white text-indigo-800 shadow-2xs transition cursor-pointer"
+                title="Sort alphabetically by Last Name (matches school gradebook order)"
+              >
+                🔤 Last Name
+              </button>
+              <button
+                type="button"
+                id="gbSortBtnFirst"
+                onclick="setGbSortQuick('name')"
+                class="px-2.5 py-1 rounded-md font-bold text-[10px] text-slate-600 hover:text-slate-900 transition cursor-pointer"
+              >
+                First Name
+              </button>
+              <button
+                type="button"
+                id="gbSortBtnAvg"
+                onclick="setGbSortQuick('avg')"
+                class="px-2.5 py-1 rounded-md font-bold text-[10px] text-slate-600 hover:text-slate-900 transition cursor-pointer"
+              >
+                📊 Average %
+              </button>
+            </div>
 
             <div class="relative">
               <input
@@ -612,9 +748,11 @@
     let ddSortAsc = true;      // Ascending puts struggling students at top by default when sorting by score!
     let focusedQuestionNum = null;
 
-    // Tab 2 (Gradebook Grid) State
-    let gbSortField = 'name'; // 'name' | 'avg' | assignmentCode
+    // Tab 2 (Multi-Assignment Averages & Gradebook Grid) State
+    let selectedGbAssignmentCodes = new Set();
+    let gbSortField = 'last'; // 'last' | 'name' | 'avg' | assignmentCode
     let gbSortAsc = true;
+    let lastComputedGbRows = [];
 
     // Tab 3 (Small Groups) State
     let selectedGroupAssignmentCodes = new Set();
@@ -862,6 +1000,10 @@
         currentAssignmentCode = avail[0].code;
       }
 
+      if (selectedGbAssignmentCodes.size === 0) {
+        avail.slice(0, 4).forEach(a => selectedGbAssignmentCodes.add(a.code));
+      }
+
       if (selectedGroupAssignmentCodes.size === 0) {
         avail.slice(0, 3).forEach(a => selectedGroupAssignmentCodes.add(a.code));
       }
@@ -899,6 +1041,10 @@
       if (periodAssignments.length > 0 && !periodAssignments.some(a => a.code === currentAssignmentCode)) {
         currentAssignmentCode = periodAssignments[0].code;
       }
+
+      // Default multi-assignment checklist to the 4 most recent assignments for this period
+      selectedGbAssignmentCodes.clear();
+      periodAssignments.slice(0, 4).forEach(a => selectedGbAssignmentCodes.add(a.code));
 
       // Update group checklist to default to this period's assignments
       selectedGroupAssignmentCodes.clear();
@@ -1530,16 +1676,78 @@
     }
 
     // =========================================================================
-    // TAB 2: CLASS GRADEBOOK GRID (STUDENTS × ASSIGNMENTS)
+    // TAB 2: MULTI-ASSIGNMENT AVERAGES & GRADEBOOK GRID
     // =========================================================================
+    function onToggleGbShowAllPeriods() {
+      renderGradebookGrid();
+    }
+
+    function applyGbPreset(preset) {
+      const includeAll = document.getElementById('chkGbShowAllAssignments').checked;
+      const avail = getAssignmentsForActivePeriod(includeAll);
+      selectedGbAssignmentCodes.clear();
+
+      if (preset === 'last4') {
+        avail.slice(0, 4).forEach(a => selectedGbAssignmentCodes.add(a.code));
+      } else if (preset === 'last3') {
+        avail.slice(0, 3).forEach(a => selectedGbAssignmentCodes.add(a.code));
+      } else if (preset === 'last5') {
+        avail.slice(0, 5).forEach(a => selectedGbAssignmentCodes.add(a.code));
+      } else if (preset === 'pod') {
+        avail.filter(a => /pod|spiral|bell/i.test(a.title)).forEach(a => selectedGbAssignmentCodes.add(a.code));
+      } else if (preset === 'all') {
+        avail.forEach(a => selectedGbAssignmentCodes.add(a.code));
+      }
+      renderGradebookGrid();
+    }
+
+    function toggleGbAssignmentCheck(code) {
+      const clean = String(code).trim().toUpperCase();
+      if (selectedGbAssignmentCodes.has(clean)) {
+        selectedGbAssignmentCodes.delete(clean);
+      } else {
+        selectedGbAssignmentCodes.add(clean);
+      }
+      renderGradebookGrid();
+    }
+
+    function setGbSortQuick(field) {
+      if (gbSortField === field) {
+        gbSortAsc = !gbSortAsc;
+      } else {
+        gbSortField = field;
+        gbSortAsc = field !== 'avg'; // Alphabetical ascending by default; Average descending or ascending
+      }
+      updateGbSortButtonsUI();
+      renderGradebookGrid();
+    }
+
     function toggleGbSort(field) {
       if (gbSortField === field) {
         gbSortAsc = !gbSortAsc;
       } else {
         gbSortField = field;
-        gbSortAsc = field === 'name';
+        gbSortAsc = field === 'name' || field === 'last';
       }
+      updateGbSortButtonsUI();
       renderGradebookGrid();
+    }
+
+    function updateGbSortButtonsUI() {
+      const btns = [
+        { field: 'last', id: 'gbSortBtnLast' },
+        { field: 'name', id: 'gbSortBtnFirst' },
+        { field: 'avg',  id: 'gbSortBtnAvg' }
+      ];
+      btns.forEach(function(b) {
+        const el = document.getElementById(b.id);
+        if (!el) return;
+        if (gbSortField === b.field) {
+          el.className = 'px-2.5 py-1 rounded-md font-extrabold text-[10px] bg-white text-indigo-800 shadow-2xs transition cursor-pointer';
+        } else {
+          el.className = 'px-2.5 py-1 rounded-md font-bold text-[10px] text-slate-600 hover:text-slate-900 transition cursor-pointer';
+        }
+      });
     }
 
     function jumpToAssignmentDeepDive(code) {
@@ -1548,12 +1756,64 @@
       switchMainTab('deepdive');
     }
 
+    function getStudentLastName(st) {
+      if (st.lastName) return String(st.lastName).trim();
+      const parts = String(st.fullName || '').trim().split(/\s+/);
+      return parts.length > 1 ? parts[parts.length - 1] : parts[0] || '';
+    }
+
     function renderGradebookGrid() {
       const includeAll = document.getElementById('chkGbShowAllAssignments').checked;
-      const assignments = getAssignmentsForActivePeriod(includeAll);
+      const onlyCheckedCols = document.getElementById('chkGbOnlyCheckedCols').checked;
+      const missingRule = document.getElementById('gbMissingRuleSelect').value; // 'excuse' | 'zero'
+      const availAssignments = getAssignmentsForActivePeriod(includeAll);
       const students = getStudentsForPeriod(selectedPeriod);
       const searchVal = (document.getElementById('gbStudentSearch').value || '').trim().toLowerCase();
 
+      // Ensure at least initial default selection if empty on first load
+      if (selectedGbAssignmentCodes.size === 0 && availAssignments.length > 0 && !window._gbUserCleared) {
+        availAssignments.slice(0, 4).forEach(a => selectedGbAssignmentCodes.add(a.code));
+      }
+
+      // 1. Render Check-Off Assignment Cards
+      const checklistEl = document.getElementById('gbAssignmentsChecklist');
+      checklistEl.innerHTML = '';
+
+      availAssignments.forEach(function(a) {
+        const isChecked = selectedGbAssignmentCodes.has(a.code);
+        const avgBadge = a.periodAverageScore >= 80
+          ? 'bg-emerald-100 text-emerald-800'
+          : (a.periodAverageScore >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800');
+
+        const card = document.createElement('div');
+        card.onclick = function() {
+          window._gbUserCleared = true;
+          toggleGbAssignmentCheck(a.code);
+        };
+        card.className = 'p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ' +
+          (isChecked
+            ? 'bg-indigo-50/90 border-indigo-500 ring-1 ring-indigo-500/40 shadow-2xs'
+            : 'bg-white hover:bg-slate-50 border-slate-200 opacity-75 hover:opacity-100');
+
+        card.innerHTML =
+          '<div class="flex items-center space-x-2.5 min-w-0 pr-2">' +
+            '<input type="checkbox" ' + (isChecked ? 'checked' : '') + ' onclick="event.stopPropagation(); window._gbUserCleared = true; toggleGbAssignmentCheck(\'' + escapeHtml(a.code) + '\')" class="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0" />' +
+            '<div class="min-w-0">' +
+              '<div class="font-extrabold text-xs text-slate-900 truncate" title="' + escapeHtml(a.title) + '">' + escapeHtml(a.title) + '</div>' +
+              '<div class="text-[9.5px] font-mono text-slate-400">' + escapeHtml(a.code) + ' • ' + escapeHtml(a.date) + ' • ' + a.periodSubmissionCount + ' stds</div>' +
+            '</div>' +
+          '</div>' +
+          '<span class="px-1.5 py-0.5 rounded font-black text-[10px] shrink-0 ' + avgBadge + '">' + a.periodAverageScore + '%</span>';
+
+        checklistEl.appendChild(card);
+      });
+
+      const checkedAssignmentsList = availAssignments.filter(a => selectedGbAssignmentCodes.has(a.code));
+      const displayedColumns = onlyCheckedCols ? checkedAssignmentsList : availAssignments;
+
+      document.getElementById('gbSelectedCountBadge').textContent = checkedAssignmentsList.length + ' Checked';
+
+      // 2. Build Table Header
       const thead = document.getElementById('gbGridThead');
       const tbody = document.getElementById('gbGridTbody');
 
@@ -1563,24 +1823,27 @@
       };
 
       let headHtml = '<tr>' +
-        '<th onclick="toggleGbSort(\'name\')" class="sticky-col bg-slate-50 p-3 border-r border-slate-200 cursor-pointer hover:bg-slate-100 min-w-[190px]">' +
-          'Student ' + sortArrow('name') +
+        '<th onclick="toggleGbSort(\'last\')" class="sticky-col bg-slate-50 p-3 border-r border-slate-200 cursor-pointer hover:bg-slate-100 min-w-[200px]" title="Click to sort by Student Name">' +
+          'Student ' + (gbSortField === 'name' ? sortArrow('name') : sortArrow('last')) +
         '</th>' +
         '<th class="p-3 border-r border-slate-200 text-center w-24">Period</th>' +
-        '<th onclick="toggleGbSort(\'avg\')" class="p-3 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-100 w-28">' +
-          'Class Avg ' + sortArrow('avg') +
+        '<th onclick="toggleGbSort(\'avg\')" class="p-3 border-r border-slate-200 text-right cursor-pointer bg-indigo-50/60 hover:bg-indigo-100/60 text-indigo-950 w-36">' +
+          'Selected Avg % ' + sortArrow('avg') +
+          '<div class="text-[9px] font-semibold text-indigo-600 normal-case">Over ' + checkedAssignmentsList.length + ' checked</div>' +
         '</th>' +
+        '<th class="p-3 border-r border-slate-200 text-center w-28">Total Points</th>' +
         '<th class="p-3 border-r border-slate-200 text-center w-24">Completed</th>';
 
-      assignments.forEach(function(a) {
+      displayedColumns.forEach(function(a) {
+        const isChecked = selectedGbAssignmentCodes.has(a.code);
         headHtml +=
-          '<th class="p-2.5 border-r border-slate-200 text-center min-w-[130px] hover:bg-indigo-50/50 transition">' +
+          '<th class="p-2.5 border-r border-slate-200 text-center min-w-[130px] transition ' + (isChecked ? 'bg-white hover:bg-indigo-50/40' : 'bg-slate-50/70 opacity-60') + '">' +
             '<div onclick="toggleGbSort(\'' + escapeHtml(a.code) + '\')" class="font-extrabold text-[11px] text-slate-900 cursor-pointer truncate max-w-[140px] mx-auto" title="' + escapeHtml(a.title) + '">' +
-              escapeHtml(a.title) + sortArrow(a.code) +
+              (isChecked ? '☑️ ' : '') + escapeHtml(a.title) + sortArrow(a.code) +
             '</div>' +
             '<div class="flex items-center justify-center space-x-1.5 mt-0.5">' +
               '<span class="text-[9px] font-mono text-slate-400">' + escapeHtml(a.code) + '</span>' +
-              '<button onclick="jumpToAssignmentDeepDive(\'' + escapeHtml(a.code) + '\')" class="text-[9px] font-bold text-indigo-600 hover:underline cursor-pointer" title="Open Deep-Dive for this assignment">Inspect ↗</button>' +
+              '<button onclick="jumpToAssignmentDeepDive(\'' + escapeHtml(a.code) + '\')" class="text-[9px] font-bold text-indigo-600 hover:underline cursor-pointer" title="Open Deep-Dive for this assignment">Deep-Dive ↗</button>' +
             '</div>' +
           '</th>';
       });
@@ -1588,23 +1851,58 @@
       headHtml += '</tr>';
       thead.innerHTML = headHtml;
 
-      // Compute rows
+      // 3. Compute Student Averages across Checked Assignments
       let rows = students.map(function(st) {
-        let sum = 0;
-        let count = 0;
         const subByCode = {};
-        assignments.forEach(function(a) {
+        availAssignments.forEach(function(a) {
           const sub = getStudentSubmission(st, a.code);
           if (sub) {
-            const pct = formatScorePct(sub);
-            subByCode[a.code] = { sub, pct };
-            sum += pct;
-            count++;
+            subByCode[a.code] = { sub, pct: formatScorePct(sub) };
           }
         });
-        const avg = count > 0 ? Math.round((sum / count) * 10) / 10 : -1;
-        return { student: st, avg, count, subByCode };
+
+        let checkedPctSum = 0;
+        let checkedCompletedCount = 0;
+        let checkedPointsEarned = 0;
+        let checkedPointsPossible = 0;
+
+        checkedAssignmentsList.forEach(function(a) {
+          const entry = subByCode[a.code];
+          if (entry) {
+            checkedPctSum += entry.pct;
+            checkedCompletedCount++;
+            checkedPointsEarned += (parseFloat(entry.sub.pointsEarned) || 0);
+            checkedPointsPossible += (parseFloat(entry.sub.pointsTotal) || 0);
+          }
+        });
+
+        let avg = -1;
+        if (checkedAssignmentsList.length > 0) {
+          if (missingRule === 'zero') {
+            avg = Math.round((checkedPctSum / checkedAssignmentsList.length) * 10) / 10;
+          } else if (checkedCompletedCount > 0) {
+            avg = Math.round((checkedPctSum / checkedCompletedCount) * 10) / 10;
+          }
+        }
+
+        return {
+          student: st,
+          lastName: getStudentLastName(st),
+          avg: avg,
+          checkedCompletedCount: checkedCompletedCount,
+          checkedTotalCount: checkedAssignmentsList.length,
+          checkedPointsEarned: Math.round(checkedPointsEarned * 10) / 10,
+          checkedPointsPossible: Math.round(checkedPointsPossible * 10) / 10,
+          subByCode: subByCode
+        };
       });
+
+      // Compute Class KPI over checked assignments
+      const validAvgRows = rows.filter(r => r.avg >= 0);
+      const classAvgSum = validAvgRows.reduce((acc, r) => acc + r.avg, 0);
+      const classCheckedAvg = validAvgRows.length > 0 ? Math.round((classAvgSum / validAvgRows.length) * 10) / 10 : 0;
+      document.getElementById('gbKpiClassAvg').textContent = validAvgRows.length > 0 ? (classCheckedAvg + '%') : '—';
+      document.getElementById('gbKpiStudentCount').textContent = validAvgRows.length + ' / ' + students.length + ' students';
 
       if (searchVal) {
         rows = rows.filter(r =>
@@ -1615,7 +1913,9 @@
 
       rows.sort(function(a, b) {
         let cmp = 0;
-        if (gbSortField === 'name') {
+        if (gbSortField === 'last') {
+          cmp = String(a.lastName).localeCompare(String(b.lastName)) || String(a.student.fullName).localeCompare(String(b.student.fullName));
+        } else if (gbSortField === 'name') {
           cmp = String(a.student.fullName).localeCompare(String(b.student.fullName));
         } else if (gbSortField === 'avg') {
           cmp = a.avg - b.avg;
@@ -1627,11 +1927,12 @@
         return gbSortAsc ? cmp : -cmp;
       });
 
+      lastComputedGbRows = rows;
       currentDisplayedStudentIds = rows.map(r => String(r.student.studentId));
       tbody.innerHTML = '';
 
       if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="' + (4 + assignments.length) + '" class="p-8 text-center text-slate-400 italic">No students found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="' + (5 + displayedColumns.length) + '" class="p-8 text-center text-slate-400 italic">No students found.</td></tr>';
         return;
       }
 
@@ -1642,23 +1943,35 @@
           ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
           : (avg >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
 
+        const missingAny = r.checkedCompletedCount < r.checkedTotalCount;
+        const completedBadgeCls = missingAny
+          ? 'text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded'
+          : 'text-slate-600';
+
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-50 transition group';
 
+        const displayName = gbSortField === 'last' && st.lastName && st.firstName
+          ? (st.lastName + ', ' + st.firstName)
+          : st.fullName;
+
         let html =
           '<td onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\')" class="sticky-col bg-white group-hover:bg-slate-50 p-3 border-r border-slate-200 cursor-pointer">' +
-            '<div class="font-extrabold text-slate-900 text-xs hover:text-indigo-600">' + escapeHtml(st.fullName) + '</div>' +
+            '<div class="font-extrabold text-slate-900 text-xs hover:text-indigo-600">' + escapeHtml(displayName) + '</div>' +
             '<div class="text-[10px] text-slate-400 font-mono">ID #' + escapeHtml(st.studentId) + '</div>' +
           '</td>' +
           '<td class="p-3 border-r border-slate-200 text-center text-[11px] text-slate-500">' + escapeHtml(st.classPeriod) + '</td>' +
-          '<td class="p-3 border-r border-slate-200 text-right">' +
-            (avg >= 0 ? ('<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + avgCls + '">' + avg + '%</span>') : '<span class="text-slate-300">—</span>') +
+          '<td class="p-3 border-r border-slate-200 text-right bg-indigo-50/20">' +
+            (avg >= 0 ? ('<span class="px-2.5 py-1 rounded-lg border font-black text-xs ' + avgCls + '">' + avg + '%</span>') : '<span class="text-slate-300">—</span>') +
           '</td>' +
-          '<td class="p-3 border-r border-slate-200 text-center font-bold text-slate-600 text-[11px]">' +
-            r.count + ' / ' + assignments.length +
+          '<td class="p-3 border-r border-slate-200 text-center font-mono font-bold text-slate-600 text-[11px]">' +
+            (r.checkedPointsPossible > 0 ? (r.checkedPointsEarned + ' / ' + r.checkedPointsPossible) : '—') +
+          '</td>' +
+          '<td class="p-3 border-r border-slate-200 text-center font-bold text-[11px]">' +
+            '<span class="' + completedBadgeCls + '">' + r.checkedCompletedCount + ' / ' + r.checkedTotalCount + '</span>' +
           '</td>';
 
-        assignments.forEach(function(a) {
+        displayedColumns.forEach(function(a) {
           const entry = r.subByCode[a.code];
           if (!entry) {
             html += '<td class="p-2.5 border-r border-slate-200 text-center text-slate-300 bg-slate-50/40">—</td>';
@@ -1677,6 +1990,26 @@
 
         tr.innerHTML = html;
         tbody.appendChild(tr);
+      });
+    }
+
+    function copyGradebookAverages() {
+      if (!lastComputedGbRows || lastComputedGbRows.length === 0) {
+        showToast('No student averages to copy.', '⚠️');
+        return;
+      }
+      const pLabel = selectedPeriod === 'ALL' ? 'All Classes' : selectedPeriod;
+      const codes = Array.from(selectedGbAssignmentCodes).join(', ');
+      let lines = ['Student Name\tID #\tAverage %\tTotal Points\tCompleted (' + codes + ')'];
+      lastComputedGbRows.forEach(function(r) {
+        const st = r.student;
+        const name = (st.lastName && st.firstName) ? (st.lastName + ', ' + st.firstName) : st.fullName;
+        const avgStr = r.avg >= 0 ? (r.avg + '%') : 'Missing';
+        const ptsStr = r.checkedPointsPossible > 0 ? (r.checkedPointsEarned + '/' + r.checkedPointsPossible) : '—';
+        lines.push(name + '\t' + st.studentId + '\t' + avgStr + '\t' + ptsStr + '\t' + r.checkedCompletedCount + '/' + r.checkedTotalCount);
+      });
+      navigator.clipboard.writeText(lines.join('\n')).then(function() {
+        showToast('✅ Copied student averages for ' + selectedGbAssignmentCodes.size + ' checked assignments (' + pLabel + ')!', '📋');
       });
     }
 
