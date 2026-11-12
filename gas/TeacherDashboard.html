@@ -51,6 +51,27 @@
     </div>
 
     <div class="flex items-center space-x-2">
+      <a
+        href="https://drive.google.com/drive/u/0/folders/15ZdjhTl_CRi_BRFeGa2wMAU3PwvUbi8T"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
+        title="Open 'For AutoGrader' folder in Google Drive to drop new PDF scans"
+      >
+        <span>📂</span>
+        <span>Scan Folder ↗</span>
+      </a>
+
+      <button
+        onclick="runAutograderFromDashboard()"
+        id="gradeScansBtn"
+        class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition cursor-pointer shadow-sm"
+        title="Scan 'For AutoGrader' Drive folder, grade new PDFs with Gemini Vision, and import into Gradebook"
+      >
+        <span id="gradeScansIcon">🚀</span>
+        <span id="gradeScansText">Import & Grade Scans</span>
+      </button>
+
       <button
         onclick="window.print()"
         class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
@@ -69,6 +90,12 @@
       </button>
     </div>
   </header>
+
+  <!-- GRADING PROGRESS / RESULT BANNER (Hidden until Import & Grade Scans is clicked) -->
+  <div id="gradingStatusBanner" class="no-print hidden px-5 py-2.5 border-b text-xs font-bold flex items-center justify-between">
+    <div id="gradingStatusText" class="flex items-center space-x-2"></div>
+    <button onclick="document.getElementById('gradingStatusBanner').classList.add('hidden')" class="text-slate-500 hover:text-slate-800 font-extrabold px-2 cursor-pointer">✕</button>
+  </div>
 
   <!-- GLOBAL NAVIGATION & CLASS FILTER BAR -->
   <div class="no-print bg-white border-b border-slate-200 px-5 py-2.5 shadow-xs flex flex-wrap items-center justify-between gap-3 sticky top-[52px] z-20">
@@ -618,7 +645,7 @@
     // =========================================================================
     // DATA LOADING (SINGLE FETCH, 100% IN-MEMORY FILTERING)
     // =========================================================================
-    function loadDashboardData() {
+    function loadDashboardData(selectLatestOnLoad) {
       const btn = document.getElementById('refreshBtn');
       const icon = document.getElementById('refreshIcon');
       if (btn) btn.disabled = true;
@@ -629,6 +656,9 @@
           .withSuccessHandler(function(data) {
             if (btn) btn.disabled = false;
             if (icon) icon.classList.remove('animate-spin');
+            if (selectLatestOnLoad) {
+              currentAssignmentCode = '';
+            }
             onDataLoaded(data);
           })
           .withFailureHandler(function(err) {
@@ -637,6 +667,55 @@
             showToast('Error loading data: ' + (err.message || err), '❌');
           })
           .getInterventionDashboardData('ALL', []);
+      }
+    }
+
+    function runAutograderFromDashboard() {
+      const btn = document.getElementById('gradeScansBtn');
+      const icon = document.getElementById('gradeScansIcon');
+      const txt = document.getElementById('gradeScansText');
+      const banner = document.getElementById('gradingStatusBanner');
+      const bannerText = document.getElementById('gradingStatusText');
+
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-70');
+      }
+      if (icon) icon.textContent = '⏳';
+      if (txt) txt.textContent = 'Scanning & Grading...';
+
+      banner.className = 'no-print px-5 py-2.5 border-b bg-blue-50 border-blue-200 text-blue-900 text-xs font-bold flex items-center justify-between';
+      bannerText.innerHTML = '<span class="animate-spin inline-block">🔄</span><span>Reading PDF scans from "For AutoGrader" folder & grading with Gemini Vision... Please wait.</span>';
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(msg) {
+            if (btn) {
+              btn.disabled = false;
+              btn.classList.remove('opacity-70');
+            }
+            if (icon) icon.textContent = '🚀';
+            if (txt) txt.textContent = 'Import & Grade Scans';
+
+            banner.className = 'no-print px-5 py-2.5 border-b bg-emerald-50 border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between';
+            bannerText.innerHTML = '<span>🎉</span><span>' + escapeHtml(msg) + '</span>';
+            showToast('Scans graded! Refreshing dashboard...', '🎉');
+            loadDashboardData(true);
+          })
+          .withFailureHandler(function(err) {
+            if (btn) {
+              btn.disabled = false;
+              btn.classList.remove('opacity-70');
+            }
+            if (icon) icon.textContent = '🚀';
+            if (txt) txt.textContent = 'Import & Grade Scans';
+
+            const errMsg = err && err.message ? err.message : String(err);
+            banner.className = 'no-print px-5 py-2.5 border-b bg-rose-50 border-rose-200 text-rose-900 text-xs font-bold flex items-center justify-between';
+            bannerText.innerHTML = '<span>❌</span><span>' + escapeHtml(errMsg) + '</span>';
+            showToast(errMsg, '⚠️');
+          })
+          .runGradingFromSidebar('');
       }
     }
 
