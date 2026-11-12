@@ -2,7 +2,7 @@
 <html>
 <head>
   <base target="_top">
-  <title>Small Groups by Average</title>
+  <title>Class & Assignment Data Explorer</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -16,6 +16,14 @@
       background: #cbd5e1;
       border-radius: 4px;
     }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .sticky-col {
+      position: sticky;
+      left: 0;
+      z-index: 10;
+    }
     @media print {
       .no-print { display: none !important; }
       body { background: white !important; padding: 0 !important; }
@@ -26,35 +34,27 @@
 <body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col text-xs antialiased">
 
   <!-- TOP HEADER -->
-  <header class="no-print bg-slate-900 text-white px-5 py-3 shadow-md flex items-center justify-between sticky top-0 z-30">
+  <header class="no-print bg-slate-900 text-white px-5 py-2.5 shadow-md flex items-center justify-between sticky top-0 z-30">
     <div class="flex items-center space-x-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white text-base shadow-sm">
-        🎯
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white text-base shadow-sm">
+        📊
       </div>
       <div>
         <div class="flex items-center space-x-2">
-          <h1 class="text-sm font-extrabold text-white tracking-tight">Small Groups by Average</h1>
-          <span class="text-[9.5px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+          <h1 class="text-sm font-extrabold text-white tracking-tight">Class & Assignment Data Explorer</h1>
+          <span class="text-[9.5px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
             Worksheet Maker 2.0
           </span>
         </div>
-        <p class="text-[10px] text-slate-400">Filter by class, pick assignments, and group students by average into any number of groups</p>
+        <p class="text-[10px] text-slate-400">Dive into individual assignments, question accuracy, student written answers & class gradebook</p>
       </div>
     </div>
 
     <div class="flex items-center space-x-2">
       <button
-        onclick="copyGroupRosters()"
-        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
-        title="Copy formatted small groups for lesson plans or Google Docs"
-      >
-        <span>📋 Copy Groups</span>
-      </button>
-
-      <button
         onclick="window.print()"
         class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
-        title="Print small group lists"
+        title="Print current view"
       >
         <span>🖨️ Print</span>
       </button>
@@ -62,7 +62,7 @@
       <button
         onclick="loadDashboardData()"
         id="refreshBtn"
-        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition cursor-pointer shadow-sm"
+        class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer shadow-sm"
       >
         <span id="refreshIcon">🔄</span>
         <span>Refresh Data</span>
@@ -70,256 +70,490 @@
     </div>
   </header>
 
-  <!-- CONTROLS & CONFIGURATION PANEL -->
-  <div class="no-print bg-white border-b border-slate-200 px-5 py-3 shadow-xs space-y-3">
-    
-    <!-- ROW 1: STEP CONTROLS (Period, Number of Groups, Grouping Style) -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      
-      <!-- STEP 1: CLASS / PERIOD -->
-      <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-        <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
-          1. Class / Period:
-        </label>
-        <select
-          id="periodSelect"
-          onchange="onPeriodChange()"
-          class="bg-white border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-purple-500 transition cursor-pointer"
+  <!-- GLOBAL NAVIGATION & CLASS FILTER BAR -->
+  <div class="no-print bg-white border-b border-slate-200 px-5 py-2.5 shadow-xs flex flex-wrap items-center justify-between gap-3 sticky top-[52px] z-20">
+    <!-- Left: Class / Period Selector (Pills + Dropdown) -->
+    <div class="flex items-center space-x-2 flex-wrap gap-y-1.5">
+      <span class="font-extrabold text-slate-500 uppercase tracking-wider text-[10px] mr-1">Class:</span>
+      <div id="periodPillsContainer" class="flex items-center space-x-1 flex-wrap gap-y-1">
+        <button
+          type="button"
+          onclick="selectPeriod('ALL')"
+          class="px-3 py-1 rounded-lg font-extrabold text-xs bg-slate-900 text-white shadow-xs transition cursor-pointer"
         >
-          <option value="ALL">🌟 All Class Periods</option>
-        </select>
-      </div>
-
-      <!-- STEP 2: NUMBER OF GROUPS -->
-      <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-        <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
-          2. Number of Groups:
-        </label>
-        <div class="flex items-center space-x-1" id="groupCountButtons">
-          <button type="button" onclick="setGroupCount(2)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">2</button>
-          <button type="button" onclick="setGroupCount(3)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">3</button>
-          <button type="button" onclick="setGroupCount(4)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-purple-600 bg-purple-600 text-white shadow-xs">4</button>
-          <button type="button" onclick="setGroupCount(5)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">5</button>
-          <button type="button" onclick="setGroupCount(6)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">6</button>
-        </div>
-        <div class="flex items-center space-x-1 pl-1 border-l border-slate-200">
-          <button type="button" onclick="adjustGroupCount(-1)" class="w-6 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 flex items-center justify-center font-bold text-slate-700">-</button>
-          <span id="currentGroupCountLabel" class="font-bold text-purple-700 text-xs px-1">4</span>
-          <button type="button" onclick="adjustGroupCount(1)" class="w-6 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 flex items-center justify-center font-bold text-slate-700">+</button>
-        </div>
-      </div>
-
-      <!-- STEP 3: GROUPING METHOD -->
-      <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-        <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
-          3. Group By:
-        </label>
-        <select
-          id="groupingStrategy"
-          onchange="onStrategyChange()"
-          class="bg-white border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-purple-500 transition cursor-pointer"
-        >
-          <option value="ranked">📊 Ranked by Average (Ability / Tiered)</option>
-          <option value="balanced">⚖️ Balanced Teams (Mixed Ability)</option>
-        </select>
-      </div>
-
-    </div>
-
-    <!-- ROW 2: ASSIGNMENT CHECKLIST SELECTOR -->
-    <div class="border border-slate-200 rounded-xl p-3 bg-slate-50/70 space-y-2">
-      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
-        <div class="flex items-center space-x-2">
-          <span class="font-black text-slate-800 text-xs flex items-center space-x-1.5">
-            <span>📝</span>
-            <span>Select Assignments to Average:</span>
-          </span>
-          <span id="selectedAssignmentsCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
-            0 selected
-          </span>
-        </div>
-
-        <!-- Presets -->
-        <div class="flex items-center space-x-1.5 flex-wrap">
-          <span class="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider mr-1">Presets:</span>
-          <button onclick="applyPreset('all')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
-            Select All
-          </button>
-          <button onclick="applyPreset('none')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
-            Clear
-          </button>
-          <button onclick="applyPreset('last3')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
-            Last 3
-          </button>
-          <button onclick="applyPreset('last5')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
-            Last 5
-          </button>
-          <button onclick="applyPreset('pod')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
-            PODs Only
-          </button>
-          <button onclick="applyPreset('review')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
-            Reviews Only
-          </button>
-        </div>
-      </div>
-
-      <!-- Checklist Items Container (Scrollable) -->
-      <div id="assignmentsChecklist" class="flex flex-wrap gap-2 max-h-28 overflow-y-auto custom-scroll pt-1">
-        <div class="text-xs text-slate-400 italic py-1">Loading graded assignments from Gradebook...</div>
+          All Classes
+        </button>
       </div>
     </div>
 
-  </div>
-
-  <!-- KPI SUMMARY STRIP -->
-  <div class="no-print bg-white border-b border-slate-200 px-5 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs">
-    <div class="flex items-center space-x-5">
-      <div>
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Class Average</span>
-        <span id="kpiClassAverage" class="text-base font-black text-slate-900">—</span>
-      </div>
-      <div class="border-l border-slate-200 pl-4">
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assessed Students</span>
-        <span id="kpiAssessedStudents" class="text-base font-black text-slate-900">—</span>
-      </div>
-      <div class="border-l border-slate-200 pl-4">
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assignments Selected</span>
-        <span id="kpiAssignmentsCount" class="text-base font-black text-purple-700">—</span>
-      </div>
-      <div class="border-l border-slate-200 pl-4">
-        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Target Grouping</span>
-        <span id="kpiGroupingMeta" class="text-base font-black text-slate-700">4 Groups</span>
-      </div>
-    </div>
-
-    <!-- View Mode Switcher -->
-    <div class="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+    <!-- Right: 3 Main View Tabs -->
+    <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
       <button
-        id="btnViewCards"
-        onclick="switchView('cards')"
-        class="px-3 py-1 rounded-md font-bold text-xs bg-white text-purple-800 shadow-xs transition cursor-pointer"
+        id="tabBtnDeepDive"
+        onclick="switchMainTab('deepdive')"
+        class="px-3.5 py-1.5 rounded-lg font-extrabold text-xs bg-white text-indigo-700 shadow-xs transition cursor-pointer flex items-center space-x-1.5"
       >
-        📊 Small Group Columns
+        <span>🔍</span>
+        <span>Assignment Deep-Dive</span>
       </button>
       <button
-        id="btnViewTable"
-        onclick="switchView('table')"
-        class="px-3 py-1 rounded-md font-semibold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer"
+        id="tabBtnGradebook"
+        onclick="switchMainTab('gradebook')"
+        class="px-3.5 py-1.5 rounded-lg font-bold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center space-x-1.5"
       >
-        📋 Student Roster Table
+        <span>📊</span>
+        <span>Class Gradebook Grid</span>
+      </button>
+      <button
+        id="tabBtnGroups"
+        onclick="switchMainTab('groups')"
+        class="px-3.5 py-1.5 rounded-lg font-bold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center space-x-1.5"
+      >
+        <span>🎯</span>
+        <span>Small Groups</span>
       </button>
     </div>
   </div>
 
-  <!-- MAIN CONTENT AREA -->
-  <main class="flex-1 p-5 overflow-y-auto custom-scroll space-y-5">
+  <!-- LOADING BANNER -->
+  <div id="loadingState" class="p-10 text-center space-y-3">
+    <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 text-xl animate-pulse">
+      📊
+    </div>
+    <div class="text-sm font-extrabold text-slate-700">Loading Gradebook & Question Data...</div>
+    <p class="text-xs text-slate-400">Reading student submissions, written answers, and standards from Google Sheets</p>
+  </div>
 
-    <!-- VIEW 1: DYNAMIC SMALL GROUP COLUMNS -->
-    <div id="viewCardsContainer" class="space-y-5">
-      <!-- Dynamic Columns Grid (Calculated on the fly for 2, 3, 4, 5, 6 groups) -->
-      <div id="groupsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-        <!-- Rendered via JavaScript -->
+  <!-- MAIN CONTENT CONTAINER -->
+  <main id="mainAppContent" class="hidden flex-1 p-5 overflow-y-auto custom-scroll space-y-5">
+
+    <!-- =================================================================== -->
+    <!-- TAB 1: ASSIGNMENT DEEP-DIVE (DEFAULT)                               -->
+    <!-- =================================================================== -->
+    <div id="tabDeepDiveContainer" class="space-y-4">
+
+      <!-- ASSIGNMENT PICKER & SNAPSHOT CARD -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <!-- Assignment Dropdown + Quick Pills -->
+          <div class="flex items-center space-x-2.5 flex-wrap gap-y-2 flex-1 min-w-[280px]">
+            <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
+              Assignment:
+            </label>
+            <select
+              id="deepDiveAssignmentSelect"
+              onchange="onSelectSingleAssignment(this.value)"
+              class="bg-slate-50 border border-slate-300 font-extrabold text-slate-900 rounded-xl px-3 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 transition cursor-pointer min-w-[260px]"
+            >
+              <!-- Populated via JS -->
+            </select>
+
+            <label class="inline-flex items-center space-x-1.5 text-[10px] text-slate-500 font-semibold cursor-pointer select-none ml-1">
+              <input
+                type="checkbox"
+                id="chkShowAllPeriodAssignments"
+                onchange="onToggleShowAllAssignments()"
+                class="rounded text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Show assignments from other periods</span>
+            </label>
+          </div>
+
+          <!-- Class Snapshot Metrics for Selected Assignment -->
+          <div class="flex items-center space-x-4 flex-wrap gap-y-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200/80">
+            <div>
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">Class Average</span>
+              <span id="ddKpiAverage" class="text-base font-black text-slate-900">—</span>
+            </div>
+            <div class="border-l border-slate-200 pl-3.5">
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">Median</span>
+              <span id="ddKpiMedian" class="text-sm font-extrabold text-slate-700">—</span>
+            </div>
+            <div class="border-l border-slate-200 pl-3.5">
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">High / Low</span>
+              <span id="ddKpiRange" class="text-sm font-extrabold text-slate-700">—</span>
+            </div>
+            <div class="border-l border-slate-200 pl-3.5">
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">Graded</span>
+              <span id="ddKpiGraded" class="text-sm font-extrabold text-indigo-700">—</span>
+            </div>
+            <div class="border-l border-slate-200 pl-3.5">
+              <span class="text-[9.5px] font-bold text-slate-400 uppercase block">Distribution</span>
+              <div id="ddKpiTiers" class="flex items-center space-x-1.5 text-[10px] font-extrabold mt-0.5">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Assignment Pills Strip -->
+        <div id="deepDiveAssignmentPills" class="flex items-center gap-1.5 overflow-x-auto custom-scroll pb-1 pt-0.5">
+          <!-- Populated via JS -->
+        </div>
+
+        <!-- Missing / Absent Students Bar (Hidden when 0 missing) -->
+        <div id="ddMissingBanner" class="hidden pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+            <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-extrabold text-[10px] flex items-center space-x-1">
+              <span>⚠️</span>
+              <span id="ddMissingCountText">0 Missing</span>
+            </span>
+            <div id="ddMissingPillsList" class="flex flex-wrap gap-1"></div>
+          </div>
+        </div>
       </div>
 
-      <!-- UNASSESSED / ABSENT STUDENTS DRAWER -->
-      <div id="unassessedStudentsCard" class="bg-white rounded-xl border border-slate-200 shadow-xs p-3.5 space-y-2">
+      <!-- SECTION A: QUESTION-BY-QUESTION BREAKDOWN STRIP -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-3">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-2">
-            <span class="text-sm">⚠️</span>
-            <span class="font-extrabold text-slate-800 text-xs">Unassessed / Absent Students on Selected Assignments:</span>
-            <span id="unassessedCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-              0
-            </span>
+            <h2 class="font-extrabold text-slate-900 text-xs uppercase tracking-wide">Question-by-Question Breakdown</h2>
+            <span class="text-[10px] text-slate-400 font-medium">Click any question card to inspect all student answers & misconceptions for that question</span>
           </div>
-          <span class="text-[10px] text-slate-400">Rostered in period but no scores recorded for these specific assignments</span>
+          <button
+            id="btnClearQuestionFocus"
+            onclick="setFocusedQuestion(null)"
+            class="hidden px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] border border-indigo-200 cursor-pointer transition"
+          >
+            ✕ Clear Question Focus
+          </button>
         </div>
-        <div id="unassessedStudentsList" class="flex flex-wrap gap-1.5 pt-1">
-          <span class="text-xs text-slate-400 italic">None. All students have submissions for the selected assignments.</span>
+
+        <!-- Question Cards Grid -->
+        <div id="questionCardsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+          <!-- Populated via JS -->
+        </div>
+
+        <!-- QUESTION FOCUS DRILL-DOWN PANEL (Opens when a Question Card is clicked) -->
+        <div id="questionFocusPanel" class="hidden mt-3 rounded-xl border-2 border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-200/70 pb-2.5">
+            <div class="flex items-center space-x-2.5">
+              <span id="qfBadge" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-black text-xs">Q1</span>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <span id="qfStandardCode" class="font-mono font-extrabold text-xs text-indigo-950">—</span>
+                  <span id="qfStandardName" class="text-xs font-semibold text-slate-600">—</span>
+                </div>
+                <p id="qfSummaryStats" class="text-[10px] text-slate-500 font-medium mt-0.5">—</p>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button
+                id="qfSortTableBtn"
+                onclick="sortByFocusedQuestion()"
+                class="px-3 py-1 rounded-lg bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-300 font-bold text-[11px] cursor-pointer shadow-2xs transition"
+              >
+                ↕️ Sort Class Table by This Question
+              </button>
+              <button
+                onclick="setFocusedQuestion(null)"
+                class="px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] cursor-pointer transition"
+              >
+                Close ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- Two columns: Missed / Partial vs Correct Answers -->
+          <div id="qfStudentsBreakdown" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto custom-scroll pr-1">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION B: STUDENT × QUESTION HEATMAP TABLE -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <!-- Table Toolbar -->
+        <div class="p-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+          <!-- Left: Title & Score Filter Pills -->
+          <div class="flex items-center space-x-2 flex-wrap gap-y-1.5">
+            <h2 class="font-extrabold text-slate-900 text-xs uppercase tracking-wide mr-1">Student × Question Matrix</h2>
+            <div class="flex items-center space-x-1" id="ddFilterPills">
+              <button type="button" onclick="setDdScoreFilter('ALL')" data-filter="ALL" class="dd-filter-btn px-2.5 py-1 rounded-lg font-extrabold text-[10px] bg-slate-800 text-white cursor-pointer transition">All</button>
+              <button type="button" onclick="setDdScoreFilter('LOW')" data-filter="LOW" class="dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 cursor-pointer transition">🚨 &lt;60%</button>
+              <button type="button" onclick="setDdScoreFilter('MID')" data-filter="MID" class="dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 cursor-pointer transition">⚠️ 60–79%</button>
+              <button type="button" onclick="setDdScoreFilter('HIGH')" data-filter="HIGH" class="dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 cursor-pointer transition">✅ 80%+</button>
+            </div>
+          </div>
+
+          <!-- Right: Cell Mode Toggle + Student Search -->
+          <div class="flex items-center space-x-2.5 flex-wrap gap-y-1.5">
+            <!-- Cell Display Mode Switcher -->
+            <div class="flex items-center bg-slate-200/80 p-0.5 rounded-lg border border-slate-300/80">
+              <button
+                type="button"
+                id="cellModeBtnPoints"
+                onclick="setCellDisplayMode('points')"
+                class="px-2.5 py-1 rounded-md font-extrabold text-[10px] bg-white text-indigo-800 shadow-2xs transition cursor-pointer"
+                title="Show points earned in each question cell"
+              >
+                🔢 Points
+              </button>
+              <button
+                type="button"
+                id="cellModeBtnAnswers"
+                onclick="setCellDisplayMode('answers')"
+                class="px-2.5 py-1 rounded-md font-bold text-[10px] text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                title="Show the student's actual written math answer inside each question cell"
+              >
+                ✍️ Written Answers
+              </button>
+              <button
+                type="button"
+                id="cellModeBtnBoth"
+                onclick="setCellDisplayMode('both')"
+                class="px-2.5 py-1 rounded-md font-bold text-[10px] text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                title="Show both written answer and points in each cell"
+              >
+                🔢+✍️ Both
+              </button>
+            </div>
+
+            <!-- Search Input -->
+            <div class="relative">
+              <input
+                type="text"
+                id="ddStudentSearch"
+                oninput="renderDeepDiveTable()"
+                placeholder="Search student or ID..."
+                class="pl-7 pr-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500 w-44"
+              />
+              <span class="absolute left-2 top-1.5 text-slate-400 text-[10px]">🔍</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Matrix Table -->
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead id="ddMatrixThead" class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-extrabold text-[10px] select-none">
+              <!-- Populated via JS -->
+            </thead>
+            <tbody id="ddMatrixTbody" class="divide-y divide-slate-100 text-slate-800">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- TAB 2: CLASS GRADEBOOK GRID (MULTI-ASSIGNMENT MATRIX)               -->
+    <!-- =================================================================== -->
+    <div id="tabGradebookContainer" class="hidden space-y-4">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <!-- Gradebook Toolbar -->
+        <div class="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+          <div>
+            <h2 class="font-extrabold text-slate-900 text-sm tracking-tight">Class Gradebook Matrix (Students × Assignments)</h2>
+            <p class="text-[11px] text-slate-500">Click any assignment header to jump to its Deep-Dive, or click any student score to inspect their work</p>
+          </div>
+
+          <div class="flex items-center space-x-3 flex-wrap gap-y-1.5">
+            <label class="inline-flex items-center space-x-1.5 text-xs text-slate-600 font-semibold cursor-pointer select-none">
+              <input
+                type="checkbox"
+                id="chkGbShowAllAssignments"
+                onchange="renderGradebookGrid()"
+                class="rounded text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Include assignments from other periods</span>
+            </label>
+
+            <div class="relative">
+              <input
+                type="text"
+                id="gbStudentSearch"
+                oninput="renderGradebookGrid()"
+                placeholder="Search student..."
+                class="pl-7 pr-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:ring-2 focus:ring-indigo-500 w-44"
+              />
+              <span class="absolute left-2 top-1.5 text-slate-400 text-[10px]">🔍</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead id="gbGridThead" class="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-extrabold text-[10px] select-none">
+              <!-- Populated via JS -->
+            </thead>
+            <tbody id="gbGridTbody" class="divide-y divide-slate-100 text-slate-800">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <!-- VIEW 2: FULL STUDENT PERFORMANCE TABLE -->
-    <div id="viewTableContainer" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="p-3.5 border-b border-slate-200 flex items-center justify-between">
-        <div>
-          <h2 class="font-extrabold text-slate-900 text-xs uppercase tracking-wide">Student Performance & Group Allocation</h2>
-          <p class="text-[11px] text-slate-500">Individual student scores across selected assignments and assigned group</p>
+    <!-- =================================================================== -->
+    <!-- TAB 3: SMALL GROUPS (ON-DEMAND CLIENT-SIDE GROUPER)                 -->
+    <!-- =================================================================== -->
+    <div id="tabGroupsContainer" class="hidden space-y-4">
+      <!-- Group Controls Card -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center space-x-3 flex-wrap gap-y-2">
+            <!-- Number of Groups -->
+            <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
+                Groups:
+              </label>
+              <div class="flex items-center space-x-1" id="groupCountButtons">
+                <button type="button" onclick="setGroupCount(2)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer">2</button>
+                <button type="button" onclick="setGroupCount(3)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer">3</button>
+                <button type="button" onclick="setGroupCount(4)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-indigo-600 bg-indigo-600 text-white shadow-xs cursor-pointer">4</button>
+                <button type="button" onclick="setGroupCount(5)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer">5</button>
+                <button type="button" onclick="setGroupCount(6)" class="grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer">6</button>
+              </div>
+            </div>
+
+            <!-- Grouping Strategy -->
+            <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <label class="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] shrink-0">
+                Method:
+              </label>
+              <select
+                id="groupingStrategy"
+                onchange="onStrategyChange()"
+                class="bg-white border border-slate-300 font-bold text-slate-800 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-indigo-500 transition cursor-pointer"
+              >
+                <option value="ranked">📊 Ranked by Average (Ability / Tiered)</option>
+                <option value="balanced">⚖️ Balanced Teams (Mixed Ability)</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            onclick="copyGroupRosters()"
+            class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold transition cursor-pointer shadow-xs"
+          >
+            <span>📋 Copy Group Rosters (Privacy-Safe: No Scores)</span>
+          </button>
         </div>
-        <span id="tableStudentCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">0 students</span>
+
+        <!-- Assignment Checklist for Groups -->
+        <div class="border border-slate-200 rounded-xl p-3 bg-slate-50/70 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+            <div class="flex items-center space-x-2">
+              <span class="font-black text-slate-800 text-xs">📝 Assignments Included in Group Average:</span>
+              <span id="selectedAssignmentsCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                0 selected
+              </span>
+            </div>
+            <div class="flex items-center space-x-1.5 flex-wrap">
+              <button onclick="applyGroupPreset('current')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+                Current Deep-Dive Assignment Only
+              </button>
+              <button onclick="applyGroupPreset('period')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+                All Class Assignments
+              </button>
+              <button onclick="applyGroupPreset('last3')" class="px-2 py-0.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded font-semibold text-[10px] transition cursor-pointer">
+                Last 3
+              </button>
+            </div>
+          </div>
+          <div id="assignmentsChecklist" class="flex flex-wrap gap-2 max-h-28 overflow-y-auto custom-scroll pt-1"></div>
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[10px]">
-            <tr>
-              <th class="p-3">Rank</th>
-              <th class="p-3">ID #</th>
-              <th class="p-3">Student Name</th>
-              <th class="p-3">Period</th>
-              <th class="p-3 text-right">Combined Average</th>
-              <th class="p-3 text-center">Assigned Group</th>
-              <th class="p-3 text-right">Assignments Completed</th>
-            </tr>
-          </thead>
-          <tbody id="studentTableBody" class="divide-y divide-slate-100 text-slate-800">
-            <!-- Populated via JavaScript -->
-          </tbody>
-        </table>
-      </div>
+
+      <!-- Dynamic Group Columns -->
+      <div id="groupsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start"></div>
     </div>
 
   </main>
 
-  <!-- SLIDE-OVER DRAWER: STUDENT PERFORMANCE DEEP-DIVE -->
-  <div id="studentDrawer" class="no-print fixed inset-0 z-50 overflow-hidden hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+  <!-- ===================================================================== -->
+  <!-- SLIDE-OVER DRAWER: STUDENT WORK & AI FEEDBACK INSPECTOR               -->
+  <!-- ===================================================================== -->
+  <div id="studentDrawer" class="no-print fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true">
     <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity" onclick="closeStudentDrawer()"></div>
     <div class="fixed inset-y-0 right-0 max-w-full flex pl-10">
-      <div class="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+      <div class="w-screen max-w-lg bg-white shadow-2xl flex flex-col">
         <!-- Drawer Header -->
-        <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
           <div class="flex items-center space-x-2.5">
-            <div class="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center font-bold text-white text-sm">
+            <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-sm">
               🎓
             </div>
             <div>
               <h2 id="drawerStudentName" class="font-black text-sm text-white leading-tight">Student Name</h2>
-              <div class="flex items-center space-x-2 text-[10px] text-purple-200">
+              <div class="flex items-center space-x-2 text-[10px] text-indigo-200">
                 <span id="drawerStudentId">ID #--</span>
                 <span>•</span>
                 <span id="drawerStudentPeriod">Period --</span>
               </div>
             </div>
           </div>
-          <button onclick="closeStudentDrawer()" class="text-slate-400 hover:text-white text-xl p-1 cursor-pointer">✕</button>
+
+          <div class="flex items-center space-x-1.5">
+            <button
+              onclick="navigateDrawerStudent(-1)"
+              class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700 cursor-pointer"
+              title="Previous Student (Up / Left Arrow)"
+            >
+              ◀ Prev
+            </button>
+            <button
+              onclick="navigateDrawerStudent(1)"
+              class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700 cursor-pointer"
+              title="Next Student (Down / Right Arrow)"
+            >
+              Next ▶
+            </button>
+            <button onclick="closeStudentDrawer()" class="text-slate-400 hover:text-white text-lg px-1.5 cursor-pointer">✕</button>
+          </div>
+        </div>
+
+        <!-- Drawer Assignment Selector Strip -->
+        <div class="px-5 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2">
+          <span class="text-[10px] font-extrabold text-slate-500 uppercase shrink-0">Viewing Assignment:</span>
+          <select
+            id="drawerAssignmentSelect"
+            onchange="onDrawerAssignmentChange(this.value)"
+            class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-extrabold text-slate-800 flex-1 cursor-pointer"
+          >
+            <!-- Populated via JS -->
+          </select>
         </div>
 
         <!-- Drawer Content -->
-        <div class="flex-1 overflow-y-auto custom-scroll p-5 space-y-4">
-          <!-- Summary Card -->
-          <div class="p-3.5 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-between">
+        <div id="drawerScrollBody" class="flex-1 overflow-y-auto custom-scroll p-5 space-y-4">
+          <!-- Assignment Score Card -->
+          <div id="drawerScoreSummaryCard" class="p-3.5 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between">
             <div>
-              <span class="text-[10px] font-bold text-purple-700 uppercase block">Selected Assignments Average</span>
-              <span id="drawerStudentAverage" class="text-2xl font-black text-purple-900">—</span>
+              <span id="drawerAssignmentLabel" class="text-[10px] font-bold text-indigo-700 uppercase block">Assignment Score</span>
+              <span id="drawerStudentScorePct" class="text-2xl font-black text-indigo-950">—</span>
             </div>
             <div class="text-right">
-              <span class="text-[10px] font-bold text-slate-500 uppercase block">Assigned Group</span>
-              <span id="drawerStudentGroup" class="px-2.5 py-1 rounded-lg bg-purple-600 text-white font-black text-xs inline-block mt-0.5">Group 1</span>
+              <span class="text-[10px] font-bold text-slate-500 uppercase block">Points Earned</span>
+              <span id="drawerStudentPoints" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-black text-xs inline-block mt-0.5">— / — pts</span>
             </div>
           </div>
 
-          <!-- Assignment List Breakdown -->
+          <!-- Question-by-Question Student Work & AI Feedback -->
           <div>
-            <h3 class="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Assignment Scores & Items</h3>
-            <div id="drawerAssignmentsList" class="space-y-3">
-              <!-- Rendered via JS -->
+            <h3 class="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Student Written Answers & AI Feedback</h3>
+            <div id="drawerQuestionsList" class="space-y-2.5">
+              <!-- Populated via JS -->
+            </div>
+          </div>
+
+          <!-- Student's Other Assignments Summary -->
+          <div class="pt-3 border-t border-slate-200">
+            <h3 class="font-extrabold text-slate-700 text-[11px] uppercase tracking-wide mb-2">All Graded Assignments for This Student</h3>
+            <div id="drawerAllAssignmentsList" class="space-y-1.5">
+              <!-- Populated via JS -->
             </div>
           </div>
         </div>
 
         <!-- Drawer Footer -->
-        <div class="p-3.5 border-t border-slate-200 bg-slate-50 flex justify-end">
-          <button onclick="closeStudentDrawer()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-xs cursor-pointer">
-            Close Drawer
+        <div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <span class="text-[10px] text-slate-400">Tip: Use ◀ / ▶ arrow keys to flip through students</span>
+          <button onclick="closeStudentDrawer()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-xs cursor-pointer">
+            Close
           </button>
         </div>
       </div>
@@ -334,203 +568,93 @@
 
   <!-- JAVASCRIPT APPLICATION LOGIC -->
   <script>
-    // State
+    // =========================================================================
+    // STATE
+    // =========================================================================
     let rawDashboardData = null;
+    let standardsDict = {};
+    let activeMainTab = 'deepdive'; // 'deepdive' | 'gradebook' | 'groups'
     let selectedPeriod = 'ALL';
-    let selectedAssignmentCodes = new Set();
-    let numGroups = 4;
-    let groupingStrategy = 'ranked'; // 'ranked' or 'balanced'
-    let currentCalculatedGroups = [];
-    let currentAssessedStudents = [];
-    let currentUnassessedStudents = [];
 
-    // Distinct Theme Colors for Group Cards
+    // Tab 1 (Deep-Dive) State
+    let currentAssignmentCode = '';
+    let showAllPeriodAssignments = false;
+    let cellDisplayMode = 'answers'; // Default to 'answers' or 'points'? User selected toggle; let's default to 'both' or 'points' with 1-click toggle! Wait: let's check what's cleanest: 'both' or 'points'
+    let ddScoreFilter = 'ALL'; // 'ALL' | 'LOW' | 'MID' | 'HIGH'
+    let ddSortField = 'score'; // 'score' | 'name' | 'id' | 'q_1' | 'q_2' ...
+    let ddSortAsc = true;      // Ascending puts struggling students at top by default when sorting by score!
+    let focusedQuestionNum = null;
+
+    // Tab 2 (Gradebook Grid) State
+    let gbSortField = 'name'; // 'name' | 'avg' | assignmentCode
+    let gbSortAsc = true;
+
+    // Tab 3 (Small Groups) State
+    let selectedGroupAssignmentCodes = new Set();
+    let numGroups = 4;
+    let groupingStrategy = 'ranked';
+    let currentCalculatedGroups = [];
+    let currentUnassessedGroupStudents = [];
+
+    // Drawer State
+    let drawerStudentId = null;
+    let drawerAssignmentCode = null;
+    let currentDisplayedStudentIds = [];
+
     const GROUP_THEMES = [
-      { name: 'Purple', bg: 'bg-purple-50/70', border: 'border-purple-200', text: 'text-purple-900', badge: 'bg-purple-600 text-white', ring: 'ring-purple-400' },
-      { name: 'Blue',   bg: 'bg-blue-50/70',   border: 'border-blue-200',   text: 'text-blue-900',   badge: 'bg-blue-600 text-white',   ring: 'ring-blue-400' },
-      { name: 'Emerald',bg: 'bg-emerald-50/70',border: 'border-emerald-200',text: 'text-emerald-900',badge: 'bg-emerald-600 text-white',ring: 'ring-emerald-400' },
-      { name: 'Amber',  bg: 'bg-amber-50/70',  border: 'border-amber-200',  text: 'text-amber-900',  badge: 'bg-amber-600 text-white',  ring: 'ring-amber-400' },
-      { name: 'Rose',   bg: 'bg-rose-50/70',   border: 'border-rose-200',   text: 'text-rose-900',   badge: 'bg-rose-600 text-white',   ring: 'ring-rose-400' },
-      { name: 'Cyan',   bg: 'bg-cyan-50/70',   border: 'border-cyan-200',   text: 'text-cyan-900',   badge: 'bg-cyan-600 text-white',   ring: 'ring-cyan-400' },
-      { name: 'Indigo', bg: 'bg-indigo-50/70', border: 'border-indigo-200', text: 'text-indigo-900', badge: 'bg-indigo-600 text-white', ring: 'ring-indigo-400' }
+      { name: 'Indigo',  bg: 'bg-indigo-50/70',  border: 'border-indigo-200',  text: 'text-indigo-900',  badge: 'bg-indigo-600 text-white' },
+      { name: 'Blue',    bg: 'bg-blue-50/70',    border: 'border-blue-200',    text: 'text-blue-900',    badge: 'bg-blue-600 text-white' },
+      { name: 'Emerald', bg: 'bg-emerald-50/70', border: 'border-emerald-200', text: 'text-emerald-900', badge: 'bg-emerald-600 text-white' },
+      { name: 'Amber',   bg: 'bg-amber-50/70',   border: 'border-amber-200',   text: 'text-amber-900',   badge: 'bg-amber-600 text-white' },
+      { name: 'Rose',    bg: 'bg-rose-50/70',    border: 'border-rose-200',    text: 'text-rose-900',    badge: 'bg-rose-600 text-white' },
+      { name: 'Teal',    bg: 'bg-teal-50/70',    border: 'border-teal-200',    text: 'text-teal-900',    badge: 'bg-teal-600 text-white' }
     ];
 
-    window.addEventListener('load', function() {
+    window.addEventListener('DOMContentLoaded', function() {
+      cellDisplayMode = 'points';
       loadDashboardData();
     });
 
+    // =========================================================================
+    // DATA LOADING (SINGLE FETCH, 100% IN-MEMORY FILTERING)
+    // =========================================================================
     function loadDashboardData() {
-      const refreshIcon = document.getElementById('refreshIcon');
-      refreshIcon.classList.add('animate-spin');
+      const btn = document.getElementById('refreshBtn');
+      const icon = document.getElementById('refreshIcon');
+      if (btn) btn.disabled = true;
+      if (icon) icon.classList.add('animate-spin');
 
-      google.script.run
-        .withSuccessHandler(function(data) {
-          refreshIcon.classList.remove('animate-spin');
-          rawDashboardData = data;
-          initDashboard(data);
-        })
-        .withFailureHandler(function(err) {
-          refreshIcon.classList.remove('animate-spin');
-          alert('Error loading gradebook data: ' + (err.message || err));
-        })
-        .getInterventionDashboardData(selectedPeriod, Array.from(selectedAssignmentCodes));
-    }
-
-    function initDashboard(data) {
-      if (!data) return;
-
-      // 1. Populate Class / Period selector
-      const periodSelect = document.getElementById('periodSelect');
-      const curPeriodVal = periodSelect.value;
-      periodSelect.innerHTML = '<option value="ALL">🌟 All Class Periods</option>';
-      (data.periods || []).forEach(function(p) {
-        const opt = document.createElement('option');
-        opt.value = p;
-        opt.textContent = p;
-        periodSelect.appendChild(opt);
-      });
-      periodSelect.value = curPeriodVal || data.selectedPeriod || 'ALL';
-      selectedPeriod = periodSelect.value;
-
-      // 2. Initialize assignment selection
-      // If none selected yet, default to all assignments (or whatever server selected)
-      if (selectedAssignmentCodes.size === 0 && data.assignments && data.assignments.length > 0) {
-        const defaults = (data.selectedCodes && data.selectedCodes.length > 0)
-          ? data.selectedCodes
-          : data.assignments.map(a => a.code);
-        defaults.forEach(c => selectedAssignmentCodes.add(String(c).trim().toUpperCase()));
-      }
-
-      // 3. Render Checklist
-      renderAssignmentsChecklist();
-
-      // 4. Calculate averages and render groups
-      recalculateAndRenderGroups();
-    }
-
-    function renderAssignmentsChecklist() {
-      const container = document.getElementById('assignmentsChecklist');
-      if (!rawDashboardData || !rawDashboardData.assignments || rawDashboardData.assignments.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-400 italic py-1">No graded assignments found in Gradebook.</div>';
-        return;
-      }
-
-      container.innerHTML = '';
-      rawDashboardData.assignments.forEach(function(assign) {
-        const isChecked = selectedAssignmentCodes.has(assign.code);
-        const card = document.createElement('label');
-        card.className = 'flex items-center space-x-2 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition ' +
-          (isChecked ? 'bg-purple-50/90 border-purple-300 text-purple-950 font-bold shadow-xs' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 font-medium');
-
-        const chk = document.createElement('input');
-        chk.type = 'checkbox';
-        chk.value = assign.code;
-        chk.checked = isChecked;
-        chk.className = 'w-3.5 h-3.5 rounded text-purple-600 focus:ring-purple-500 cursor-pointer';
-        chk.onchange = function() {
-          if (chk.checked) {
-            selectedAssignmentCodes.add(assign.code);
-          } else {
-            selectedAssignmentCodes.delete(assign.code);
-          }
-          renderAssignmentsChecklist();
-          recalculateAndRenderGroups();
-        };
-
-        const codeBadge = '<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700 font-bold">' + escapeHtml(assign.code) + '</span>';
-        const titleSpan = '<span class="truncate max-w-[140px]">' + escapeHtml(assign.title || assign.code) + '</span>';
-        const avgSpan = '<span class="text-[10px] font-bold text-slate-400">(' + assign.averageScore + '%)</span>';
-
-        card.appendChild(chk);
-        card.innerHTML += codeBadge + ' ' + titleSpan + ' ' + avgSpan;
-        container.appendChild(card);
-      });
-
-      document.getElementById('selectedAssignmentsCountBadge').innerText =
-        selectedAssignmentCodes.size + ' of ' + rawDashboardData.assignments.length + ' selected';
-      document.getElementById('kpiAssignmentsCount').innerText = selectedAssignmentCodes.size;
-    }
-
-    function applyPreset(preset) {
-      if (!rawDashboardData || !rawDashboardData.assignments) return;
-      const all = rawDashboardData.assignments;
-      selectedAssignmentCodes.clear();
-
-      if (preset === 'all') {
-        all.forEach(a => selectedAssignmentCodes.add(a.code));
-      } else if (preset === 'none') {
-        // empty
-      } else if (preset === 'last3') {
-        all.slice(0, 3).forEach(a => selectedAssignmentCodes.add(a.code));
-      } else if (preset === 'last5') {
-        all.slice(0, 5).forEach(a => selectedAssignmentCodes.add(a.code));
-      } else if (preset === 'pod') {
-        all.filter(a => a.code.toUpperCase().includes('POD') || (a.title && a.title.toUpperCase().includes('POD'))).forEach(a => selectedAssignmentCodes.add(a.code));
-      } else if (preset === 'review') {
-        all.filter(a => a.code.toUpperCase().includes('REV') || (a.title && a.title.toUpperCase().includes('REVIEW'))).forEach(a => selectedAssignmentCodes.add(a.code));
-      }
-
-      renderAssignmentsChecklist();
-      recalculateAndRenderGroups();
-    }
-
-    function onPeriodChange() {
-      selectedPeriod = document.getElementById('periodSelect').value;
-      loadDashboardData();
-    }
-
-    function setGroupCount(count) {
-      numGroups = Math.max(2, Math.min(count, 12));
-      updateGroupCountUI();
-      recalculateAndRenderGroups();
-    }
-
-    function adjustGroupCount(delta) {
-      setGroupCount(numGroups + delta);
-    }
-
-    function updateGroupCountUI() {
-      document.getElementById('currentGroupCountLabel').innerText = numGroups;
-      document.getElementById('kpiGroupingMeta').innerText = numGroups + ' Groups';
-
-      const btns = document.querySelectorAll('#groupCountButtons .grp-btn');
-      btns.forEach(function(btn) {
-        const val = parseInt(btn.innerText.trim(), 10);
-        if (val === numGroups) {
-          btn.className = 'grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-purple-600 bg-purple-600 text-white shadow-xs';
-        } else {
-          btn.className = 'grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100';
-        }
-      });
-    }
-
-    function onStrategyChange() {
-      groupingStrategy = document.getElementById('groupingStrategy').value;
-      recalculateAndRenderGroups();
-    }
-
-    function switchView(view) {
-      const cardsCont = document.getElementById('viewCardsContainer');
-      const tableCont = document.getElementById('viewTableContainer');
-      const btnCards = document.getElementById('btnViewCards');
-      const btnTable = document.getElementById('btnViewTable');
-
-      if (view === 'cards') {
-        cardsCont.classList.remove('hidden');
-        tableCont.classList.add('hidden');
-        btnCards.className = 'px-3 py-1 rounded-md font-bold text-xs bg-white text-purple-800 shadow-xs transition cursor-pointer';
-        btnTable.className = 'px-3 py-1 rounded-md font-semibold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer';
-      } else {
-        cardsCont.classList.add('hidden');
-        tableCont.classList.remove('hidden');
-        btnCards.className = 'px-3 py-1 rounded-md font-semibold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer';
-        btnTable.className = 'px-3 py-1 rounded-md font-bold text-xs bg-white text-purple-800 shadow-xs transition cursor-pointer';
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(data) {
+            if (btn) btn.disabled = false;
+            if (icon) icon.classList.remove('animate-spin');
+            onDataLoaded(data);
+          })
+          .withFailureHandler(function(err) {
+            if (btn) btn.disabled = false;
+            if (icon) icon.classList.remove('animate-spin');
+            showToast('Error loading data: ' + (err.message || err), '❌');
+          })
+          .getInterventionDashboardData('ALL', []);
       }
     }
 
-    /**
-     * Helper to safely format score percentage (converting 0.0-1.0 decimals to 0-100%, or computing pointsEarned / pointsTotal)
-     */
+    function onDataLoaded(data) {
+      rawDashboardData = data || {};
+      standardsDict = rawDashboardData.standardsDictionary || {};
+
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('mainAppContent').classList.remove('hidden');
+
+      renderPeriodPills();
+      ensureValidAssignmentSelection();
+      renderActiveTab();
+    }
+
+    // =========================================================================
+    // HELPERS: STUDENTS, SUBMISSIONS & PERCENTAGES
+    // =========================================================================
     function formatScorePct(sub) {
       if (!sub) return 0;
       if (typeof sub.pointsTotal === 'number' && sub.pointsTotal > 0 && typeof sub.pointsEarned === 'number') {
@@ -546,382 +670,1277 @@
       return Math.round(parsed * 10) / 10;
     }
 
-    /**
-     * CORE CALCULATION:
-     * Takes students for the active period, filters each student's scores by the selected assignment codes,
-     * calculates each student's average %, sorts them, partitions them into numGroups, and renders.
-     */
-    function recalculateAndRenderGroups() {
-      if (!rawDashboardData || !rawDashboardData.students) return;
+    function getStandardLabel(stdCode) {
+      if (!stdCode) return '';
+      const clean = String(stdCode).trim();
+      return standardsDict[clean] || '';
+    }
 
-      const checkedCodes = selectedAssignmentCodes;
+    /**
+     * Returns unified list of all students (combining graded students + roster students)
+     * filtered by `period` ('ALL' or specific period name)
+     */
+    function getStudentsForPeriod(period) {
+      if (!rawDashboardData) return [];
+      const pTarget = (period || 'ALL').toUpperCase();
+      const map = new Map();
+
+      // 1. Add from graded students list
+      (rawDashboardData.students || []).forEach(function(s) {
+        const sPeriod = String(s.classPeriod || 'No Period').trim();
+        if (pTarget !== 'ALL' && sPeriod.toUpperCase() !== pTarget) return;
+        const key = String(s.studentId).trim().replace(/^0+/, '') || String(s.studentId);
+        map.set(key, {
+          studentId: s.studentId,
+          firstName: s.firstName || '',
+          lastName: s.lastName || '',
+          fullName: s.fullName || ('Student #' + s.studentId),
+          classPeriod: sPeriod,
+          allSubmissions: s.allSubmissions || s.submissions || []
+        });
+      });
+
+      // 2. Merge any ungraded roster students for this period
+      const rosterSource = rawDashboardData.roster || rawDashboardData.missingStudents || [];
+      rosterSource.forEach(function(r) {
+        const rPeriod = String(r.classPeriod || 'No Period').trim();
+        if (pTarget !== 'ALL' && rPeriod.toUpperCase() !== pTarget) return;
+        const key = String(r.studentId).trim().replace(/^0+/, '') || String(r.studentId);
+        if (!map.has(key)) {
+          map.set(key, {
+            studentId: r.studentId,
+            firstName: r.firstName || '',
+            lastName: r.lastName || '',
+            fullName: r.fullName || ('Student #' + r.studentId),
+            classPeriod: rPeriod,
+            allSubmissions: []
+          });
+        }
+      });
+
+      return Array.from(map.values());
+    }
+
+    /**
+     * Returns a student's submission for a given assignmentCode (if multiple, picks the latest/highest)
+     */
+    function getStudentSubmission(student, code) {
+      if (!student || !code) return null;
+      const target = String(code).trim().toUpperCase();
+      const subs = (student.allSubmissions || []).filter(s => String(s.assignmentCode || '').trim().toUpperCase() === target);
+      if (subs.length === 0) return null;
+      return subs[subs.length - 1];
+    }
+
+    /**
+     * Computes assignment metadata specifically for the active period
+     */
+    function getAssignmentsForActivePeriod(includeZeroSubmissionAssignments) {
+      if (!rawDashboardData || !rawDashboardData.assignments) return [];
+      const periodStudents = getStudentsForPeriod(selectedPeriod);
+
+      const list = rawDashboardData.assignments.map(function(a) {
+        const code = String(a.code).trim().toUpperCase();
+        let count = 0;
+        let sum = 0;
+        const scores = [];
+
+        periodStudents.forEach(function(st) {
+          const sub = getStudentSubmission(st, code);
+          if (sub) {
+            const pct = formatScorePct(sub);
+            count++;
+            sum += pct;
+            scores.push(pct);
+          }
+        });
+
+        const avg = count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
+        return {
+          ...a,
+          code,
+          periodSubmissionCount: count,
+          periodAverageScore: avg,
+          periodScores: scores
+        };
+      });
+
+      if (selectedPeriod === 'ALL' || includeZeroSubmissionAssignments) {
+        return list;
+      }
+      const filtered = list.filter(a => a.periodSubmissionCount > 0);
+      return filtered.length > 0 ? filtered : list;
+    }
+
+    function ensureValidAssignmentSelection() {
+      const avail = getAssignmentsForActivePeriod(showAllPeriodAssignments);
+      if (avail.length === 0) {
+        currentAssignmentCode = '';
+        return;
+      }
+      const exists = avail.some(a => a.code === currentAssignmentCode);
+      if (!currentAssignmentCode || !exists) {
+        currentAssignmentCode = avail[0].code;
+      }
+
+      if (selectedGroupAssignmentCodes.size === 0) {
+        avail.slice(0, 3).forEach(a => selectedGroupAssignmentCodes.add(a.code));
+      }
+    }
+
+    // =========================================================================
+    // TOP NAVIGATION: PERIOD PILLS & TABS
+    // =========================================================================
+    function renderPeriodPills() {
+      const cont = document.getElementById('periodPillsContainer');
+      const periods = (rawDashboardData && rawDashboardData.periods) || [];
+      let html = '';
+
+      const allActive = selectedPeriod === 'ALL';
+      html += '<button type="button" onclick="selectPeriod(\'ALL\')" class="px-3 py-1 rounded-lg font-extrabold text-xs transition cursor-pointer ' +
+        (allActive ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700') + '">🌟 All Classes</button>';
+
+      periods.forEach(function(p) {
+        const isActive = selectedPeriod === p;
+        html += '<button type="button" onclick="selectPeriod(\'' + escapeHtml(p) + '\')" class="px-3 py-1 rounded-lg font-extrabold text-xs transition cursor-pointer ' +
+          (isActive ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700') + '">' +
+          escapeHtml(p) + '</button>';
+      });
+
+      cont.innerHTML = html;
+    }
+
+    function selectPeriod(period) {
+      selectedPeriod = period || 'ALL';
+      focusedQuestionNum = null;
+      renderPeriodPills();
+
+      // Auto-select period's most recent assignment if current assignment wasn't taken by this period
+      const periodAssignments = getAssignmentsForActivePeriod(false);
+      if (periodAssignments.length > 0 && !periodAssignments.some(a => a.code === currentAssignmentCode)) {
+        currentAssignmentCode = periodAssignments[0].code;
+      }
+
+      // Update group checklist to default to this period's assignments
+      selectedGroupAssignmentCodes.clear();
+      periodAssignments.slice(0, 3).forEach(a => selectedGroupAssignmentCodes.add(a.code));
+
+      renderActiveTab();
+    }
+
+    function switchMainTab(tab) {
+      activeMainTab = tab;
+      const tabs = [
+        { id: 'deepdive', btn: 'tabBtnDeepDive', cont: 'tabDeepDiveContainer' },
+        { id: 'gradebook', btn: 'tabBtnGradebook', cont: 'tabGradebookContainer' },
+        { id: 'groups', btn: 'tabBtnGroups', cont: 'tabGroupsContainer' }
+      ];
+
+      tabs.forEach(function(t) {
+        const b = document.getElementById(t.btn);
+        const c = document.getElementById(t.cont);
+        if (t.id === tab) {
+          c.classList.remove('hidden');
+          b.className = 'px-3.5 py-1.5 rounded-lg font-extrabold text-xs bg-white text-indigo-700 shadow-xs transition cursor-pointer flex items-center space-x-1.5';
+        } else {
+          c.classList.add('hidden');
+          b.className = 'px-3.5 py-1.5 rounded-lg font-bold text-xs text-slate-600 hover:text-slate-900 transition cursor-pointer flex items-center space-x-1.5';
+        }
+      });
+
+      renderActiveTab();
+    }
+
+    function renderActiveTab() {
+      if (activeMainTab === 'deepdive') {
+        renderDeepDiveTab();
+      } else if (activeMainTab === 'gradebook') {
+        renderGradebookGrid();
+      } else if (activeMainTab === 'groups') {
+        renderGroupsTab();
+      }
+    }
+
+    // =========================================================================
+    // TAB 1: ASSIGNMENT DEEP-DIVE
+    // =========================================================================
+    function onToggleShowAllAssignments() {
+      showAllPeriodAssignments = document.getElementById('chkShowAllPeriodAssignments').checked;
+      ensureValidAssignmentSelection();
+      renderDeepDiveTab();
+    }
+
+    function onSelectSingleAssignment(code) {
+      currentAssignmentCode = String(code || '').trim().toUpperCase();
+      focusedQuestionNum = null;
+      renderDeepDiveTab();
+    }
+
+    function renderDeepDiveTab() {
+      const assignments = getAssignmentsForActivePeriod(showAllPeriodAssignments);
+      ensureValidAssignmentSelection();
+
+      // 1. Populate Dropdown & Quick Pills
+      const selectEl = document.getElementById('deepDiveAssignmentSelect');
+      const pillsEl = document.getElementById('deepDiveAssignmentPills');
+      selectEl.innerHTML = '';
+      pillsEl.innerHTML = '';
+
+      if (assignments.length === 0) {
+        selectEl.innerHTML = '<option value="">No assignments found</option>';
+        return;
+      }
+
+      assignments.forEach(function(a) {
+        const opt = document.createElement('option');
+        opt.value = a.code;
+        opt.textContent = a.title + ' (' + a.code + ') — ' + a.date + ' • ' + a.periodSubmissionCount + ' graded (' + a.periodAverageScore + '% avg)';
+        if (a.code === currentAssignmentCode) opt.selected = true;
+        selectEl.appendChild(opt);
+
+        const isSel = a.code === currentAssignmentCode;
+        const avgBadge = a.periodAverageScore >= 80 ? 'text-emerald-700 bg-emerald-100' : (a.periodAverageScore >= 60 ? 'text-amber-800 bg-amber-100' : 'text-rose-800 bg-rose-100');
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.onclick = function() { onSelectSingleAssignment(a.code); };
+        pill.className = 'shrink-0 px-3 py-1.5 rounded-xl border text-left transition cursor-pointer flex items-center space-x-2 ' +
+          (isSel ? 'bg-indigo-50/90 border-indigo-500 ring-1 ring-indigo-500 shadow-2xs' : 'bg-white border-slate-200 hover:border-slate-300');
+        pill.innerHTML =
+          '<div>' +
+            '<div class="font-extrabold text-[11px] text-slate-900 leading-tight">' + escapeHtml(a.title) + '</div>' +
+            '<div class="text-[9.5px] text-slate-400 font-mono">' + escapeHtml(a.code) + ' • ' + escapeHtml(a.date) + ' • ' + a.periodSubmissionCount + ' stds</div>' +
+          '</div>' +
+          '<span class="px-1.5 py-0.5 rounded font-black text-[10px] ' + avgBadge + '">' + a.periodAverageScore + '%</span>';
+        pillsEl.appendChild(pill);
+      });
+
+      // 2. Gather student performance on `currentAssignmentCode` for `selectedPeriod`
+      const periodStudents = getStudentsForPeriod(selectedPeriod);
       const assessed = [];
-      const unassessed = [];
+      const missing = [];
 
-      rawDashboardData.students.forEach(function(s) {
-        // Find submissions matching the checked assignment codes
-        const allSubs = s.allSubmissions || s.submissions || [];
-        const matchingSubs = allSubs.filter(sub => checkedCodes.has(sub.assignmentCode.toUpperCase()));
-
-        if (matchingSubs.length > 0) {
-          const scoreSum = matchingSubs.reduce((acc, sub) => acc + formatScorePct(sub), 0);
-          const avg = Math.round((scoreSum / matchingSubs.length) * 10) / 10;
+      periodStudents.forEach(function(st) {
+        const sub = getStudentSubmission(st, currentAssignmentCode);
+        if (sub) {
           assessed.push({
-            ...s,
-            calculatedAverage: avg,
-            matchingSubmissions: matchingSubs
+            student: st,
+            sub: sub,
+            scorePct: formatScorePct(sub)
           });
         } else {
-          unassessed.push(s);
+          missing.push(st);
         }
       });
 
-      // Also merge any roster students who had 0 submissions overall
-      (rawDashboardData.missingStudents || []).forEach(function(m) {
-        if (!unassessed.some(u => String(u.studentId) === String(m.studentId))) {
-          unassessed.push({
-            studentId: m.studentId,
-            fullName: m.fullName,
-            classPeriod: m.classPeriod,
-            calculatedAverage: 0,
-            matchingSubmissions: []
-          });
-        }
+      // 3. Snapshot KPIs
+      const scores = assessed.map(x => x.scorePct).sort((a, b) => a - b);
+      const count = scores.length;
+      const sum = scores.reduce((a, b) => a + b, 0);
+      const avg = count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
+      const median = count > 0
+        ? (count % 2 === 1 ? scores[Math.floor(count / 2)] : Math.round(((scores[count / 2 - 1] + scores[count / 2]) / 2) * 10) / 10)
+        : 0;
+      const minScore = count > 0 ? scores[0] : 0;
+      const maxScore = count > 0 ? scores[count - 1] : 0;
+
+      const lowCount = scores.filter(s => s < 60).length;
+      const midCount = scores.filter(s => s >= 60 && s < 80).length;
+      const highCount = scores.filter(s => s >= 80).length;
+
+      const avgColor = avg >= 80 ? 'text-emerald-700' : (avg >= 60 ? 'text-amber-700' : 'text-rose-700');
+      document.getElementById('ddKpiAverage').className = 'text-base font-black ' + (count > 0 ? avgColor : 'text-slate-400');
+      document.getElementById('ddKpiAverage').textContent = count > 0 ? (avg + '%') : '—';
+      document.getElementById('ddKpiMedian').textContent = count > 0 ? (median + '%') : '—';
+      document.getElementById('ddKpiRange').textContent = count > 0 ? (maxScore + '% / ' + minScore + '%') : '—';
+      document.getElementById('ddKpiGraded').textContent = count + ' / ' + periodStudents.length + ' students';
+
+      document.getElementById('ddKpiTiers').innerHTML =
+        '<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800" title="80%+ Mastery">✅ ' + highCount + '</span>' +
+        '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="60–79% Developing">⚠️ ' + midCount + '</span>' +
+        '<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800" title="Below 60% Needs Support">🚨 ' + lowCount + '</span>';
+
+      // Update filter button counts
+      const filterBtns = document.querySelectorAll('.dd-filter-btn');
+      filterBtns.forEach(function(btn) {
+        const f = btn.getAttribute('data-filter');
+        if (f === 'ALL') btn.textContent = 'All (' + count + ')';
+        if (f === 'LOW') btn.textContent = '🚨 <60% (' + lowCount + ')';
+        if (f === 'MID') btn.textContent = '⚠️ 60–79% (' + midCount + ')';
+        if (f === 'HIGH') btn.textContent = '✅ 80%+ (' + highCount + ')';
       });
 
-      // Sort assessed students descending by calculated average
-      assessed.sort((a, b) => b.calculatedAverage - a.calculatedAverage);
-
-      currentAssessedStudents = assessed;
-      currentUnassessedStudents = unassessed;
-
-      // KPI calculations
-      const totalScoreSum = assessed.reduce((acc, s) => acc + s.calculatedAverage, 0);
-      const overallAvg = assessed.length > 0 ? Math.round((totalScoreSum / assessed.length) * 10) / 10 : 0;
-      document.getElementById('kpiClassAverage').innerText = overallAvg + '%';
-      document.getElementById('kpiAssessedStudents').innerText = assessed.length + ' (' + (assessed.length + unassessed.length) + ' enrolled)';
-      document.getElementById('tableStudentCountBadge').innerText = (assessed.length + unassessed.length) + ' students';
-
-      // Partition into N Groups
-      if (groupingStrategy === 'balanced') {
-        currentCalculatedGroups = partitionBalanced(assessed, numGroups);
+      // Missing Banner
+      const missingBanner = document.getElementById('ddMissingBanner');
+      if (missing.length > 0 && count > 0) {
+        missingBanner.classList.remove('hidden');
+        document.getElementById('ddMissingCountText').textContent = missing.length + ' Missing / Absent:';
+        const pillsCont = document.getElementById('ddMissingPillsList');
+        pillsCont.innerHTML = '';
+        missing.forEach(function(m) {
+          const sp = document.createElement('span');
+          sp.className = 'px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-[10px]';
+          sp.textContent = m.fullName + ' (#' + m.studentId + ')';
+          pillsCont.appendChild(sp);
+        });
       } else {
-        currentCalculatedGroups = partitionRanked(assessed, numGroups);
+        missingBanner.classList.add('hidden');
       }
 
-      // Render View 1: Columns
-      renderGroupColumns(currentCalculatedGroups);
+      // 4. Analyze Questions for this Assignment
+      const questionStats = buildQuestionStatsForAssignment(assessed);
 
-      // Render View 2: Table
-      renderStudentTable(assessed, unassessed, currentCalculatedGroups);
+      // 5. Render Question Breakdown Cards & Focus Panel
+      renderQuestionBreakdownCards(questionStats);
+      renderQuestionFocusPanel(questionStats);
 
-      // Render Unassessed Students
-      renderUnassessedStudents(unassessed);
+      // 6. Render Student × Question Heatmap Table
+      renderDeepDiveTable(assessed, questionStats);
     }
 
     /**
-     * Partition method: Ranked (Ability / Quantile)
+     * Builds question-level metadata (Q1, Q2, ...) across all assessed students for the selected assignment
      */
-    function partitionRanked(students, count) {
-      const groups = Array.from({ length: count }, () => []);
-      if (students.length === 0) return groups;
+    function buildQuestionStatsForAssignment(assessedList) {
+      const qMap = new Map();
 
-      const baseSize = Math.floor(students.length / count);
-      const remainder = students.length % count;
+      assessedList.forEach(function(item) {
+        const qs = (item.sub && item.sub.questions) || [];
+        qs.forEach(function(q) {
+          const qNum = Number(q.qNum);
+          if (!qNum) return;
+          if (!qMap.has(qNum)) {
+            qMap.set(qNum, {
+              qNum: qNum,
+              standard: q.standard || '',
+              maxScoreObserved: 0,
+              attempts: 0,
+              fullCount: 0,
+              partialCount: 0,
+              zeroCount: 0,
+              earnedSum: 0,
+              entries: []
+            });
+          }
+          const st = qMap.get(qNum);
+          if (!st.standard && q.standard) st.standard = q.standard;
+          const sc = parseFloat(q.score) || 0;
+          if (sc > st.maxScoreObserved) st.maxScoreObserved = sc;
+          st.entries.push({
+            student: item.student,
+            sub: item.sub,
+            scorePct: item.scorePct,
+            q: q,
+            score: sc
+          });
+        });
+      });
 
-      let curIdx = 0;
-      for (let g = 0; g < count; g++) {
-        const size = baseSize + (g < remainder ? 1 : 0);
-        groups[g] = students.slice(curIdx, curIdx + size);
-        curIdx += size;
-      }
-      return groups;
+      const sortedQNums = Array.from(qMap.keys()).sort((a, b) => a - b);
+      return sortedQNums.map(function(qNum) {
+        const st = qMap.get(qNum);
+        const maxPts = st.maxScoreObserved > 0 ? st.maxScoreObserved : 1;
+        st.maxPoints = maxPts;
+
+        st.entries.forEach(function(e) {
+          st.attempts++;
+          st.earnedSum += e.score;
+          const isFull = e.score > 0 && (e.score >= maxPts || /^correct/i.test(String(e.q.feedback || '').trim()));
+          if (e.score <= 0) {
+            e.creditStatus = 'zero';
+            st.zeroCount++;
+          } else if (isFull) {
+            e.creditStatus = 'full';
+            st.fullCount++;
+          } else {
+            e.creditStatus = 'partial';
+            st.partialCount++;
+          }
+        });
+
+        // Accuracy based on points earned out of total possible for this question (or full credit rate)
+        st.accuracyPct = st.attempts > 0
+          ? Math.round((st.earnedSum / (st.attempts * maxPts)) * 100)
+          : 0;
+        st.standardName = getStandardLabel(st.standard);
+        return st;
+      });
     }
 
-    /**
-     * Partition method: Balanced (Snake-draft distribution)
-     */
-    function partitionBalanced(students, count) {
-      const groups = Array.from({ length: count }, () => []);
-      if (students.length === 0) return groups;
-
-      let forward = true;
-      let g = 0;
-      for (let i = 0; i < students.length; i++) {
-        groups[g].push(students[i]);
-        if (forward) {
-          if (g === count - 1) forward = false;
-          else g++;
-        } else {
-          if (g === 0) forward = true;
-          else g--;
-        }
-      }
-      return groups;
-    }
-
-    function renderGroupColumns(groups) {
-      const grid = document.getElementById('groupsGrid');
+    function renderQuestionBreakdownCards(questionStats) {
+      const grid = document.getElementById('questionCardsGrid');
+      const clearBtn = document.getElementById('btnClearQuestionFocus');
       grid.innerHTML = '';
 
-      // Adjust grid columns depending on numGroups
-      if (numGroups <= 2) {
-        grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 items-start';
-      } else if (numGroups === 3) {
-        grid.className = 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start';
-      } else if (numGroups === 4) {
-        grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start';
-      } else if (numGroups === 5) {
-        grid.className = 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 items-start';
+      if (focusedQuestionNum !== null) {
+        clearBtn.classList.remove('hidden');
       } else {
-        grid.className = 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 items-start';
+        clearBtn.classList.add('hidden');
       }
 
-      groups.forEach(function(studentsInGroup, gIdx) {
-        const theme = GROUP_THEMES[gIdx % GROUP_THEMES.length];
-        const groupScoreSum = studentsInGroup.reduce((acc, s) => acc + s.calculatedAverage, 0);
-        const groupAvg = studentsInGroup.length > 0 ? Math.round((groupScoreSum / studentsInGroup.length) * 10) / 10 : 0;
-        
-        let minScore = 0;
-        let maxScore = 0;
-        if (studentsInGroup.length > 0) {
-          const scores = studentsInGroup.map(s => s.calculatedAverage);
-          minScore = Math.min(...scores);
-          maxScore = Math.max(...scores);
-        }
+      if (!questionStats || questionStats.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-xs text-slate-400 italic py-2">No individual question breakdown recorded for this assignment.</div>';
+        return;
+      }
 
-        const col = document.createElement('div');
-        col.className = 'bg-white rounded-xl border ' + theme.border + ' shadow-sm overflow-hidden flex flex-col space-y-3 p-3.5 print-page';
+      questionStats.forEach(function(qs) {
+        const isFocused = focusedQuestionNum === qs.qNum;
+        const acc = qs.accuracyPct;
+        const barColor = acc >= 80 ? 'bg-emerald-500' : (acc >= 60 ? 'bg-amber-500' : 'bg-rose-500');
+        const badgeColor = acc >= 80
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          : (acc >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
 
-        // Column Header
-        let colHeaderHtml =
-          '<div class="flex items-center justify-between border-b ' + theme.border + ' pb-2.5">' +
-            '<div>' +
-              '<div class="flex items-center space-x-2">' +
-                '<span class="px-2 py-0.5 rounded-md font-black text-xs ' + theme.badge + '">Group ' + (gIdx + 1) + '</span>' +
-                '<span class="font-extrabold text-xs ' + theme.text + '">' + groupAvg + '% avg</span>' +
+        const card = document.createElement('div');
+        card.onclick = function() {
+          setFocusedQuestion(isFocused ? null : qs.qNum);
+        };
+        card.className = 'p-3 rounded-xl border transition cursor-pointer flex flex-col justify-between space-y-2 ' +
+          (isFocused
+            ? 'bg-indigo-50/70 border-indigo-600 ring-2 ring-indigo-500/40 shadow-sm'
+            : 'bg-slate-50/60 hover:bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs');
+
+        card.innerHTML =
+          '<div class="space-y-1">' +
+            '<div class="flex items-center justify-between">' +
+              '<div class="flex items-center space-x-1.5">' +
+                '<span class="px-2 py-0.5 rounded-md bg-slate-900 text-white font-black text-xs">Q' + qs.qNum + '</span>' +
+                (qs.standard ? ('<span class="font-mono font-bold text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">' + escapeHtml(qs.standard) + '</span>') : '') +
               '</div>' +
-              '<div class="text-[10px] text-slate-500 font-medium mt-0.5">' +
-                (studentsInGroup.length > 0 ? ('Range: ' + minScore + '% – ' + maxScore + '%') : 'No students') +
-              '</div>' +
+              '<span class="px-1.5 py-0.5 rounded border font-black text-[10px] ' + badgeColor + '">' + acc + '%</span>' +
             '</div>' +
-            '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">' +
-              studentsInGroup.length + ' students' +
-            '</span>' +
+            (qs.standardName ? ('<div class="text-[10px] text-slate-500 font-medium truncate" title="' + escapeHtml(qs.standardName) + '">' + escapeHtml(qs.standardName) + '</div>') : '') +
+          '</div>' +
+          '<div class="space-y-1">' +
+            '<div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">' +
+              '<div class="h-full ' + barColor + '" style="width: ' + Math.min(100, Math.max(0, acc)) + '%"></div>' +
+            '</div>' +
+            '<div class="flex items-center justify-between text-[9.5px] font-bold text-slate-500">' +
+              '<span class="text-emerald-700">✅ ' + qs.fullCount + '</span>' +
+              (qs.partialCount > 0 ? ('<span class="text-amber-700">⚠️ ' + qs.partialCount + '</span>') : '') +
+              '<span class="text-rose-700">❌ ' + qs.zeroCount + ' missed</span>' +
+            '</div>' +
           '</div>';
 
-        // Student Cards
-        let studentsHtml = '<div class="space-y-2">';
-        if (studentsInGroup.length === 0) {
-          studentsHtml += '<div class="text-xs text-slate-400 italic py-2 text-center">Empty Group</div>';
-        } else {
-          studentsInGroup.forEach(function(student) {
-            const avgBadgeColor = student.calculatedAverage >= 80
-              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-              : (student.calculatedAverage >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
-
-            // Assignment score chips
-            let chipsHtml = '';
-            (student.matchingSubmissions || []).slice(0, 4).forEach(function(sub) {
-              const chipScore = formatScorePct(sub);
-              const chipColor = chipScore >= 80 ? 'text-emerald-700 bg-emerald-50' : (chipScore >= 60 ? 'text-amber-700 bg-amber-50' : 'text-rose-700 bg-rose-50');
-              chipsHtml += '<span class="px-1.5 py-0.5 rounded font-mono text-[9px] font-bold ' + chipColor + '" title="' + escapeHtml(sub.assignmentTitle) + '">' +
-                escapeHtml(sub.assignmentCode) + ': ' + chipScore + '%' +
-              '</span>';
-            });
-
-            studentsHtml +=
-              '<div onclick="openStudentDrawer(\'' + student.studentId + '\', ' + (gIdx + 1) + ')" class="p-2.5 rounded-xl border border-slate-200 hover:border-purple-300 hover:shadow-xs bg-slate-50/50 hover:bg-white transition cursor-pointer space-y-1.5">' +
-                '<div class="flex items-center justify-between">' +
-                  '<div>' +
-                    '<span class="font-extrabold text-slate-900 text-xs block">' + escapeHtml(student.fullName || ('Student #' + student.studentId)) + '</span>' +
-                    '<span class="text-[10px] text-slate-400 font-mono font-medium">ID #' + escapeHtml(student.studentId) + '</span>' +
-                  '</div>' +
-                  '<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + avgBadgeColor + '">' +
-                    student.calculatedAverage + '%' +
-                  '</span>' +
-                '</div>' +
-                (chipsHtml ? ('<div class="flex flex-wrap gap-1 pt-0.5">' + chipsHtml + '</div>') : '') +
-              '</div>';
-          });
-        }
-        studentsHtml += '</div>';
-
-        col.innerHTML = colHeaderHtml + studentsHtml;
-        grid.appendChild(col);
+        grid.appendChild(card);
       });
     }
 
-    function renderStudentTable(assessed, unassessed, groups) {
-      const tbody = document.getElementById('studentTableBody');
-      tbody.innerHTML = '';
-
-      // Build studentId -> GroupNumber map
-      const studentGroupMap = new Map();
-      groups.forEach(function(stList, gIdx) {
-        stList.forEach(s => studentGroupMap.set(String(s.studentId), gIdx + 1));
-      });
-
-      let rank = 1;
-      assessed.forEach(function(s) {
-        const groupNum = studentGroupMap.get(String(s.studentId)) || '—';
-        const avgColor = s.calculatedAverage >= 80 ? 'text-emerald-700 font-black' : (s.calculatedAverage >= 60 ? 'text-amber-700 font-black' : 'text-rose-700 font-black');
-
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-50 cursor-pointer transition';
-        tr.onclick = function() { openStudentDrawer(s.studentId, groupNum); };
-        tr.innerHTML =
-          '<td class="p-3 font-bold text-slate-400">#' + rank++ + '</td>' +
-          '<td class="p-3 font-mono font-bold text-slate-600">' + escapeHtml(s.studentId) + '</td>' +
-          '<td class="p-3 font-extrabold text-slate-900">' + escapeHtml(s.fullName || ('Student #' + s.studentId)) + '</td>' +
-          '<td class="p-3 text-slate-500">' + escapeHtml(s.classPeriod || '—') + '</td>' +
-          '<td class="p-3 text-right ' + avgColor + '">' + s.calculatedAverage + '%</td>' +
-          '<td class="p-3 text-center"><span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-extrabold text-[10px]">Group ' + groupNum + '</span></td>' +
-          '<td class="p-3 text-right text-slate-500 font-medium">' + s.matchingSubmissions.length + ' / ' + selectedAssignmentCodes.size + '</td>';
-        tbody.appendChild(tr);
-      });
-
-      unassessed.forEach(function(s) {
-        const tr = document.createElement('tr');
-        tr.className = 'bg-amber-50/30 hover:bg-amber-50/60 transition';
-        tr.innerHTML =
-          '<td class="p-3 font-bold text-slate-400">—</td>' +
-          '<td class="p-3 font-mono font-bold text-slate-600">' + escapeHtml(s.studentId) + '</td>' +
-          '<td class="p-3 font-bold text-slate-700">' + escapeHtml(s.fullName || ('Student #' + s.studentId)) + '</td>' +
-          '<td class="p-3 text-slate-500">' + escapeHtml(s.classPeriod || '—') + '</td>' +
-          '<td class="p-3 text-right text-slate-400 italic">No submissions</td>' +
-          '<td class="p-3 text-center"><span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold text-[10px]">Unassigned</span></td>' +
-          '<td class="p-3 text-right text-amber-700 font-bold">0 / ' + selectedAssignmentCodes.size + '</td>';
-        tbody.appendChild(tr);
-      });
+    function setFocusedQuestion(qNum) {
+      focusedQuestionNum = qNum;
+      renderDeepDiveTab();
     }
 
-    function renderUnassessedStudents(unassessed) {
-      const card = document.getElementById('unassessedStudentsCard');
-      const countBadge = document.getElementById('unassessedCountBadge');
-      const list = document.getElementById('unassessedStudentsList');
+    function sortByFocusedQuestion() {
+      if (!focusedQuestionNum) return;
+      ddSortField = 'q_' + focusedQuestionNum;
+      ddSortAsc = true; // Put 0s / missed at the top
+      renderDeepDiveTab();
+    }
 
-      countBadge.innerText = unassessed.length;
-      if (unassessed.length === 0) {
-        list.innerHTML = '<span class="text-xs text-slate-400 italic">None. All students have submissions for the selected assignments.</span>';
-        card.classList.add('opacity-70');
-      } else {
-        card.classList.remove('opacity-70');
-        list.innerHTML = '';
-        unassessed.forEach(function(s) {
-          const pill = document.createElement('span');
-          pill.className = 'px-2 py-1 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-semibold flex items-center space-x-1';
-          pill.innerHTML = '<span>👤</span><span>' + escapeHtml(s.fullName || ('Student #' + s.studentId)) + ' (#' + escapeHtml(s.studentId) + ')</span>';
-          list.appendChild(pill);
-        });
+    function renderQuestionFocusPanel(questionStats) {
+      const panel = document.getElementById('questionFocusPanel');
+      if (focusedQuestionNum === null) {
+        panel.classList.add('hidden');
+        return;
       }
-    }
 
-    function openStudentDrawer(studentId, groupNum) {
-      const student = currentAssessedStudents.find(s => String(s.studentId) === String(studentId));
-      if (!student) return;
+      const qs = (questionStats || []).find(q => q.qNum === focusedQuestionNum);
+      if (!qs) {
+        panel.classList.add('hidden');
+        return;
+      }
 
-      document.getElementById('drawerStudentName').innerText = student.fullName || ('Student #' + student.studentId);
-      document.getElementById('drawerStudentId').innerText = 'ID #' + student.studentId;
-      document.getElementById('drawerStudentPeriod').innerText = student.classPeriod || 'No Period';
-      document.getElementById('drawerStudentAverage').innerText = student.calculatedAverage + '%';
-      document.getElementById('drawerStudentGroup').innerText = 'Group ' + (groupNum || '—');
+      panel.classList.remove('hidden');
+      document.getElementById('qfBadge').textContent = 'Q' + qs.qNum + ' (' + qs.maxPoints + ' pt' + (qs.maxPoints !== 1 ? 's' : '') + ')';
+      document.getElementById('qfStandardCode').textContent = qs.standard || 'Standard';
+      document.getElementById('qfStandardName').textContent = qs.standardName ? ('— ' + qs.standardName) : '';
+      document.getElementById('qfSummaryStats').textContent =
+        qs.accuracyPct + '% Class Accuracy • ' + qs.fullCount + ' Full Credit, ' + qs.partialCount + ' Partial, ' + qs.zeroCount + ' Missed (out of ' + qs.attempts + ' students)';
 
-      const listCont = document.getElementById('drawerAssignmentsList');
-      listCont.innerHTML = '';
+      const missedEntries = qs.entries.filter(e => e.creditStatus !== 'full').sort((a, b) => a.score - b.score);
+      const correctEntries = qs.entries.filter(e => e.creditStatus === 'full');
 
-      (student.matchingSubmissions || []).forEach(function(sub) {
-        const subScore = formatScorePct(sub);
-        const scoreBadgeColor = subScore >= 80 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : (subScore >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+      const cont = document.getElementById('qfStudentsBreakdown');
+      let missedHtml =
+        '<div class="bg-white rounded-xl border border-rose-200 p-3 space-y-2">' +
+          '<div class="font-extrabold text-rose-900 text-xs flex items-center justify-between border-b border-rose-100 pb-1.5">' +
+            '<span>❌ Missed / Partial Credit (' + missedEntries.length + ' students)</span>' +
+            '<span class="text-[10px] font-semibold text-rose-600">Written Answer & AI Feedback</span>' +
+          '</div>';
 
-        let questionsHtml = '';
-        (sub.questions || []).forEach(function(q) {
-          const isCorrect = q.score > 0;
-          const icon = isCorrect ? '✅' : '❌';
-          const border = isCorrect ? 'border-emerald-200 bg-emerald-50/40' : 'border-rose-200 bg-rose-50/40';
-
-          questionsHtml +=
-            '<div class="p-2.5 rounded-lg border ' + border + ' text-[11px] space-y-1">' +
-              '<div class="flex items-center justify-between font-bold">' +
-                '<span>' + icon + ' Q' + q.qNum + (q.standard ? (' • ' + q.standard) : '') + '</span>' +
-                '<span>' + q.score + ' pt</span>' +
+      if (missedEntries.length === 0) {
+        missedHtml += '<div class="text-xs text-emerald-700 font-bold py-2">🎉 Every student got full credit on this question!</div>';
+      } else {
+        missedHtml += '<div class="space-y-1.5">';
+        missedEntries.forEach(function(e) {
+          const isPartial = e.creditStatus === 'partial';
+          const badgeCls = isPartial ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200';
+          missedHtml +=
+            '<div onclick="openStudentDrawer(\'' + escapeHtml(e.student.studentId) + '\', \'' + escapeHtml(currentAssignmentCode) + '\', ' + qs.qNum + ')" class="p-2 rounded-lg border border-slate-200 hover:border-indigo-300 bg-slate-50/70 hover:bg-white cursor-pointer transition space-y-1">' +
+              '<div class="flex items-center justify-between">' +
+                '<span class="font-extrabold text-slate-900 text-xs">' + escapeHtml(e.student.fullName) + ' <span class="text-[10px] font-mono text-slate-400">#' + escapeHtml(e.student.studentId) + '</span></span>' +
+                '<div class="flex items-center space-x-1.5">' +
+                  '<span class="px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-900 font-mono font-extrabold text-[10px]">Ans: ' + escapeHtml(e.q.studentAns || 'Blank') + '</span>' +
+                  '<span class="px-1.5 py-0.5 rounded border font-black text-[10px] ' + badgeCls + '">' + e.score + '/' + qs.maxPoints + ' pt</span>' +
+                '</div>' +
               '</div>' +
-              '<div class="text-slate-700">' +
-                '<span class="font-semibold text-slate-500">Student Answer: </span>' +
-                '<span class="font-mono font-bold">' + escapeHtml(q.studentAns || '—') + '</span>' +
-              '</div>' +
-              (q.feedback ? ('<div class="text-[10px] text-blue-900 bg-blue-50 border border-blue-100 p-1.5 rounded italic">Feedback: ' + escapeHtml(q.feedback) + '</div>') : '') +
+              (e.q.feedback ? ('<div class="text-[10px] text-slate-600 italic">' + escapeHtml(e.q.feedback) + '</div>') : '') +
             '</div>';
         });
+        missedHtml += '</div>';
+      }
+      missedHtml += '</div>';
 
-        const subCard = document.createElement('div');
-        subCard.className = 'border border-slate-200 rounded-xl p-3 bg-white space-y-2';
-        subCard.innerHTML =
-          '<div class="flex items-center justify-between border-b border-slate-100 pb-2">' +
-            '<div>' +
-              '<span class="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono font-bold text-[10px] mr-1.5">' + escapeHtml(sub.assignmentCode) + '</span>' +
-              '<span class="font-extrabold text-slate-900 text-xs">' + escapeHtml(sub.assignmentTitle) + '</span>' +
-            '</div>' +
-            '<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + scoreBadgeColor + '">' +
-              subScore + '% (' + sub.pointsEarned + '/' + sub.pointsTotal + ' pts)' +
-            '</span>' +
-          '</div>' +
-          (questionsHtml ? ('<div class="space-y-1.5 pt-1">' + questionsHtml + '</div>') : '<div class="text-[10px] text-slate-400 italic">No question breakdown recorded.</div>');
+      let correctHtml =
+        '<div class="bg-white rounded-xl border border-emerald-200 p-3 space-y-2">' +
+          '<div class="font-extrabold text-emerald-900 text-xs flex items-center justify-between border-b border-emerald-100 pb-1.5">' +
+            '<span>✅ Full Credit (' + correctEntries.length + ' students)</span>' +
+            '<span class="text-[10px] font-semibold text-emerald-600">Written Answer</span>' +
+          '</div>';
 
-        listCont.appendChild(subCard);
+      if (correctEntries.length === 0) {
+        correctHtml += '<div class="text-xs text-slate-400 italic py-2">No students earned full credit on this question yet.</div>';
+      } else {
+        correctHtml += '<div class="space-y-1.5">';
+        correctEntries.forEach(function(e) {
+          correctHtml +=
+            '<div onclick="openStudentDrawer(\'' + escapeHtml(e.student.studentId) + '\', \'' + escapeHtml(currentAssignmentCode) + '\', ' + qs.qNum + ')" class="p-2 rounded-lg border border-slate-100 hover:border-emerald-300 bg-emerald-50/30 hover:bg-white cursor-pointer transition flex items-center justify-between">' +
+              '<span class="font-bold text-slate-800 text-xs">' + escapeHtml(e.student.fullName) + ' <span class="text-[10px] font-mono text-slate-400">#' + escapeHtml(e.student.studentId) + '</span></span>' +
+              '<div class="flex items-center space-x-1.5">' +
+                '<span class="px-1.5 py-0.5 rounded bg-emerald-100/80 text-emerald-950 font-mono font-bold text-[10px]">Ans: ' + escapeHtml(e.q.studentAns || '—') + '</span>' +
+                '<span class="px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black text-[10px]">' + e.score + ' pt</span>' +
+              '</div>' +
+            '</div>';
+        });
+        correctHtml += '</div>';
+      }
+      correctHtml += '</div>';
+
+      cont.innerHTML = missedHtml + correctHtml;
+    }
+
+    // =========================================================================
+    // STUDENT × QUESTION HEATMAP TABLE
+    // =========================================================================
+    function setDdScoreFilter(filter) {
+      ddScoreFilter = filter || 'ALL';
+      const btns = document.querySelectorAll('.dd-filter-btn');
+      btns.forEach(function(b) {
+        const f = b.getAttribute('data-filter');
+        if (f === ddScoreFilter) {
+          b.className = 'dd-filter-btn px-2.5 py-1 rounded-lg font-extrabold text-[10px] bg-slate-900 text-white cursor-pointer transition shadow-2xs';
+        } else if (f === 'LOW') {
+          b.className = 'dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 cursor-pointer transition';
+        } else if (f === 'MID') {
+          b.className = 'dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 cursor-pointer transition';
+        } else if (f === 'HIGH') {
+          b.className = 'dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 cursor-pointer transition';
+        } else {
+          b.className = 'dd-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer transition';
+        }
+      });
+      renderDeepDiveTable();
+    }
+
+    function setCellDisplayMode(mode) {
+      cellDisplayMode = mode;
+      const modes = [
+        { id: 'points', btn: 'cellModeBtnPoints' },
+        { id: 'answers', btn: 'cellModeBtnAnswers' },
+        { id: 'both', btn: 'cellModeBtnBoth' }
+      ];
+      modes.forEach(function(m) {
+        const el = document.getElementById(m.btn);
+        if (m.id === mode) {
+          el.className = 'px-2.5 py-1 rounded-md font-extrabold text-[10px] bg-white text-indigo-800 shadow-2xs transition cursor-pointer';
+        } else {
+          el.className = 'px-2.5 py-1 rounded-md font-bold text-[10px] text-slate-600 hover:text-slate-900 transition cursor-pointer';
+        }
+      });
+      renderDeepDiveTable();
+    }
+
+    function toggleDdSort(field) {
+      if (ddSortField === field) {
+        ddSortAsc = !ddSortAsc;
+      } else {
+        ddSortField = field;
+        ddSortAsc = field === 'name' || field.startsWith('q_') || field === 'score';
+      }
+      renderDeepDiveTable();
+    }
+
+    let cachedAssessedForTable = [];
+    let cachedQuestionStatsForTable = [];
+
+    function renderDeepDiveTable(assessedOverride, questionStatsOverride) {
+      if (assessedOverride) cachedAssessedForTable = assessedOverride;
+      if (questionStatsOverride) cachedQuestionStatsForTable = questionStatsOverride;
+
+      const assessed = cachedAssessedForTable || [];
+      const questionStats = cachedQuestionStatsForTable || [];
+      const maxPtsMap = new Map();
+      questionStats.forEach(qs => maxPtsMap.set(qs.qNum, qs.maxPoints));
+
+      const thead = document.getElementById('ddMatrixThead');
+      const tbody = document.getElementById('ddMatrixTbody');
+
+      const sortArrow = function(field) {
+        if (ddSortField !== field) return '<span class="text-slate-300 ml-1">↕</span>';
+        return '<span class="text-indigo-600 ml-1">' + (ddSortAsc ? '↑' : '↓') + '</span>';
+      };
+
+      // Build Header Row
+      let headHtml = '<tr>' +
+        '<th onclick="toggleDdSort(\'name\')" class="sticky-col bg-slate-50 p-3 border-r border-slate-200 cursor-pointer hover:bg-slate-100 min-w-[180px]">' +
+          'Student ' + sortArrow('name') +
+        '</th>' +
+        '<th class="p-3 border-r border-slate-200 text-center w-24">Period</th>' +
+        '<th onclick="toggleDdSort(\'score\')" class="p-3 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-100 w-28">' +
+          'Score % ' + sortArrow('score') +
+        '</th>' +
+        '<th class="p-3 border-r border-slate-200 text-center w-24">Points</th>';
+
+      questionStats.forEach(function(qs) {
+        const isFocused = focusedQuestionNum === qs.qNum;
+        const fKey = 'q_' + qs.qNum;
+        headHtml +=
+          '<th onclick="toggleDdSort(\'' + fKey + '\')" class="p-2.5 border-r border-slate-200 text-center cursor-pointer hover:bg-indigo-50/60 min-w-[92px] ' +
+            (isFocused ? 'bg-indigo-100/80 text-indigo-950' : '') + '" title="Click to sort by Q' + qs.qNum + ' (' + escapeHtml(qs.standardName || qs.standard) + ')">' +
+            '<div class="font-black text-xs text-slate-800">Q' + qs.qNum + sortArrow(fKey) + '</div>' +
+            '<div class="text-[9px] font-mono text-slate-400 font-semibold">' + escapeHtml(qs.standard || (qs.maxPoints + 'pt')) + ' • ' + qs.accuracyPct + '%</div>' +
+          '</th>';
       });
 
+      headHtml += '<th class="p-3 text-center w-20">Inspect</th></tr>';
+      thead.innerHTML = headHtml;
+
+      // Filter rows
+      const searchVal = (document.getElementById('ddStudentSearch').value || '').trim().toLowerCase();
+      let filtered = assessed.filter(function(item) {
+        if (ddScoreFilter === 'LOW' && item.scorePct >= 60) return false;
+        if (ddScoreFilter === 'MID' && (item.scorePct < 60 || item.scorePct >= 80)) return false;
+        if (ddScoreFilter === 'HIGH' && item.scorePct < 80) return false;
+        if (searchVal) {
+          const matchName = String(item.student.fullName || '').toLowerCase().includes(searchVal);
+          const matchId = String(item.student.studentId || '').toLowerCase().includes(searchVal);
+          if (!matchName && !matchId) return false;
+        }
+        return true;
+      });
+
+      // Sort rows
+      filtered.sort(function(a, b) {
+        let cmp = 0;
+        if (ddSortField === 'name') {
+          cmp = String(a.student.fullName).localeCompare(String(b.student.fullName));
+        } else if (ddSortField === 'score') {
+          cmp = a.scorePct - b.scorePct;
+        } else if (ddSortField.startsWith('q_')) {
+          const qNum = Number(ddSortField.split('_')[1]);
+          const qa = (a.sub.questions || []).find(q => Number(q.qNum) === qNum);
+          const qb = (b.sub.questions || []).find(q => Number(q.qNum) === qNum);
+          const sa = qa ? (parseFloat(qa.score) || 0) : -1;
+          const sb = qb ? (parseFloat(qb.score) || 0) : -1;
+          cmp = sa - sb;
+        }
+        if (cmp === 0) {
+          cmp = String(a.student.fullName).localeCompare(String(b.student.fullName));
+        }
+        return ddSortAsc ? cmp : -cmp;
+      });
+
+      currentDisplayedStudentIds = filtered.map(x => String(x.student.studentId));
+      tbody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="' + (5 + questionStats.length) + '" class="p-8 text-center text-slate-400 italic">No student submissions match the current filter.</td></tr>';
+        return;
+      }
+
+      filtered.forEach(function(item) {
+        const st = item.student;
+        const sub = item.sub;
+        const pct = item.scorePct;
+
+        const scoreBadgeCls = pct >= 80
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          : (pct >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+
+        const qLookup = new Map();
+        (sub.questions || []).forEach(q => qLookup.set(Number(q.qNum), q));
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50/90 transition group';
+
+        let rowHtml =
+          '<td onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\', \'' + escapeHtml(currentAssignmentCode) + '\')" class="sticky-col bg-white group-hover:bg-slate-50 p-3 border-r border-slate-200 cursor-pointer">' +
+            '<div class="font-extrabold text-slate-900 text-xs hover:text-indigo-600 transition">' + escapeHtml(st.fullName) + '</div>' +
+            '<div class="text-[10px] text-slate-400 font-mono">ID #' + escapeHtml(st.studentId) + '</div>' +
+          '</td>' +
+          '<td class="p-3 border-r border-slate-200 text-center text-[11px] text-slate-500 font-medium">' + escapeHtml(st.classPeriod) + '</td>' +
+          '<td onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\', \'' + escapeHtml(currentAssignmentCode) + '\')" class="p-3 border-r border-slate-200 text-right cursor-pointer">' +
+            '<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + scoreBadgeCls + '">' + pct + '%</span>' +
+          '</td>' +
+          '<td class="p-3 border-r border-slate-200 text-center font-mono font-bold text-slate-600 text-[11px]">' +
+            sub.pointsEarned + ' / ' + sub.pointsTotal +
+          '</td>';
+
+        questionStats.forEach(function(qs) {
+          const q = qLookup.get(qs.qNum);
+          const maxPts = maxPtsMap.get(qs.qNum) || 1;
+          const isFocusedCol = focusedQuestionNum === qs.qNum;
+
+          if (!q) {
+            rowHtml += '<td class="p-2 border-r border-slate-200 text-center text-slate-300">—</td>';
+            return;
+          }
+
+          const sc = parseFloat(q.score) || 0;
+          const isFull = sc > 0 && (sc >= maxPts || /^correct/i.test(String(q.feedback || '').trim()));
+          let cellBg = '';
+          let cellText = '';
+          let statusIcon = '';
+
+          if (sc <= 0) {
+            cellBg = isFocusedCol ? 'bg-rose-100/90 hover:bg-rose-200/70' : 'bg-rose-50/70 hover:bg-rose-100/80';
+            cellText = 'text-rose-900';
+            statusIcon = '❌';
+          } else if (isFull) {
+            cellBg = isFocusedCol ? 'bg-emerald-100/90 hover:bg-emerald-200/70' : 'bg-emerald-50/70 hover:bg-emerald-100/80';
+            cellText = 'text-emerald-900';
+            statusIcon = '✅';
+          } else {
+            cellBg = isFocusedCol ? 'bg-amber-100/90 hover:bg-amber-200/70' : 'bg-amber-50/80 hover:bg-amber-100/80';
+            cellText = 'text-amber-900';
+            statusIcon = '⚠️';
+          }
+
+          const ansStr = String(q.studentAns || '—').trim();
+          const tooltip = 'Q' + qs.qNum + ' (' + sc + '/' + maxPts + ' pt)\nStudent Answer: ' + ansStr + (q.feedback ? ('\nFeedback: ' + q.feedback) : '');
+
+          let innerContent = '';
+          if (cellDisplayMode === 'points') {
+            innerContent = '<div class="font-extrabold text-xs ' + cellText + '">' + statusIcon + ' ' + sc + '<span class="text-[9.5px] opacity-60">/' + maxPts + '</span></div>';
+          } else if (cellDisplayMode === 'answers') {
+            innerContent = '<div class="font-mono font-bold text-[11px] ' + cellText + ' truncate max-w-[110px] mx-auto">' + escapeHtml(ansStr) + '</div>';
+          } else {
+            innerContent =
+              '<div class="font-mono font-bold text-[10.5px] ' + cellText + ' truncate max-w-[110px] mx-auto">' + escapeHtml(ansStr) + '</div>' +
+              '<div class="text-[9px] font-extrabold opacity-75 ' + cellText + '">' + statusIcon + ' ' + sc + '/' + maxPts + ' pt</div>';
+          }
+
+          rowHtml +=
+            '<td onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\', \'' + escapeHtml(currentAssignmentCode) + '\', ' + qs.qNum + ')" ' +
+                'title="' + escapeHtml(tooltip) + '" ' +
+                'class="p-2 border-r border-slate-200 text-center cursor-pointer transition ' + cellBg + '">' +
+              innerContent +
+            '</td>';
+        });
+
+        rowHtml +=
+          '<td class="p-2 text-center">' +
+            '<button onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\', \'' + escapeHtml(currentAssignmentCode) + '\')" class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-700 font-bold text-[10px] cursor-pointer transition">' +
+              'View ↗' +
+            '</button>' +
+          '</td>';
+
+        tr.innerHTML = rowHtml;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // =========================================================================
+    // TAB 2: CLASS GRADEBOOK GRID (STUDENTS × ASSIGNMENTS)
+    // =========================================================================
+    function toggleGbSort(field) {
+      if (gbSortField === field) {
+        gbSortAsc = !gbSortAsc;
+      } else {
+        gbSortField = field;
+        gbSortAsc = field === 'name';
+      }
+      renderGradebookGrid();
+    }
+
+    function jumpToAssignmentDeepDive(code) {
+      currentAssignmentCode = code;
+      focusedQuestionNum = null;
+      switchMainTab('deepdive');
+    }
+
+    function renderGradebookGrid() {
+      const includeAll = document.getElementById('chkGbShowAllAssignments').checked;
+      const assignments = getAssignmentsForActivePeriod(includeAll);
+      const students = getStudentsForPeriod(selectedPeriod);
+      const searchVal = (document.getElementById('gbStudentSearch').value || '').trim().toLowerCase();
+
+      const thead = document.getElementById('gbGridThead');
+      const tbody = document.getElementById('gbGridTbody');
+
+      const sortArrow = function(field) {
+        if (gbSortField !== field) return '<span class="text-slate-300 ml-1">↕</span>';
+        return '<span class="text-indigo-600 ml-1">' + (gbSortAsc ? '↑' : '↓') + '</span>';
+      };
+
+      let headHtml = '<tr>' +
+        '<th onclick="toggleGbSort(\'name\')" class="sticky-col bg-slate-50 p-3 border-r border-slate-200 cursor-pointer hover:bg-slate-100 min-w-[190px]">' +
+          'Student ' + sortArrow('name') +
+        '</th>' +
+        '<th class="p-3 border-r border-slate-200 text-center w-24">Period</th>' +
+        '<th onclick="toggleGbSort(\'avg\')" class="p-3 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-100 w-28">' +
+          'Class Avg ' + sortArrow('avg') +
+        '</th>' +
+        '<th class="p-3 border-r border-slate-200 text-center w-24">Completed</th>';
+
+      assignments.forEach(function(a) {
+        headHtml +=
+          '<th class="p-2.5 border-r border-slate-200 text-center min-w-[130px] hover:bg-indigo-50/50 transition">' +
+            '<div onclick="toggleGbSort(\'' + escapeHtml(a.code) + '\')" class="font-extrabold text-[11px] text-slate-900 cursor-pointer truncate max-w-[140px] mx-auto" title="' + escapeHtml(a.title) + '">' +
+              escapeHtml(a.title) + sortArrow(a.code) +
+            '</div>' +
+            '<div class="flex items-center justify-center space-x-1.5 mt-0.5">' +
+              '<span class="text-[9px] font-mono text-slate-400">' + escapeHtml(a.code) + '</span>' +
+              '<button onclick="jumpToAssignmentDeepDive(\'' + escapeHtml(a.code) + '\')" class="text-[9px] font-bold text-indigo-600 hover:underline cursor-pointer" title="Open Deep-Dive for this assignment">Inspect ↗</button>' +
+            '</div>' +
+          '</th>';
+      });
+
+      headHtml += '</tr>';
+      thead.innerHTML = headHtml;
+
+      // Compute rows
+      let rows = students.map(function(st) {
+        let sum = 0;
+        let count = 0;
+        const subByCode = {};
+        assignments.forEach(function(a) {
+          const sub = getStudentSubmission(st, a.code);
+          if (sub) {
+            const pct = formatScorePct(sub);
+            subByCode[a.code] = { sub, pct };
+            sum += pct;
+            count++;
+          }
+        });
+        const avg = count > 0 ? Math.round((sum / count) * 10) / 10 : -1;
+        return { student: st, avg, count, subByCode };
+      });
+
+      if (searchVal) {
+        rows = rows.filter(r =>
+          String(r.student.fullName || '').toLowerCase().includes(searchVal) ||
+          String(r.student.studentId || '').toLowerCase().includes(searchVal)
+        );
+      }
+
+      rows.sort(function(a, b) {
+        let cmp = 0;
+        if (gbSortField === 'name') {
+          cmp = String(a.student.fullName).localeCompare(String(b.student.fullName));
+        } else if (gbSortField === 'avg') {
+          cmp = a.avg - b.avg;
+        } else {
+          const sa = a.subByCode[gbSortField] ? a.subByCode[gbSortField].pct : -1;
+          const sb = b.subByCode[gbSortField] ? b.subByCode[gbSortField].pct : -1;
+          cmp = sa - sb;
+        }
+        return gbSortAsc ? cmp : -cmp;
+      });
+
+      currentDisplayedStudentIds = rows.map(r => String(r.student.studentId));
+      tbody.innerHTML = '';
+
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="' + (4 + assignments.length) + '" class="p-8 text-center text-slate-400 italic">No students found.</td></tr>';
+        return;
+      }
+
+      rows.forEach(function(r) {
+        const st = r.student;
+        const avg = r.avg;
+        const avgCls = avg >= 80
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          : (avg >= 60 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition group';
+
+        let html =
+          '<td onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\')" class="sticky-col bg-white group-hover:bg-slate-50 p-3 border-r border-slate-200 cursor-pointer">' +
+            '<div class="font-extrabold text-slate-900 text-xs hover:text-indigo-600">' + escapeHtml(st.fullName) + '</div>' +
+            '<div class="text-[10px] text-slate-400 font-mono">ID #' + escapeHtml(st.studentId) + '</div>' +
+          '</td>' +
+          '<td class="p-3 border-r border-slate-200 text-center text-[11px] text-slate-500">' + escapeHtml(st.classPeriod) + '</td>' +
+          '<td class="p-3 border-r border-slate-200 text-right">' +
+            (avg >= 0 ? ('<span class="px-2 py-0.5 rounded-md border font-black text-xs ' + avgCls + '">' + avg + '%</span>') : '<span class="text-slate-300">—</span>') +
+          '</td>' +
+          '<td class="p-3 border-r border-slate-200 text-center font-bold text-slate-600 text-[11px]">' +
+            r.count + ' / ' + assignments.length +
+          '</td>';
+
+        assignments.forEach(function(a) {
+          const entry = r.subByCode[a.code];
+          if (!entry) {
+            html += '<td class="p-2.5 border-r border-slate-200 text-center text-slate-300 bg-slate-50/40">—</td>';
+          } else {
+            const p = entry.pct;
+            const cellCls = p >= 80
+              ? 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-900'
+              : (p >= 60 ? 'bg-amber-50/70 hover:bg-amber-100 text-amber-900' : 'bg-rose-50/70 hover:bg-rose-100 text-rose-900');
+            html +=
+              '<td onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\', \'' + escapeHtml(a.code) + '\')" class="p-2.5 border-r border-slate-200 text-center cursor-pointer transition ' + cellCls + '">' +
+                '<div class="font-black text-xs">' + p + '%</div>' +
+                '<div class="text-[9.5px] font-mono opacity-75">' + entry.sub.pointsEarned + '/' + entry.sub.pointsTotal + ' pts</div>' +
+              '</td>';
+          }
+        });
+
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // =========================================================================
+    // STUDENT WORK & AI FEEDBACK INSPECTOR DRAWER
+    // =========================================================================
+    function openStudentDrawer(studentId, assignmentCode, highlightQNum) {
+      const allStudents = getStudentsForPeriod('ALL');
+      const st = allStudents.find(s => String(s.studentId) === String(studentId));
+      if (!st) return;
+
+      drawerStudentId = String(st.studentId);
+      const stSubs = st.allSubmissions || [];
+
+      if (assignmentCode && stSubs.some(s => String(s.assignmentCode).toUpperCase() === String(assignmentCode).toUpperCase())) {
+        drawerAssignmentCode = String(assignmentCode).toUpperCase();
+      } else if (currentAssignmentCode && stSubs.some(s => String(s.assignmentCode).toUpperCase() === String(currentAssignmentCode).toUpperCase())) {
+        drawerAssignmentCode = String(currentAssignmentCode).toUpperCase();
+      } else if (stSubs.length > 0) {
+        drawerAssignmentCode = String(stSubs[stSubs.length - 1].assignmentCode).toUpperCase();
+      } else {
+        drawerAssignmentCode = currentAssignmentCode || '';
+      }
+
+      document.getElementById('drawerStudentName').textContent = st.fullName;
+      document.getElementById('drawerStudentId').textContent = 'ID #' + st.studentId;
+      document.getElementById('drawerStudentPeriod').textContent = st.classPeriod;
+
+      // Populate student's assignments dropdown in drawer
+      const selectEl = document.getElementById('drawerAssignmentSelect');
+      selectEl.innerHTML = '';
+      stSubs.forEach(function(sub) {
+        const c = String(sub.assignmentCode).toUpperCase();
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = sub.assignmentTitle + ' (' + c + ') — ' + formatScorePct(sub) + '%';
+        if (c === drawerAssignmentCode) opt.selected = true;
+        selectEl.appendChild(opt);
+      });
+
+      renderDrawerAssignmentDetails(st, drawerAssignmentCode, highlightQNum);
       document.getElementById('studentDrawer').classList.remove('hidden');
+    }
+
+    function onDrawerAssignmentChange(code) {
+      const allStudents = getStudentsForPeriod('ALL');
+      const st = allStudents.find(s => String(s.studentId) === String(drawerStudentId));
+      if (!st) return;
+      drawerAssignmentCode = String(code).toUpperCase();
+      renderDrawerAssignmentDetails(st, drawerAssignmentCode, null);
+    }
+
+    function renderDrawerAssignmentDetails(st, code, highlightQNum) {
+      const sub = getStudentSubmission(st, code);
+      const qListCont = document.getElementById('drawerQuestionsList');
+      const allListCont = document.getElementById('drawerAllAssignmentsList');
+      qListCont.innerHTML = '';
+      allListCont.innerHTML = '';
+
+      if (!sub) {
+        document.getElementById('drawerAssignmentLabel').textContent = 'No Submission';
+        document.getElementById('drawerStudentScorePct').textContent = 'Missing';
+        document.getElementById('drawerStudentPoints').textContent = '0 pts';
+        qListCont.innerHTML = '<div class="text-xs text-slate-400 italic py-3">This student does not have a graded scan for this assignment.</div>';
+      } else {
+        const pct = formatScorePct(sub);
+        document.getElementById('drawerAssignmentLabel').textContent = sub.assignmentTitle + ' (' + sub.assignmentCode + ')';
+        document.getElementById('drawerStudentScorePct').textContent = pct + '%';
+        document.getElementById('drawerStudentPoints').textContent = sub.pointsEarned + ' / ' + sub.pointsTotal + ' pts';
+
+        const qs = sub.questions || [];
+        if (qs.length === 0) {
+          qListCont.innerHTML = '<div class="text-xs text-slate-400 italic py-2">No individual question items recorded.</div>';
+        } else {
+          qs.forEach(function(q) {
+            const sc = parseFloat(q.score) || 0;
+            const isFull = sc > 0 && /^correct/i.test(String(q.feedback || '').trim());
+            const isZero = sc <= 0;
+            const isHighlighted = highlightQNum && Number(q.qNum) === Number(highlightQNum);
+
+            const borderCls = isZero
+              ? 'border-rose-200 bg-rose-50/40'
+              : (isFull ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40');
+            const ringCls = isHighlighted ? 'ring-2 ring-indigo-500 shadow-sm' : '';
+            const icon = isZero ? '❌' : (isFull ? '✅' : '⚠️');
+            const stdDesc = getStandardLabel(q.standard);
+
+            const card = document.createElement('div');
+            card.id = 'drawerQCard_' + q.qNum;
+            card.className = 'p-3 rounded-xl border ' + borderCls + ' ' + ringCls + ' space-y-1.5 transition';
+            card.innerHTML =
+              '<div class="flex items-center justify-between">' +
+                '<div class="flex items-center space-x-1.5">' +
+                  '<span class="font-black text-slate-900 text-xs">' + icon + ' Q' + q.qNum + '</span>' +
+                  (q.standard ? ('<span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono font-bold text-[10px] text-indigo-700">' + escapeHtml(q.standard) + '</span>') : '') +
+                  (stdDesc ? ('<span class="text-[10px] text-slate-500 font-medium truncate max-w-[180px]">' + escapeHtml(stdDesc) + '</span>') : '') +
+                '</div>' +
+                '<span class="font-extrabold text-xs text-slate-800">' + sc + ' pt' + (sc !== 1 ? 's' : '') + '</span>' +
+              '</div>' +
+              '<div class="flex items-center justify-between bg-white/90 px-2.5 py-1.5 rounded-lg border border-slate-200/80">' +
+                '<span class="text-[10px] font-bold text-slate-500 uppercase">Student Written Answer:</span>' +
+                '<span class="font-mono font-black text-xs text-slate-900">' + escapeHtml(q.studentAns || 'Blank') + '</span>' +
+              '</div>' +
+              (q.feedback ? ('<div class="text-[11px] text-slate-700 bg-blue-50/80 border border-blue-100 px-2.5 py-1.5 rounded-lg italic">💬 ' + escapeHtml(q.feedback) + '</div>') : '');
+
+            qListCont.appendChild(card);
+          });
+
+          if (highlightQNum) {
+            setTimeout(function() {
+              const targetEl = document.getElementById('drawerQCard_' + highlightQNum);
+              if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 60);
+          }
+        }
+      }
+
+      // Render all assignments list for this student
+      (st.allSubmissions || []).slice().reverse().forEach(function(sItem) {
+        const sPct = formatScorePct(sItem);
+        const isCurrent = String(sItem.assignmentCode).toUpperCase() === String(code).toUpperCase();
+        const badgeCls = sPct >= 80 ? 'bg-emerald-100 text-emerald-800' : (sPct >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800');
+
+        const row = document.createElement('div');
+        row.onclick = function() { onDrawerAssignmentChange(sItem.assignmentCode); };
+        row.className = 'p-2 rounded-lg border flex items-center justify-between cursor-pointer transition ' +
+          (isCurrent ? 'bg-indigo-50 border-indigo-300 font-bold' : 'bg-slate-50 hover:bg-white border-slate-200');
+        row.innerHTML =
+          '<div>' +
+            '<span class="font-bold text-slate-800 text-xs">' + escapeHtml(sItem.assignmentTitle) + '</span>' +
+            '<span class="text-[10px] font-mono text-slate-400 ml-1.5">(' + escapeHtml(sItem.assignmentCode) + ')</span>' +
+          '</div>' +
+          '<span class="px-2 py-0.5 rounded font-black text-xs ' + badgeCls + '">' + sPct + '% (' + sItem.pointsEarned + '/' + sItem.pointsTotal + ')</span>';
+        allListCont.appendChild(row);
+      });
+    }
+
+    function navigateDrawerStudent(delta) {
+      if (!drawerStudentId || currentDisplayedStudentIds.length === 0) return;
+      const idx = currentDisplayedStudentIds.indexOf(String(drawerStudentId));
+      if (idx === -1) return;
+      const nextIdx = (idx + delta + currentDisplayedStudentIds.length) % currentDisplayedStudentIds.length;
+      openStudentDrawer(currentDisplayedStudentIds[nextIdx], drawerAssignmentCode);
     }
 
     function closeStudentDrawer() {
       document.getElementById('studentDrawer').classList.add('hidden');
+      drawerStudentId = null;
     }
 
     document.addEventListener('keydown', function(e) {
+      const isOpen = !document.getElementById('studentDrawer').classList.contains('hidden');
+      if (!isOpen) return;
       if (e.key === 'Escape') closeStudentDrawer();
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        navigateDrawerStudent(1);
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        navigateDrawerStudent(-1);
+      }
     });
 
-    /**
-     * Copies formatted groups to clipboard for easy pasting into lesson plans
-     * (Excludes scores and percentages for student privacy when displayed or shared)
-     */
-    function copyGroupRosters() {
-      if (!currentCalculatedGroups || currentCalculatedGroups.length === 0) {
-        showToast('⚠️ No student groups calculated yet.', '⚠️');
-        return;
+    // =========================================================================
+    // TAB 3: SMALL GROUPS (ON-DEMAND CLIENT-SIDE GROUPER)
+    // =========================================================================
+    function renderGroupsTab() {
+      const avail = getAssignmentsForActivePeriod(true);
+      const cont = document.getElementById('assignmentsChecklist');
+      cont.innerHTML = '';
+
+      if (selectedGroupAssignmentCodes.size === 0 && currentAssignmentCode) {
+        selectedGroupAssignmentCodes.add(currentAssignmentCode);
       }
 
+      avail.forEach(function(a) {
+        const isChecked = selectedGroupAssignmentCodes.has(a.code);
+        const lbl = document.createElement('label');
+        lbl.className = 'inline-flex items-center space-x-2 px-2.5 py-1.5 rounded-xl border text-xs cursor-pointer transition select-none ' +
+          (isChecked ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50');
+        lbl.innerHTML =
+          '<input type="checkbox" class="rounded text-indigo-600" ' + (isChecked ? 'checked' : '') + ' />' +
+          '<span>' + escapeHtml(a.title) + ' <span class="text-[10px] font-mono text-slate-400">(' + escapeHtml(a.code) + ')</span></span>';
+        lbl.querySelector('input').onchange = function(e) {
+          if (e.target.checked) selectedGroupAssignmentCodes.add(a.code);
+          else selectedGroupAssignmentCodes.delete(a.code);
+          renderGroupsTab();
+        };
+        cont.appendChild(lbl);
+      });
+
+      document.getElementById('selectedAssignmentsCountBadge').textContent = selectedGroupAssignmentCodes.size + ' selected';
+      recalculateAndRenderGroups();
+    }
+
+    function applyGroupPreset(type) {
+      const avail = getAssignmentsForActivePeriod(false);
+      selectedGroupAssignmentCodes.clear();
+      if (type === 'current' && currentAssignmentCode) {
+        selectedGroupAssignmentCodes.add(currentAssignmentCode);
+      } else if (type === 'period') {
+        avail.forEach(a => selectedGroupAssignmentCodes.add(a.code));
+      } else if (type === 'last3') {
+        avail.slice(0, 3).forEach(a => selectedGroupAssignmentCodes.add(a.code));
+      }
+      renderGroupsTab();
+    }
+
+    function setGroupCount(n) {
+      numGroups = Math.min(8, Math.max(2, Number(n) || 4));
+      const btns = document.querySelectorAll('.grp-btn');
+      btns.forEach(function(btn) {
+        if (Number(btn.innerText) === numGroups) {
+          btn.className = 'grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-indigo-600 bg-indigo-600 text-white shadow-xs cursor-pointer';
+        } else {
+          btn.className = 'grp-btn px-2.5 py-1 rounded-lg font-extrabold text-xs transition border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer';
+        }
+      });
+      recalculateAndRenderGroups();
+    }
+
+    function onStrategyChange() {
+      groupingStrategy = document.getElementById('groupingStrategy').value;
+      recalculateAndRenderGroups();
+    }
+
+    function recalculateAndRenderGroups() {
+      const students = getStudentsForPeriod(selectedPeriod);
+      const assessed = [];
+      const unassessed = [];
+
+      students.forEach(function(st) {
+        const matchingSubs = (st.allSubmissions || []).filter(s =>
+          selectedGroupAssignmentCodes.has(String(s.assignmentCode).toUpperCase())
+        );
+        if (matchingSubs.length > 0) {
+          const sum = matchingSubs.reduce((acc, sub) => acc + formatScorePct(sub), 0);
+          const avg = Math.round((sum / matchingSubs.length) * 10) / 10;
+          assessed.push({ ...st, calculatedAverage: avg, matchingSubmissions: matchingSubs });
+        } else {
+          unassessed.push(st);
+        }
+      });
+
+      assessed.sort((a, b) => b.calculatedAverage - a.calculatedAverage);
+      currentUnassessedGroupStudents = unassessed;
+
+      // Partition
+      const groups = Array.from({ length: numGroups }, () => []);
+      if (groupingStrategy === 'balanced') {
+        let forward = true;
+        let g = 0;
+        for (let i = 0; i < assessed.length; i++) {
+          groups[g].push(assessed[i]);
+          if (forward) {
+            if (g === numGroups - 1) forward = false;
+            else g++;
+          } else {
+            if (g === 0) forward = true;
+            else g--;
+          }
+        }
+      } else {
+        const baseSize = Math.floor(assessed.length / numGroups);
+        const rem = assessed.length % numGroups;
+        let idx = 0;
+        for (let g = 0; g < numGroups; g++) {
+          const size = baseSize + (g < rem ? 1 : 0);
+          groups[g] = assessed.slice(idx, idx + size);
+          idx += size;
+        }
+      }
+
+      currentCalculatedGroups = groups;
+
+      const grid = document.getElementById('groupsGrid');
+      grid.innerHTML = '';
+      grid.className = numGroups <= 2
+        ? 'grid grid-cols-1 md:grid-cols-2 gap-4 items-start'
+        : (numGroups === 3 ? 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start');
+
+      groups.forEach(function(grp, gIdx) {
+        const theme = GROUP_THEMES[gIdx % GROUP_THEMES.length];
+        const sum = grp.reduce((acc, s) => acc + s.calculatedAverage, 0);
+        const avg = grp.length > 0 ? Math.round((sum / grp.length) * 10) / 10 : 0;
+
+        const col = document.createElement('div');
+        col.className = 'bg-white rounded-xl border ' + theme.border + ' shadow-xs p-3.5 space-y-2.5 print-page';
+
+        let html =
+          '<div class="flex items-center justify-between border-b ' + theme.border + ' pb-2">' +
+            '<div class="flex items-center space-x-2">' +
+              '<span class="px-2 py-0.5 rounded-md font-black text-xs ' + theme.badge + '">Group ' + (gIdx + 1) + '</span>' +
+              '<span class="font-extrabold text-xs ' + theme.text + '">' + avg + '% avg</span>' +
+            '</div>' +
+            '<span class="text-[11px] font-bold text-slate-500">' + grp.length + ' stds</span>' +
+          '</div>' +
+          '<div class="space-y-1.5">';
+
+        grp.forEach(function(st) {
+          const badgeCls = st.calculatedAverage >= 80
+            ? 'bg-emerald-100 text-emerald-800'
+            : (st.calculatedAverage >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800');
+          html +=
+            '<div onclick="openStudentDrawer(\'' + escapeHtml(st.studentId) + '\')" class="p-2 rounded-lg border border-slate-200 hover:border-indigo-300 bg-slate-50/60 hover:bg-white flex items-center justify-between cursor-pointer transition">' +
+              '<div>' +
+                '<div class="font-extrabold text-slate-900 text-xs">' + escapeHtml(st.fullName) + '</div>' +
+                '<div class="text-[9.5px] font-mono text-slate-400">ID #' + escapeHtml(st.studentId) + '</div>' +
+              '</div>' +
+              '<span class="px-1.5 py-0.5 rounded font-black text-xs ' + badgeCls + '">' + st.calculatedAverage + '%</span>' +
+            '</div>';
+        });
+
+        html += '</div>';
+        col.innerHTML = html;
+        grid.appendChild(col);
+      });
+    }
+
+    function copyGroupRosters() {
+      if (!currentCalculatedGroups || currentCalculatedGroups.length === 0) {
+        showToast('No groups calculated yet.', '⚠️');
+        return;
+      }
       const pLabel = selectedPeriod === 'ALL' ? 'All Classes' : selectedPeriod;
-      const codes = Array.from(selectedAssignmentCodes).join(', ');
+      const codes = Array.from(selectedGroupAssignmentCodes).join(', ');
 
       let text = '🎯 SMALL GROUPS - ' + pLabel + '\n';
-      if (codes) text += 'Assignments: ' + codes + '\n';
-      text += '\n';
+      if (codes) text += 'Assignments: ' + codes + '\n\n';
 
       currentCalculatedGroups.forEach(function(group, idx) {
-        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         text += 'GROUP ' + (idx + 1) + ' (' + group.length + ' Students)\n';
-        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
         group.forEach(function(s) {
-          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + '\n';
+          text += '• ' + s.fullName + '\n';
         });
         text += '\n';
       });
 
-      if (currentUnassessedStudents.length > 0) {
-        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        text += 'UNASSESSED / ABSENT STUDENTS (' + currentUnassessedStudents.length + ')\n';
-        text += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-        currentUnassessedStudents.forEach(function(s) {
-          text += '• ' + (s.fullName || ('Student #' + s.studentId)) + '\n';
-        });
-      }
-
       navigator.clipboard.writeText(text).then(function() {
-        showToast('✅ Copied ' + numGroups + ' group rosters to clipboard (privacy-safe: no scores)!', '📋');
-      }).catch(function() {
-        showToast('Unable to copy automatically. Please try again.', '⚠️');
+        showToast('✅ Copied ' + numGroups + ' group rosters (privacy-safe: no scores)!', '📋');
       });
     }
 
@@ -942,7 +1961,8 @@
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
   </script>
 </body>

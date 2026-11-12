@@ -10,7 +10,7 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('📐 Math Autograder')
-    .addItem('🎯 Small Groups by Average Popout', 'openInterventionDashboard')
+    .addItem('📊 Class & Assignment Data Explorer', 'openInterventionDashboard')
     .addItem('📱 Open Autograder Sidebar', 'showSidebar')
     .addItem('🎓 Preview / Share Student Progress Portal', 'openStudentPortalPreview')
     .addSeparator()
@@ -60,7 +60,7 @@ function doGet(e) {
     }
     if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
       return HtmlService.createHtmlOutputFromFile('TeacherDashboard')
-        .setTitle('Small Groups & Intervention Dashboard')
+        .setTitle('Class & Assignment Data Explorer')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
@@ -290,13 +290,13 @@ function handleDriveBridgeReconcile_(body) {
 }
 
 /**
- * Opens the Small Groups by Average popout dialog inside Google Sheets
+ * Opens the Class & Assignment Data Explorer popout dialog inside Google Sheets
  */
 function openInterventionDashboard() {
   const html = HtmlService.createHtmlOutputFromFile('TeacherDashboard')
-    .setWidth(1150)
-    .setHeight(820);
-  SpreadsheetApp.getUi().showModalDialog(html, '🎯 Small Groups by Average');
+    .setWidth(1240)
+    .setHeight(840);
+  SpreadsheetApp.getUi().showModalDialog(html, '📊 Class & Assignment Data Explorer');
 }
 
 /**
@@ -1900,6 +1900,15 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     if (r.classPeriod) periodsSet.add(r.classPeriod.trim());
   });
 
+  const allRosterFormatted = rosterInfo.list.map(r => ({
+    studentId: r.studentId,
+    firstName: r.firstName || '',
+    lastName: r.lastName || '',
+    fullName: r.studentName,
+    classPeriod: r.classPeriod || 'No Period'
+  }));
+  const stdDict = typeof STANDARDS_DICTIONARY !== 'undefined' ? STANDARDS_DICTIONARY : {};
+
   if (!gradebookSheet || gradebookSheet.getLastRow() <= 1) {
     return {
       periods: Array.from(periodsSet).sort(),
@@ -1919,11 +1928,9 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
         topStrugglingStandard: null
       },
       tiers: { tier3: [], tier2: [], tier1: [] },
-      missingStudents: rosterInfo.list.map(r => ({
-        studentId: r.studentId,
-        fullName: r.studentName,
-        classPeriod: r.classPeriod || 'No Period'
-      })),
+      missingStudents: allRosterFormatted,
+      roster: allRosterFormatted,
+      standardsDictionary: stdDict,
       itemAnalysis: []
     };
   }
@@ -1943,12 +1950,9 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
   const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 8;
   const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 9;
 
-  // 2. Discover all unique assignments and periods in Gradebook
+  // 2. Discover all unique assignments in Gradebook
   const assignmentMap = new Map();
   for (const row of rows) {
-    const rawPeriod = periodCol !== -1 ? String(row[periodCol] || '').trim() : '';
-    if (rawPeriod) periodsSet.add(rawPeriod);
-
     const code = String(row[codeCol] || '').trim().toUpperCase();
     if (!code) continue;
     const title = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;
@@ -2139,9 +2143,12 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
       });
     }
 
+    const subTimestamp = row[0] instanceof Date ? row[0] : new Date(row[0] || Date.now());
     const subItem = {
       assignmentCode: code,
       assignmentTitle,
+      date: Utilities.formatDate(subTimestamp, ss.getSpreadsheetTimeZone() || 'GMT', 'M/d/yy'),
+      rawDate: subTimestamp.getTime(),
       scorePercent: scoreVal,
       pointsEarned: ptsEarned,
       pointsTotal: ptsTotal,
@@ -2260,6 +2267,8 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     },
     students: Array.from(studentMap.values()).sort((a, b) => b.averageScore - a.averageScore),
     missingStudents,
+    roster: allRosterFormatted,
+    standardsDictionary: stdDict,
     itemAnalysis
   };
 }
