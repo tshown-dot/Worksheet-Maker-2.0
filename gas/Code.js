@@ -1116,15 +1116,19 @@ function getStudentPortalData(rawStudentId, rawPassword) {
         const qAns = String(r[baseCol + 1] || '');
         const qFeedback = String(r[baseCol + 2] || '');
 
+        const stdMatch = qFeedback.match(/([4-8]\.[A-Z]+\.[A-Z0-9\.]+)/i);
+        const stdCode = stdMatch ? stdMatch[1].toUpperCase() : null;
+        const cleanFeedback = qFeedback.replace(/\[([4-8]\.[A-Z]+\.[A-Z0-9\.]+)\]/gi, function(m, c) {
+          const translated = typeof translateStandard === 'function' ? translateStandard(c) : c;
+          return `[${translated}]`;
+        });
+
         questions.push({
           orderIndex: qIdx + 1,
           score: qScore,
           studentAnswer: qAns,
-          feedback: qFeedback
+          feedback: cleanFeedback
         });
-
-        const stdMatch = qFeedback.match(/([4-8]\.[A-Z]+\.[A-Z0-9\.]+)/i);
-        const stdCode = stdMatch ? stdMatch[1].toUpperCase() : null;
         if (stdCode) {
           if (!standardsMap[stdCode]) {
             standardsMap[stdCode] = { code: stdCode, attempts: 0, correct: 0 };
@@ -1907,7 +1911,9 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     fullName: r.studentName,
     classPeriod: r.classPeriod || 'No Period'
   }));
-  const stdDict = typeof STANDARDS_DICTIONARY !== 'undefined' ? STANDARDS_DICTIONARY : {};
+  const stdDict = typeof getStandardsMapDictionary === 'function'
+    ? getStandardsMapDictionary()
+    : (typeof STANDARDS_DICTIONARY !== 'undefined' ? STANDARDS_DICTIONARY : {});
 
   if (!gradebookSheet || gradebookSheet.getLastRow() <= 1) {
     return {
@@ -2080,9 +2086,9 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
       const qAns = qAnsIndex !== -1 ? String(row[qAnsIndex] || '') : '';
       const qFeedback = qFeedbackIndex !== -1 ? String(row[qFeedbackIndex] || '') : '';
 
-      // Extract standard from feedback e.g. [6.NS.C.6b]
+      // Extract standard from feedback e.g. [6.NS.C.6b] or 6.NS.C.6b
       let stdCode = '';
-      const stdMatch = qFeedback.match(/\[([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)\]/);
+      const stdMatch = qFeedback.match(/\[?([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)\]?/i);
       if (stdMatch) stdCode = stdMatch[1];
 
       if (activeCodesSet.has(code)) {
@@ -2093,9 +2099,9 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
             assignmentTitle,
             qNum: q,
             standard: stdCode,
-            standardDescription: (typeof getStandardDescription === 'function')
-              ? getStandardDescription(stdCode)
-              : (typeof STANDARDS_DICTIONARY !== 'undefined' && STANDARDS_DICTIONARY[stdCode] ? STANDARDS_DICTIONARY[stdCode] : ''),
+            standardDescription: (typeof translateStandard === 'function')
+              ? translateStandard(stdCode, stdDict)
+              : (stdDict[stdCode] || ''),
             attempts: 0,
             earnedSum: 0,
             correctCount: 0,

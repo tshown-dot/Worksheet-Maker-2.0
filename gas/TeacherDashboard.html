@@ -889,8 +889,32 @@
 
     function getStandardLabel(stdCode) {
       if (!stdCode) return '';
-      const clean = String(stdCode).trim();
-      return standardsDict[clean] || '';
+      const clean = String(stdCode).trim().replace(/^\[|\]$/g, '');
+      if (standardsDict[clean]) return standardsDict[clean];
+
+      const lower = clean.toLowerCase();
+      const keys = Object.keys(standardsDict);
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i].toLowerCase() === lower) return standardsDict[keys[i]];
+      }
+
+      // Fallback for sub-standard letter suffixes (e.g. 6.RP.A.3c -> 6.RP.A.3)
+      const stripped = clean.replace(/[a-zA-Z]+$/, '');
+      if (stripped !== clean) {
+        for (let i = 0; i < keys.length; i++) {
+          if (keys[i].toLowerCase() === stripped.toLowerCase()) return standardsDict[keys[i]];
+        }
+      }
+
+      return clean;
+    }
+
+    function formatFeedbackWithStandardsMap(feedbackText) {
+      if (!feedbackText) return '';
+      return String(feedbackText).replace(/\[([4-8]\.[A-Z]+\.[A-Z0-9\.]+)\]/gi, function(match, code) {
+        const translated = getStandardLabel(code);
+        return translated ? ('[' + translated + ']') : match;
+      });
     }
 
     /**
@@ -1324,16 +1348,16 @@
             ? 'bg-indigo-50/70 border-indigo-600 ring-2 ring-indigo-500/40 shadow-sm'
             : 'bg-slate-50/60 hover:bg-white border-slate-200 hover:border-indigo-300 hover:shadow-xs');
 
+        const stdLabel = qs.standardName || qs.standard || '';
         card.innerHTML =
           '<div class="space-y-1">' +
-            '<div class="flex items-center justify-between">' +
-              '<div class="flex items-center space-x-1.5">' +
-                '<span class="px-2 py-0.5 rounded-md bg-slate-900 text-white font-black text-xs">Q' + qs.qNum + '</span>' +
-                (qs.standard ? ('<span class="font-mono font-bold text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">' + escapeHtml(qs.standard) + '</span>') : '') +
+            '<div class="flex items-center justify-between gap-1.5">' +
+              '<div class="flex items-center space-x-1.5 min-w-0">' +
+                '<span class="px-2 py-0.5 rounded-md bg-slate-900 text-white font-black text-xs shrink-0">Q' + qs.qNum + '</span>' +
               '</div>' +
-              '<span class="px-1.5 py-0.5 rounded border font-black text-[10px] ' + badgeColor + '">' + acc + '%</span>' +
+              '<span class="px-1.5 py-0.5 rounded border font-black text-[10px] shrink-0 ' + badgeColor + '">' + acc + '%</span>' +
             '</div>' +
-            (qs.standardName ? ('<div class="text-[10px] text-slate-500 font-medium truncate" title="' + escapeHtml(qs.standardName) + '">' + escapeHtml(qs.standardName) + '</div>') : '') +
+            (stdLabel ? ('<div class="text-[10.5px] text-indigo-800 bg-indigo-50/90 border border-indigo-200/80 px-1.5 py-0.5 rounded font-bold truncate" title="' + escapeHtml(stdLabel) + '">' + escapeHtml(stdLabel) + '</div>') : '') +
           '</div>' +
           '<div class="space-y-1">' +
             '<div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">' +
@@ -1377,8 +1401,8 @@
 
       panel.classList.remove('hidden');
       document.getElementById('qfBadge').textContent = 'Q' + qs.qNum + ' (' + qs.maxPoints + ' pt' + (qs.maxPoints !== 1 ? 's' : '') + ')';
-      document.getElementById('qfStandardCode').textContent = qs.standard || 'Standard';
-      document.getElementById('qfStandardName').textContent = qs.standardName ? ('— ' + qs.standardName) : '';
+      document.getElementById('qfStandardCode').textContent = qs.standardName || qs.standard || 'General Math';
+      document.getElementById('qfStandardName').textContent = '';
       document.getElementById('qfSummaryStats').textContent =
         qs.accuracyPct + '% Class Accuracy • ' + qs.fullCount + ' Full Credit, ' + qs.partialCount + ' Partial, ' + qs.zeroCount + ' Missed (out of ' + qs.attempts + ' students)';
 
@@ -1409,7 +1433,7 @@
                   '<span class="px-1.5 py-0.5 rounded border font-black text-[10px] ' + badgeCls + '">' + e.score + '/' + qs.maxPoints + ' pt</span>' +
                 '</div>' +
               '</div>' +
-              (e.q.feedback ? ('<div class="text-[10px] text-slate-600 italic">' + escapeHtml(e.q.feedback) + '</div>') : '') +
+              (e.q.feedback ? ('<div class="text-[10px] text-slate-600 italic">' + escapeHtml(formatFeedbackWithStandardsMap(e.q.feedback)) + '</div>') : '') +
             '</div>';
         });
         missedHtml += '</div>';
@@ -1529,11 +1553,12 @@
       questionStats.forEach(function(qs) {
         const isFocused = focusedQuestionNum === qs.qNum;
         const fKey = 'q_' + qs.qNum;
+        const stdTitle = qs.standardName || qs.standard || (qs.maxPoints + 'pt');
         headHtml +=
-          '<th onclick="toggleDdSort(\'' + fKey + '\')" class="p-2.5 border-r border-slate-200 text-center cursor-pointer hover:bg-indigo-50/60 min-w-[92px] ' +
-            (isFocused ? 'bg-indigo-100/80 text-indigo-950' : '') + '" title="Click to sort by Q' + qs.qNum + ' (' + escapeHtml(qs.standardName || qs.standard) + ')">' +
-            '<div class="font-black text-xs text-slate-800">Q' + qs.qNum + sortArrow(fKey) + '</div>' +
-            '<div class="text-[9px] font-mono text-slate-400 font-semibold">' + escapeHtml(qs.standard || (qs.maxPoints + 'pt')) + ' • ' + qs.accuracyPct + '%</div>' +
+          '<th onclick="toggleDdSort(\'' + fKey + '\')" class="p-2.5 border-r border-slate-200 text-center cursor-pointer hover:bg-indigo-50/60 min-w-[115px] max-w-[155px] ' +
+            (isFocused ? 'bg-indigo-100/80 text-indigo-950' : '') + '" title="Click to sort by Q' + qs.qNum + ' — ' + escapeHtml(stdTitle) + ' (' + qs.accuracyPct + '% class accuracy)">' +
+            '<div class="font-black text-xs text-slate-800">Q' + qs.qNum + ' <span class="text-[10px] font-bold text-indigo-600">(' + qs.accuracyPct + '%)</span>' + sortArrow(fKey) + '</div>' +
+            '<div class="text-[9.5px] text-slate-500 font-bold truncate max-w-[140px] mx-auto normal-case" title="' + escapeHtml(stdTitle) + '">' + escapeHtml(stdTitle) + '</div>' +
           '</th>';
       });
 
@@ -1642,7 +1667,8 @@
           }
 
           const ansStr = String(q.studentAns || '—').trim();
-          const tooltip = 'Q' + qs.qNum + ' (' + sc + '/' + maxPts + ' pt)\nStudent Answer: ' + ansStr + (q.feedback ? ('\nFeedback: ' + q.feedback) : '');
+          const cleanFb = formatFeedbackWithStandardsMap(q.feedback);
+          const tooltip = 'Q' + qs.qNum + (qs.standardName ? (' — ' + qs.standardName) : '') + ' (' + sc + '/' + maxPts + ' pt)\nStudent Answer: ' + ansStr + (cleanFb ? ('\nFeedback: ' + cleanFb) : '');
 
           let innerContent = '';
           if (cellDisplayMode === 'points') {
@@ -2101,19 +2127,18 @@
             card.id = 'drawerQCard_' + q.qNum;
             card.className = 'p-3 rounded-xl border ' + borderCls + ' ' + ringCls + ' space-y-1.5 transition';
             card.innerHTML =
-              '<div class="flex items-center justify-between">' +
-                '<div class="flex items-center space-x-1.5">' +
-                  '<span class="font-black text-slate-900 text-xs">' + icon + ' Q' + q.qNum + '</span>' +
-                  (q.standard ? ('<span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 font-mono font-bold text-[10px] text-indigo-700">' + escapeHtml(q.standard) + '</span>') : '') +
-                  (stdDesc ? ('<span class="text-[10px] text-slate-500 font-medium truncate max-w-[180px]">' + escapeHtml(stdDesc) + '</span>') : '') +
+              '<div class="flex items-center justify-between gap-2">' +
+                '<div class="flex items-center space-x-1.5 min-w-0">' +
+                  '<span class="font-black text-slate-900 text-xs shrink-0">' + icon + ' Q' + q.qNum + '</span>' +
+                  (stdDesc ? ('<span class="px-2 py-0.5 rounded bg-indigo-50 border border-indigo-200 font-bold text-[10px] text-indigo-800 truncate max-w-[260px]" title="' + escapeHtml(stdDesc) + '">' + escapeHtml(stdDesc) + '</span>') : '') +
                 '</div>' +
-                '<span class="font-extrabold text-xs text-slate-800">' + sc + ' pt' + (sc !== 1 ? 's' : '') + '</span>' +
+                '<span class="font-extrabold text-xs text-slate-800 shrink-0">' + sc + ' pt' + (sc !== 1 ? 's' : '') + '</span>' +
               '</div>' +
               '<div class="flex items-center justify-between bg-white/90 px-2.5 py-1.5 rounded-lg border border-slate-200/80">' +
                 '<span class="text-[10px] font-bold text-slate-500 uppercase">Student Written Answer:</span>' +
                 '<span class="font-mono font-black text-xs text-slate-900">' + escapeHtml(q.studentAns || 'Blank') + '</span>' +
               '</div>' +
-              (q.feedback ? ('<div class="text-[11px] text-slate-700 bg-blue-50/80 border border-blue-100 px-2.5 py-1.5 rounded-lg italic">💬 ' + escapeHtml(q.feedback) + '</div>') : '');
+              (q.feedback ? ('<div class="text-[11px] text-slate-700 bg-blue-50/80 border border-blue-100 px-2.5 py-1.5 rounded-lg italic">💬 ' + escapeHtml(formatFeedbackWithStandardsMap(q.feedback)) + '</div>') : '');
 
             qListCont.appendChild(card);
           });

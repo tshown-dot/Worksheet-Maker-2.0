@@ -299,7 +299,7 @@
             '<div class="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">' +
               '<div>' +
                 '<div class="font-bold text-emerald-950">' + escapeHtml(s.name) + '</div>' +
-                '<div class="text-[10px] font-semibold text-emerald-700">Standard ' + escapeHtml(s.code) + ' • ' + s.correct + '/' + s.attempts + ' correct</div>' +
+                '<div class="text-[10px] font-semibold text-emerald-700">' + s.correct + '/' + s.attempts + ' correct</div>' +
               '</div>' +
               '<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-extrabold text-xs">' + s.rate + '%</span>' +
             '</div>';
@@ -324,7 +324,7 @@
             '<div class="p-2.5 rounded-xl border ' + boxClass + ' flex items-center justify-between">' +
               '<div>' +
                 '<div class="font-bold">' + escapeHtml(s.name) + '</div>' +
-                '<div class="text-[10px] font-semibold opacity-80">Standard ' + escapeHtml(s.code) + ' • ' + tagLabel + '</div>' +
+                '<div class="text-[10px] font-semibold opacity-80">' + tagLabel + '</div>' +
               '</div>' +
               '<span class="px-2 py-0.5 rounded-md ' + badgeClass + ' font-extrabold text-xs">' + s.rate + '%</span>' +
             '</div>';
@@ -343,8 +343,7 @@
             '<div class="space-y-1">' +
               '<div class="flex items-center justify-between text-xs">' +
                 '<div>' +
-                  '<span class="font-bold text-slate-800">' + escapeHtml(s.name) + '</span> ' +
-                  '<span class="text-[11px] font-mono text-slate-400">(' + escapeHtml(s.code) + ')</span>' +
+                  '<span class="font-bold text-slate-800">' + escapeHtml(s.name) + '</span>' +
                 '</div>' +
                 '<span class="font-extrabold text-slate-700">' + s.rate + '% <span class="text-[11px] font-normal text-slate-400">(' + s.correct + '/' + s.attempts + ')</span></span>' +
               '</div>' +

@@ -117,21 +117,54 @@ const STANDARDS_DICTIONARY = {
 };
 
 /**
- * Translates a standard code into Plain English
+ * Translates a standard code into Plain English using STANDARDS_DICTIONARY
+ * (with automatic prefix fallback for sub-standards like 6.RP.A.3c -> 6.RP.A.3)
  * @param {string} code - e.g. "6.NS.C.7a" or "7.EE.B.4"
  * @returns {string} Plain English title
  */
-function translateStandard(code) {
+function translateStandard(code, customDict) {
   if (!code) return "General Math";
-  const clean = String(code).trim();
-  if (STANDARDS_DICTIONARY[clean]) return STANDARDS_DICTIONARY[clean];
+  const dict = customDict || STANDARDS_DICTIONARY;
+  const clean = String(code).trim().replace(/^\[|\]$/g, '');
+  if (dict[clean]) return dict[clean];
 
   const lower = clean.toLowerCase();
-  for (const [k, v] of Object.entries(STANDARDS_DICTIONARY)) {
+  for (const [k, v] of Object.entries(dict)) {
     if (k.toLowerCase() === lower) return v;
   }
 
+  // Fallback: if sub-standard letter suffix exists (e.g. 6.RP.A.3c -> 6.RP.A.3)
+  const strippedLetter = clean.replace(/[a-zA-Z]+$/, '');
+  if (strippedLetter !== clean) {
+    for (const [k, v] of Object.entries(dict)) {
+      if (k.toLowerCase() === strippedLetter.toLowerCase()) return v;
+    }
+  }
+
   return clean;
+}
+
+/**
+ * Returns the complete Standards Map dictionary, merging built-in STANDARDS_DICTIONARY
+ * with any custom rows from the "Standards Map" sheet tab.
+ */
+function getStandardsMapDictionary() {
+  const merged = Object.assign({}, STANDARDS_DICTIONARY);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss ? ss.getSheetByName('Standards Map') : null;
+    if (sheet && sheet.getLastRow() > 1) {
+      const vals = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+      for (let i = 0; i < vals.length; i++) {
+        const code = String(vals[i][0] || '').trim();
+        const desc = String(vals[i][1] || '').trim();
+        if (code && desc) {
+          merged[code] = desc;
+        }
+      }
+    }
+  } catch (e) {}
+  return merged;
 }
 
 /**
