@@ -213,10 +213,7 @@ async function renderWorksheetIntoPDF(
     doc.setTextColor(148, 163, 184);
     doc.text(`Worksheet Maker 2.0 • Form ${worksheet.short_code}`, margin, pageHeight - 6.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...theme.accent);
-    const footerLabel = [theme.classLabel, theme.badgeLabel].filter(Boolean).join(' • ');
-    doc.text(`${footerLabel}  —  Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 6.5, { align: 'center' });
-    doc.setTextColor(148, 163, 184);
+    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 6.5, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.text('Standardized OCR Assessment Layout', pageWidth - margin, pageHeight - 6.5, { align: 'right' });
   }

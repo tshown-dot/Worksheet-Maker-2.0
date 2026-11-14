@@ -9,11 +9,8 @@ import { Worksheet } from '../types/worksheet';
 // autograder bounding boxes are unaffected.
 //
 // Distinctions are designed to read instantly on a black & white copy:
-//   - Spiral Review:   near-black header bars w/ white text, heavy solid border.
-//   - Math 6 POD:      white header, heavy DASHED border + dashed header rule.
-//   - Accelerated POD: DIAGONAL-STRIPED header bars, thin DOUBLE border.
-//   - Classwork:       light tinted header, heavy DOUBLE border.
-//   - Quiz:            solid filled header, heavy solid border.
+//   - POD cards use a SOLID filled header bar (white text); everything else tinted.
+//   - Accelerated PODs use a DOUBLE card border; Math 6 PODs a single thick one.
 //   - Class tag (MATH 6 / ACCELERATED) is printed in the masthead and every card.
 // ----------------------------------------------------------------------------
 
@@ -69,7 +66,7 @@ export function getWorksheetTheme(
           accent: [180, 83, 9], // amber-700
           tint: [255, 247, 237], // orange-50
           ink: [124, 45, 18], // orange-900
-          headerStyle: 'hatch',
+          headerStyle: 'solid',
           borderStyle: 'double',
           numberShape: 'circle',
         };
@@ -82,8 +79,8 @@ export function getWorksheetTheme(
           accent: [3, 105, 161], // sky-700
           tint: [240, 249, 255], // sky-50
           ink: [12, 74, 110], // sky-900
-          headerStyle: 'outline',
-          borderStyle: 'dashed',
+          headerStyle: 'solid',
+          borderStyle: 'thick',
           numberShape: 'circle',
         };
       }
@@ -94,8 +91,8 @@ export function getWorksheetTheme(
         accent: [51, 65, 85], // slate-700
         tint: [241, 245, 249],
         ink: [15, 23, 42],
-        headerStyle: 'outline',
-        borderStyle: 'dashed',
+        headerStyle: 'solid',
+        borderStyle: 'thick',
         numberShape: 'circle',
       };
     }
@@ -108,7 +105,7 @@ export function getWorksheetTheme(
         tint: [236, 253, 245],
         ink: [6, 78, 59],
         headerStyle: 'tint',
-        borderStyle: 'heavy-double',
+        borderStyle: 'double',
         numberShape: 'square',
       };
     case 'quiz':
@@ -119,7 +116,7 @@ export function getWorksheetTheme(
         accent: [185, 28, 28], // red-700
         tint: [254, 242, 242],
         ink: [127, 29, 29],
-        headerStyle: 'solid',
+        headerStyle: 'tint',
         borderStyle: 'thick',
         numberShape: 'square',
       };
@@ -142,11 +139,11 @@ export function getWorksheetTheme(
         badgeLabel: 'SPIRAL REVIEW',
         badgeIcon: '🔄',
         classLabel: null,
-        accent: [30, 27, 75], // indigo-950 (prints near-black)
+        accent: [79, 70, 229], // indigo-600
         tint: [238, 242, 255],
-        ink: [30, 27, 75],
-        headerStyle: 'solid',
-        borderStyle: 'heavy',
+        ink: [49, 46, 129],
+        headerStyle: 'tint',
+        borderStyle: 'single',
         numberShape: 'square',
       };
   }
