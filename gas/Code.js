@@ -58,6 +58,11 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify(res))
         .setMimeType(ContentService.MimeType.JSON);
     }
+    if (e.parameter.action === 'organizePodFolders') {
+      const res = organizePodFoldersInDrive_();
+      return ContentService.createTextOutput(JSON.stringify(res))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
       return HtmlService.createHtmlOutputFromFile('TeacherDashboard')
         .setTitle('Class & Assignment Data Explorer')
@@ -143,22 +148,90 @@ function upsertDriveBridgePdf_(folder, fileName, base64Data) {
 
 /**
  * Saves both Student and Answer Key PDFs into Google Drive / Worksheet Maker / [Folder Name]
+ * Automatically routes Accelerated PODs to "Accelerated PODs" and Math 6 PODs to "Math 6 PODs"
  */
+function resolveDriveBridgeFolderName_(rawFolderName, baseFilename) {
+  const folder = String(rawFolderName || 'General').trim() || 'General';
+  const name = String(baseFilename || '').trim();
+  const isPodLike =
+    folder === 'Daily Warm-Ups (POD)' ||
+    folder === 'Math 6 PODs' ||
+    folder === 'Accelerated PODs' ||
+    /\bpod\b/i.test(name);
+
+  if (isPodLike) {
+    if (/(accel|accelerated|adv|advanced|honors)/i.test(name)) {
+      return 'Accelerated PODs';
+    }
+    if (/math[\s_]*6/i.test(name)) {
+      return 'Math 6 PODs';
+    }
+  }
+  return folder;
+}
+
 function handleDriveBridgeSave_(body) {
   const rootFolder = getOrCreateDriveBridgeFolder_('Worksheet Maker', DriveApp.getRootFolder());
-  const subFolder = getOrCreateDriveBridgeFolder_(body.folderName || 'General', rootFolder);
   const baseFilename = String(body.baseFilename || 'Worksheet').trim();
+  const resolvedFolder = resolveDriveBridgeFolderName_(body.folderName, baseFilename);
+  const subFolder = getOrCreateDriveBridgeFolder_(resolvedFolder, rootFolder);
 
   const studentRes = upsertDriveBridgePdf_(subFolder, `${baseFilename}_Student.pdf`, body.studentPdfBase64);
   const keyRes = upsertDriveBridgePdf_(subFolder, `${baseFilename}_AnswerKey.pdf`, body.keyPdfBase64);
 
   return {
     success: true,
+    folderName: resolvedFolder,
     folderUrl: subFolder.getUrl(),
     studentFileUrl: studentRes ? studentRes.webViewLink : null,
     keyFileUrl: keyRes ? keyRes.webViewLink : null,
     studentFileId: studentRes ? studentRes.id : null,
     keyFileId: keyRes ? keyRes.id : null
+  };
+}
+
+/**
+ * Organizes existing Google Drive PDFs inside "Worksheet Maker" into
+ * "Math 6 PODs" and "Accelerated PODs" folders based on their filename.
+ */
+function organizePodFoldersInDrive_() {
+  const rootFolder = getOrCreateDriveBridgeFolder_('Worksheet Maker', DriveApp.getRootFolder());
+  const math6Folder = getOrCreateDriveBridgeFolder_('Math 6 PODs', rootFolder);
+  const accelFolder = getOrCreateDriveBridgeFolder_('Accelerated PODs', rootFolder);
+
+  let movedToMath6 = 0;
+  let movedToAccel = 0;
+
+  const subIter = rootFolder.getFolders();
+  while (subIter.hasNext()) {
+    const sub = subIter.next();
+    if (sub.isTrashed()) continue;
+    const subName = sub.getName();
+    if (subName === 'Math 6 PODs' || subName === 'Accelerated PODs') continue;
+
+    const files = sub.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      if (f.isTrashed()) continue;
+      const fname = f.getName();
+      if (!/pod/i.test(fname) && subName !== 'Daily Warm-Ups (POD)') continue;
+
+      if (/(accel|accelerated|adv|advanced|honors)/i.test(fname)) {
+        f.moveTo(accelFolder);
+        movedToAccel++;
+      } else if (/math[\s_]*6/i.test(fname)) {
+        f.moveTo(math6Folder);
+        movedToMath6++;
+      }
+    }
+  }
+
+  return {
+    success: true,
+    movedToMath6,
+    movedToAccel,
+    math6FolderUrl: math6Folder.getUrl(),
+    accelFolderUrl: accelFolder.getUrl()
   };
 }
 

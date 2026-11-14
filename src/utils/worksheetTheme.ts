@@ -47,12 +47,45 @@ export interface WorksheetTheme {
   pageFrame?: 'dashed';
 }
 
+export const MATH6_POD_FOLDER = 'Math 6 PODs';
+export const ACCELERATED_POD_FOLDER = 'Accelerated PODs';
+
 /** Detects which class a POD belongs to from its title / folder. */
 export function detectPodClass(ws: Pick<Worksheet, 'title' | 'folder_name'>): PodClass {
   const text = `${ws.title || ''} ${ws.folder_name || ''}`;
   if (/\b(accel|accelerated|adv|advanced|honors)\b/i.test(text)) return 'accelerated';
   if (/\bmath\s*6\b/i.test(text)) return 'math6';
   return null;
+}
+
+/**
+ * Infers the appropriate folder for a worksheet (separating Accelerated PODs vs Math 6 PODs)
+ * when the current folder is a generic/default POD folder or unset.
+ */
+export function resolveWorksheetFolder(
+  title: string | undefined,
+  currentFolder: string | undefined,
+  stylePreset?: string
+): string {
+  const cleanTitle = String(title || '').trim();
+  const cleanFolder = String(currentFolder || '').trim();
+  const isPodLike =
+    stylePreset === 'pod' ||
+    /\bpod\b|problem of the day/i.test(cleanTitle) ||
+    cleanFolder === 'Daily Warm-Ups (POD)' ||
+    cleanFolder === MATH6_POD_FOLDER ||
+    cleanFolder === ACCELERATED_POD_FOLDER;
+
+  if (isPodLike) {
+    if (/\b(accel|accelerated|adv|advanced|honors)\b/i.test(cleanTitle)) {
+      return ACCELERATED_POD_FOLDER;
+    }
+    if (/\bmath\s*6\b/i.test(cleanTitle)) {
+      return MATH6_POD_FOLDER;
+    }
+  }
+
+  return cleanFolder || 'General';
 }
 
 export function getWorksheetTheme(

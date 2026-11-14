@@ -11,6 +11,11 @@ import {
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Worksheet, StylePreset, SpacingMode } from '../types/worksheet';
+import {
+  MATH6_POD_FOLDER,
+  ACCELERATED_POD_FOLDER,
+  resolveWorksheetFolder,
+} from '../utils/worksheetTheme';
 
 interface WorksheetSettingsProps {
   worksheet: Worksheet;
@@ -32,13 +37,20 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
   const fetchFolders = async () => {
     try {
       const { data } = await supabase.from('folders').select('name').order('name');
-      if (data && data.length > 0) {
-        setFolders(data.map((f: any) => f.name));
-      } else {
-        setFolders(['General', 'Unit 1: Number Systems', 'Unit 2: Expressions & Equations', 'Daily Warm-Ups (POD)']);
-      }
+      const baseSet = new Set<string>([
+        MATH6_POD_FOLDER,
+        ACCELERATED_POD_FOLDER,
+        ...(data ? data.map((f: any) => f.name) : []),
+      ]);
+      setFolders(Array.from(baseSet).sort());
     } catch {
-      setFolders(['General', 'Unit 1: Number Systems', 'Unit 2: Expressions & Equations', 'Daily Warm-Ups (POD)']);
+      setFolders([
+        ACCELERATED_POD_FOLDER,
+        MATH6_POD_FOLDER,
+        'General',
+        'Unit 1: Number Systems',
+        'Unit 2: Expressions & Equations',
+      ]);
     }
   };
 
@@ -101,7 +113,19 @@ export const WorksheetSettings: React.FC<WorksheetSettingsProps> = ({
           <input
             type="text"
             value={worksheet.title}
-            onChange={(e) => onChange({ title: e.target.value })}
+            onChange={(e) => {
+              const newTitle = e.target.value;
+              const autoFolder = resolveWorksheetFolder(
+                newTitle,
+                worksheet.folder_name,
+                worksheet.style_preset
+              );
+              if (autoFolder !== worksheet.folder_name) {
+                onChange({ title: newTitle, folder_name: autoFolder });
+              } else {
+                onChange({ title: newTitle });
+              }
+            }}
             placeholder="e.g. Unit 3: Solving Two-Step Equations"
             className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
           />

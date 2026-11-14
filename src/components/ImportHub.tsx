@@ -3,6 +3,11 @@ import { Question, StylePreset, Worksheet } from '../types/worksheet';
 import { supabase } from '../lib/supabase';
 import { generateWorksheetPDF } from '../utils/pdfGenerator';
 import { saveWorksheetToDrive } from '../utils/googleDrive';
+import {
+  MATH6_POD_FOLDER,
+  ACCELERATED_POD_FOLDER,
+  resolveWorksheetFolder,
+} from '../utils/worksheetTheme';
 import { 
   Sparkles, 
   FileText, 
@@ -64,12 +69,14 @@ export const ImportHub: React.FC<ImportHubProps> = ({
 
   // Folder selection state
   const [folders, setFolders] = useState<string[]>([
-    'Daily Warm-Ups (POD)',
+    MATH6_POD_FOLDER,
+    ACCELERATED_POD_FOLDER,
+    'Spirals',
     'Unit 1: Number Systems',
     'Unit 2: Expressions & Equations',
     'General',
   ]);
-  const [selectedFolder, setSelectedFolder] = useState<string>('Daily Warm-Ups (POD)');
+  const [selectedFolder, setSelectedFolder] = useState<string>(MATH6_POD_FOLDER);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
@@ -206,12 +213,15 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   const fetchFolders = async () => {
     try {
       const { data } = await supabase.from('folders').select('name').order('name');
-      if (data && data.length > 0) {
-        const names = data.map((f: any) => f.name);
-        setFolders(names);
-        if (!names.includes(selectedFolder)) {
-          setSelectedFolder(names[0] || 'General');
-        }
+      const baseSet = new Set<string>([
+        MATH6_POD_FOLDER,
+        ACCELERATED_POD_FOLDER,
+        ...(data ? data.map((f: any) => f.name) : []),
+      ]);
+      const names = Array.from(baseSet).sort();
+      setFolders(names);
+      if (!names.includes(selectedFolder)) {
+        setSelectedFolder(MATH6_POD_FOLDER);
       }
     } catch {}
   };
@@ -433,6 +443,15 @@ RULES:
             name,
             items: groupMap[name],
           }));
+          // Auto-switch selectedFolder to Accelerated PODs or Math 6 PODs based on detected group titles
+          const inferredFirstFolder = resolveWorksheetFolder(
+            groups[0].name,
+            selectedFolder,
+            inferStylePreset(groups[0].name, groups[0].items)
+          );
+          if (inferredFirstFolder !== selectedFolder) {
+            setSelectedFolder(inferredFirstFolder);
+          }
           setDetectedGroups(groups);
           return;
         }
@@ -440,13 +459,14 @@ RULES:
         // Single assignment
         const title = items[0]?.assignmentName || undefined;
         const stylePreset = inferStylePreset(title, items);
+        const targetFolder = resolveWorksheetFolder(title, selectedFolder, stylePreset);
         const { questions, totalPages } = convertRawItemsToQuestions(items);
 
         onImportQuestions(questions, {
           title,
           stylePreset,
           totalPages,
-          folderName: selectedFolder,
+          folderName: targetFolder,
         });
         return;
       }
@@ -501,13 +521,14 @@ RULES:
 
   const handleSelectGroup = (group: AssignmentGroup) => {
     const stylePreset = inferStylePreset(group.name, group.items);
+    const targetFolder = resolveWorksheetFolder(group.name, selectedFolder, stylePreset);
     const { questions, totalPages } = convertRawItemsToQuestions(group.items);
 
     onImportQuestions(questions, {
       title: group.name,
       stylePreset,
       totalPages,
-      folderName: selectedFolder,
+      folderName: targetFolder,
     });
   };
 
@@ -515,13 +536,16 @@ RULES:
   const handleSaveAllGroups = async (andPrintMode?: 'student' | 'key' | 'both') => {
     if (!detectedGroups || detectedGroups.length === 0) return;
     setIsSavingAll(true);
-    setSaveAllMessage(`Saving ${detectedGroups.length} assignments to "${selectedFolder}"...`);
+    setSaveAllMessage(`Saving ${detectedGroups.length} assignments...`);
 
     const savedBatchWorksheets: Worksheet[] = [];
+    const usedFolders = new Set<string>();
 
     try {
       for (const group of detectedGroups) {
         const grpPreset = inferStylePreset(group.name, group.items);
+        const targetFolder = resolveWorksheetFolder(group.name, selectedFolder, grpPreset);
+        usedFolders.add(targetFolder);
         const code = 'M' + Math.floor(1000 + Math.random() * 9000);
         const { questions, totalPages } = convertRawItemsToQuestions(group.items);
 
@@ -532,7 +556,7 @@ RULES:
             title: group.name,
             subject: 'Mathematics',
             grade_level: '6th Grade',
-            folder_name: selectedFolder,
+            folder_name: targetFolder,
             teacher_id: teacherId || null,
             style_preset: grpPreset,
             total_pages: totalPages,
@@ -570,7 +594,7 @@ RULES:
           title: group.name,
           subject: 'Mathematics',
           grade_level: '6th Grade',
-          folder_name: selectedFolder,
+          folder_name: targetFolder,
           style_preset: grpPreset,
           total_pages: totalPages,
           columns: 2,
@@ -598,7 +622,7 @@ RULES:
             const baseName = `${code}_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
             const driveRes = await saveWorksheetToDrive(
               providerToken,
-              selectedFolder,
+              targetFolder,
               sDoc.output('blob'),
               kDoc.output('blob'),
               baseName
@@ -629,9 +653,10 @@ RULES:
         })();
       }
 
+      const folderSummary = Array.from(usedFolders).join(' & ');
       fetchSavedWorksheets();
       setSaveAllMessage(
-        `🎉 Saved all ${detectedGroups.length} assignments to "${selectedFolder}" (syncing PDFs to Google Drive in background)!`
+        `🎉 Saved all ${detectedGroups.length} assignments to "${folderSummary}" (syncing PDFs to Google Drive in background)!`
       );
       setIsSavingAll(false);
 

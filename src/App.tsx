@@ -11,6 +11,7 @@ import { AIImportModal } from './components/AIImportModal';
 import { WorksheetListModal } from './components/WorksheetListModal';
 import { generateWorksheetPDF } from './utils/pdfGenerator';
 import { saveWorksheetToDrive, DEFAULT_WORKSHEET_DRIVE_FOLDER_URL } from './utils/googleDrive';
+import { resolveWorksheetFolder } from './utils/worksheetTheme';
 import { Plus, Eye, Edit3, Sparkles, ArrowLeft } from 'lucide-react';
 
 const INITIAL_WORKSHEET: Worksheet = {
@@ -237,12 +238,18 @@ export function App() {
         }
       }
 
+      const resolvedFolder = resolveWorksheetFolder(
+        worksheet.title,
+        worksheet.folder_name,
+        worksheet.style_preset
+      );
+
       const wsPayload = {
         short_code: worksheet.short_code,
         title: worksheet.title,
         subject: worksheet.subject,
         grade_level: worksheet.grade_level,
-        folder_name: worksheet.folder_name || 'General',
+        folder_name: resolvedFolder,
         teacher_id: user?.id || null,
         style_preset: worksheet.style_preset,
         total_pages: worksheet.total_pages,
@@ -272,7 +279,7 @@ export function App() {
         savedId = data.id;
       }
 
-      setWorksheet((prev) => ({ ...prev, id: savedId }));
+      setWorksheet((prev) => ({ ...prev, id: savedId, folder_name: resolvedFolder }));
 
       if (savedId) {
         await supabase.from('questions').delete().eq('worksheet_id', savedId);
@@ -303,7 +310,11 @@ export function App() {
 
       // Non-blocking background sync to Google Drive via permanent Apps Script Bridge
       const activeDriveToken = session?.provider_token || providerToken;
-      const wsSnapshot: Worksheet = { ...worksheet, id: savedId || worksheet.id };
+      const wsSnapshot: Worksheet = {
+        ...worksheet,
+        id: savedId || worksheet.id,
+        folder_name: resolvedFolder,
+      };
       (async () => {
         try {
           const studentDoc = await generateWorksheetPDF(wsSnapshot, { isAnswerKey: false });
@@ -314,7 +325,7 @@ export function App() {
 
           const driveRes = await saveWorksheetToDrive(
             activeDriveToken,
-            wsSnapshot.folder_name || 'General',
+            resolvedFolder,
             studentBlob,
             keyBlob,
             baseName
