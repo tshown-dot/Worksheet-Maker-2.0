@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
-import { Worksheet, Question, StylePreset } from '../types/worksheet';
+import { Worksheet, Question } from '../types/worksheet';
+import { getWorksheetTheme, WorksheetTheme } from './worksheetTheme';
 
 export interface PDFExportOptions {
   isAnswerKey?: boolean;
@@ -118,30 +119,46 @@ async function renderWorksheetIntoPDF(
       currentY += 6.5;
     }
 
-    // Worksheet Title + Badge on same line / lockup
+    const theme = getWorksheetTheme(worksheet);
+
+    // Worksheet Title + Type Badge on same line / lockup
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    const badgeW = doc.getTextWidth(theme.badgeLabel) + 3;
     doc.setFontSize(12.5);
     doc.setTextColor(17, 24, 39);
-    const maxTitleWidth = qrX - margin - 72;
+    const idBoxLeft = qrX - 38 - 3.5;
+    const maxTitleWidth = idBoxLeft - margin - badgeW - 6;
     let displayTitle = worksheet.title || 'Untitled Math Worksheet';
     if (doc.getTextWidth(displayTitle) > maxTitleWidth) {
       displayTitle = doc.splitTextToSize(displayTitle, maxTitleWidth)[0] + '...';
     }
     doc.text(displayTitle, margin, currentY + 3.5);
     const titleWidth = doc.getTextWidth(displayTitle);
-    renderThemeBadge(doc, worksheet.style_preset, margin + 3 + titleWidth, currentY + 3.5);
+    renderThemeBadge(doc, theme, margin + 3 + titleWidth, currentY + 3.5);
     currentY += 5;
 
-    // Subject & Grade Level Subtitle
+    // Subtitle: optional solid class tag (POD) + Subject & Grade Level
+    let subtitleX = margin;
+    if (theme.classLabel) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      const tagW = doc.getTextWidth(theme.classLabel) + 4;
+      doc.setFillColor(...theme.accent);
+      doc.roundedRect(margin, currentY - 0.3, tagW, 4, 0.8, 0.8, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text(theme.classLabel, margin + 2, currentY + 2.6);
+      subtitleX += tagW + 2;
+    }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(107, 114, 128);
-    doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, margin, currentY + 2.5);
+    doc.text(`${worksheet.subject} • ${worksheet.grade_level}`, subtitleX, currentY + 2.5);
     currentY = Math.max(currentY + 4.5, qrY + 15.5);
 
-    // Academic Double Divider Line
-    doc.setDrawColor(15, 23, 42);
-    doc.setLineWidth(0.5);
+    // Academic Double Divider Line (accent-colored by worksheet type)
+    doc.setDrawColor(...theme.accent);
+    doc.setLineWidth(0.8);
     doc.line(margin, currentY, pageWidth - margin, currentY);
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
@@ -180,7 +197,7 @@ async function renderWorksheetIntoPDF(
         questionCardHeight,
         qX,
         cardWidth,
-        worksheet.style_preset,
+        theme,
         isAnswerKey,
         worksheet.track_standards !== false
       );
@@ -196,7 +213,10 @@ async function renderWorksheetIntoPDF(
     doc.setTextColor(148, 163, 184);
     doc.text(`Worksheet Maker 2.0 • Form ${worksheet.short_code}`, margin, pageHeight - 6.5);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 6.5, { align: 'center' });
+    doc.setTextColor(...theme.accent);
+    const footerLabel = [theme.classLabel, theme.badgeLabel].filter(Boolean).join(' • ');
+    doc.text(`${footerLabel}  —  Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 6.5, { align: 'center' });
+    doc.setTextColor(148, 163, 184);
     doc.setFont('helvetica', 'normal');
     doc.text('Standardized OCR Assessment Layout', pageWidth - margin, pageHeight - 6.5, { align: 'right' });
   }
@@ -205,53 +225,22 @@ async function renderWorksheetIntoPDF(
 // ----------------------------------------------------------------------------
 // HELPER: Renders Style Preset Badge
 // ----------------------------------------------------------------------------
-function renderThemeBadge(doc: jsPDF, preset: StylePreset, x: number, y: number) {
+function renderThemeBadge(doc: jsPDF, theme: WorksheetTheme, x: number, y: number) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
-
-  if (preset === 'spiral' || preset === 'homework') {
-    doc.setFillColor(238, 242, 255);
-    doc.setDrawColor(99, 102, 241);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 28, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(67, 56, 202);
-    doc.text('SPIRAL REVIEW', x + 1.5, y - 0.2);
-  } else if (preset === 'classwork') {
-    doc.setFillColor(236, 253, 245);
-    doc.setDrawColor(16, 185, 129);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 22, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(6, 95, 70);
-    doc.text('CLASSWORK', x + 1.5, y - 0.2);
-  } else if (preset === 'pod') {
-    doc.setFillColor(243, 244, 246);
-    doc.setDrawColor(156, 163, 175);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 32, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(55, 65, 81);
-    doc.text('★ PROBLEM OF DAY', x + 1.5, y - 0.2);
-  } else if (preset === 'quiz') {
-    doc.setFillColor(254, 242, 242);
-    doc.setDrawColor(239, 68, 68);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 16, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(185, 28, 28);
-    doc.text('QUIZ', x + 1.5, y - 0.2);
-  } else if (preset === 'exit_ticket') {
-    doc.setFillColor(240, 253, 244);
-    doc.setDrawColor(34, 197, 94);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 22, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(21, 128, 61);
-    doc.text('EXIT TICKET', x + 1.5, y - 0.2);
+  const w = doc.getTextWidth(theme.badgeLabel) + 3;
+  if (theme.headerStyle === 'solid') {
+    doc.setFillColor(...theme.accent);
+    doc.roundedRect(x, y - 3.2, w, 4.2, 0.8, 0.8, 'F');
+    doc.setTextColor(255, 255, 255);
   } else {
-    doc.setFillColor(238, 242, 255);
-    doc.setDrawColor(99, 102, 241);
+    doc.setFillColor(...theme.tint);
+    doc.setDrawColor(...theme.accent);
     doc.setLineWidth(0.3);
-    doc.roundedRect(x, y - 3.2, 28, 4.2, 0.8, 0.8, 'FD');
-    doc.setTextColor(67, 56, 202);
-    doc.text('SPIRAL REVIEW', x + 1.5, y - 0.2);
+    doc.roundedRect(x, y - 3.2, w, 4.2, 0.8, 0.8, 'FD');
+    doc.setTextColor(...theme.ink);
   }
+  doc.text(theme.badgeLabel, x + 1.5, y - 0.2);
 }
 
 // ----------------------------------------------------------------------------
@@ -352,83 +341,171 @@ function renderQuestionCard(
   height: number,
   x: number,
   width: number,
-  _preset: StylePreset,
+  theme: WorksheetTheme,
   isAnswerKey: boolean,
   trackStandards: boolean = true
 ) {
-  const isClasswork = _preset === 'classwork';
+  const hs = theme.headerStyle;
+  const isSolid = hs === 'solid';
+  const headerHeight = 6.5;
 
-  // 1. Unified Outer Question Container Border
-  if (isClasswork) {
-    // Distinct double-line studio border for Classwork
-    doc.setLineWidth(0.5);
-    doc.setDrawColor(30, 41, 59); // slate-800 outer
-    doc.setLineDashPattern([], 0);
-    doc.roundedRect(x, y, width, height, 1, 1, 'S');
-
-    // Inner subtle hairline frame inset by 0.7mm
-    doc.setLineWidth(0.2);
-    doc.setDrawColor(203, 213, 225); // slate-300 inner
-    doc.roundedRect(x + 0.7, y + 0.7, width - 1.4, height - 1.4, 0.6, 0.6, 'S');
-  } else {
-    // Crisp Solid Border for Spiral Review, POD & Quiz
-    doc.setLineWidth(0.35);
-    doc.setDrawColor(180, 190, 203);
-    doc.setLineDashPattern([], 0);
-    doc.roundedRect(x, y, width, height, 1, 1, 'S');
+  // 1. Outer Question Container Border (style varies by worksheet type)
+  doc.setLineDashPattern([], 0);
+  doc.setDrawColor(...theme.accent);
+  let inset = 0.35;
+  switch (theme.borderStyle) {
+    case 'double':
+      doc.setLineWidth(0.5);
+      doc.roundedRect(x, y, width, height, 1, 1, 'S');
+      doc.setLineWidth(0.25);
+      doc.roundedRect(x + 0.8, y + 0.8, width - 1.6, height - 1.6, 0.6, 0.6, 'S');
+      inset = 1;
+      break;
+    case 'heavy-double':
+      doc.setLineWidth(1.0);
+      doc.roundedRect(x, y, width, height, 1.2, 1.2, 'S');
+      doc.setLineWidth(0.45);
+      doc.roundedRect(x + 1.4, y + 1.4, width - 2.8, height - 2.8, 0.6, 0.6, 'S');
+      inset = 1.65;
+      break;
+    case 'dashed':
+      doc.setLineWidth(0.9);
+      doc.setLineDashPattern([3.2, 1.8], 0);
+      doc.roundedRect(x, y, width, height, 1.5, 1.5, 'S');
+      doc.setLineDashPattern([], 0);
+      inset = 0.5;
+      break;
+    case 'heavy':
+      doc.setLineWidth(1.1);
+      doc.roundedRect(x, y, width, height, 0.6, 0.6, 'S');
+      inset = 0.5;
+      break;
+    case 'thick':
+      doc.setLineWidth(0.7);
+      doc.roundedRect(x, y, width, height, 1, 1, 'S');
+      break;
+    default:
+      doc.setLineWidth(0.4);
+      doc.roundedRect(x, y, width, height, 1, 1, 'S');
   }
 
   // 2. Question Header Bar
-  const headerHeight = 6.5;
-  if (isClasswork) {
-    doc.setFillColor(241, 245, 249); // slate-100
-    doc.rect(x + 0.8, y + 0.8, width - 1.6, headerHeight - 0.4, 'F');
-    // Emerald accent line under Classwork header
-    doc.setDrawColor(16, 185, 129); // emerald-500
-    doc.setLineWidth(0.4);
-    doc.line(x + 0.7, y + headerHeight, x + width - 0.7, y + headerHeight);
-  } else {
-    doc.setFillColor(248, 250, 252);
-    doc.rect(x + 0.2, y + 0.2, width - 0.4, headerHeight, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.25);
-    doc.line(x, y + headerHeight, x + width, y + headerHeight);
+  const hx0 = x + inset;
+  const hx1 = x + width - inset;
+  const hy0 = y + inset;
+  const hy1 = y + headerHeight;
+  if (hs === 'solid') {
+    doc.setFillColor(...theme.accent);
+    doc.rect(hx0, hy0, hx1 - hx0, hy1 - hy0, 'F');
+  } else if (hs === 'tint') {
+    doc.setFillColor(...theme.tint);
+    doc.rect(hx0, hy0, hx1 - hx0, hy1 - hy0, 'F');
+  } else if (hs === 'hatch') {
+    // Diagonal stripes, manually clipped to the header rectangle
+    doc.setFillColor(...theme.tint);
+    doc.rect(hx0, hy0, hx1 - hx0, hy1 - hy0, 'F');
+    doc.setDrawColor(...theme.accent);
+    doc.setLineWidth(0.55);
+    const h = hy1 - hy0;
+    for (let t = -h; t < hx1 - hx0; t += 1.6) {
+      let sx = hx0 + t, sy = hy1;
+      let ex = hx0 + t + h, ey = hy0;
+      if (sx < hx0) { sy -= hx0 - sx; sx = hx0; }
+      if (ex > hx1) { ey += ex - hx1; ex = hx1; }
+      doc.line(sx, sy, ex, ey);
+    }
   }
-
-  // Question Number Badge (Emerald for Classwork, Dark Slate for Spiral)
-  if (isClasswork) {
-    doc.setFillColor(5, 150, 105); // emerald-600
+  // Header bottom rule
+  doc.setDrawColor(...theme.accent);
+  if (hs === 'outline') {
+    doc.setLineWidth(0.8);
+    doc.setLineDashPattern([2.2, 1.2], 0);
+    doc.line(hx0 + 1, hy1, hx1 - 1, hy1);
+    doc.setLineDashPattern([], 0);
   } else {
-    doc.setFillColor(15, 23, 42); // slate-900
+    doc.setLineWidth(hs === 'hatch' ? 0.8 : 0.4);
+    doc.line(hx0, hy1, hx1, hy1);
   }
-  doc.roundedRect(x + 2.5, y + 1.4, 4.5, 4, 0.5, 0.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.2);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`${q.order_index}`, x + 4.75, y + 4.3, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.2);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Question ${q.order_index}`, x + 8.5, y + 4.4);
+  const qLabel = `Question ${q.order_index}`;
+  const qLabelW = doc.getTextWidth(qLabel);
 
-  let currentHeaderX = x + 8.5 + doc.getTextWidth(`Question ${q.order_index}`) + 2.5;
+  // White chip behind number + label so text stays readable over stripes
+  if (hs === 'hatch') {
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(...theme.accent);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(x + 1.8, y + 1.2, 6.7 + qLabelW + 1.6, 4.4, 0.8, 0.8, 'FD');
+  }
+
+  // Question Number Badge (square or circle). Inverted (white) on solid headers.
+  if (isSolid) {
+    doc.setFillColor(255, 255, 255);
+  } else {
+    doc.setFillColor(...theme.accent);
+  }
+  if (theme.numberShape === 'circle') {
+    doc.circle(x + 4.75, y + 3.4, 2.2, 'F');
+  } else {
+    doc.roundedRect(x + 2.5, y + 1.4, 4.5, 4, 0.5, 0.5, 'F');
+  }
+  doc.setFontSize(7.2);
+  if (isSolid) {
+    doc.setTextColor(...theme.accent);
+  } else {
+    doc.setTextColor(255, 255, 255);
+  }
+  doc.text(`${q.order_index}`, x + 4.75, y + 4.3, { align: 'center' });
+
+  doc.setFontSize(9.2);
+  if (isSolid) {
+    doc.setTextColor(255, 255, 255);
+  } else {
+    doc.setTextColor(...theme.ink);
+  }
+  doc.text(qLabel, x + 8.5, y + 4.4);
+
+  let currentHeaderX = x + 8.5 + qLabelW + 2.5;
 
   // NJSLS Standards Badge on Answer Key
   if (isAnswerKey && trackStandards && q.standard) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.2);
-    doc.setTextColor(126, 34, 206); // Purple-700
+    if (isSolid) {
+      doc.setTextColor(255, 255, 255);
+    } else {
+      doc.setTextColor(126, 34, 206); // Purple-700
+    }
+    if (hs === 'hatch') {
+      const sw = doc.getTextWidth(`[${q.standard}]`);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(currentHeaderX - 0.8, y + 1.6, sw + 1.6, 3.6, 'F');
+    }
     doc.text(`[${q.standard}]`, currentHeaderX, y + 4.4);
   }
 
-  // Points Badge on Right of Header Bar
-  if (q.points) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    doc.setTextColor(100, 116, 139);
-    const ptText = `${q.points} pt${q.points > 1 ? 's' : ''}`;
-    doc.text(ptText, x + width - 2.5, y + 4.4, { align: 'right' });
+  // Right side of Header Bar: Points + Class Tag (POD)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.2);
+  const ptText = q.points ? `${q.points} pt${q.points > 1 ? 's' : ''}` : '';
+  const rightParts = [theme.classLabel, ptText].filter(Boolean).join('   ');
+  if (rightParts) {
+    const rw = doc.getTextWidth(rightParts);
+    const rx = x + width - 2.8;
+    if (hs === 'hatch') {
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(...theme.accent);
+      doc.setLineWidth(0.35);
+      doc.roundedRect(rx - rw - 1.6, y + 1.2, rw + 3.2, 4.4, 0.8, 0.8, 'FD');
+    }
+    if (isSolid) {
+      doc.setTextColor(255, 255, 255);
+    } else {
+      doc.setTextColor(...theme.ink);
+    }
+    doc.text(rightParts, rx, y + 4.4, { align: 'right' });
   }
 
   // 3. Question Prompt Text

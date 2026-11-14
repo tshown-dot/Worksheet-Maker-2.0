@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { Worksheet, Question } from '../types/worksheet';
 import { MathText } from '../utils/mathRenderer';
 import { getStandardDescription } from '../utils/standards';
+import { getWorksheetTheme, rgb } from '../utils/worksheetTheme';
 
 interface WorksheetPageProps {
   worksheet: Worksheet;
@@ -34,6 +35,45 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
     .filter((q) => (q.page_number || 1) === pageNum)
     .sort((a, b) => a.order_index - b.order_index);
 
+  const theme = getWorksheetTheme(worksheet);
+  const isSolid = theme.headerStyle === 'solid';
+  const accent = rgb(theme.accent);
+  const cardBorderStyle: React.CSSProperties = (() => {
+    switch (theme.borderStyle) {
+      case 'double':
+        return { border: `4px double ${accent}` };
+      case 'heavy-double':
+        return { border: `8px double ${accent}`, borderRadius: 4 };
+      case 'dashed':
+        return { border: `3.5px dashed ${accent}`, borderRadius: 6 };
+      case 'heavy':
+        return { border: `4px solid ${accent}` };
+      case 'thick':
+        return { border: `2.5px solid ${accent}` };
+      default:
+        return { border: `1.5px solid ${accent}` };
+    }
+  })();
+
+  const hs = theme.headerStyle;
+  const headerBarStyle: React.CSSProperties =
+    hs === 'solid'
+      ? { backgroundColor: accent, borderBottom: `1.5px solid ${accent}` }
+      : hs === 'hatch'
+        ? {
+            backgroundColor: rgb(theme.tint),
+            backgroundImage: `repeating-linear-gradient(-45deg, ${accent} 0 2px, transparent 2px 6px)`,
+            borderBottom: `3px solid ${accent}`,
+          }
+        : hs === 'outline'
+          ? { backgroundColor: '#fff', borderBottom: `3px dashed ${accent}` }
+          : { backgroundColor: rgb(theme.tint), borderBottom: `1.5px solid ${accent}` };
+  // White chips keep text readable over the striped (hatch) header
+  const chipStyle: React.CSSProperties =
+    hs === 'hatch'
+      ? { backgroundColor: '#fff', border: `1px solid ${accent}`, borderRadius: 4, padding: '1px 6px' }
+      : {};
+
   const columns = worksheet.columns || 1;
   const rowCount = columns === 2 ? Math.max(Math.ceil(pageQuestions.length / 2), 1) : Math.max(pageQuestions.length, 1);
 
@@ -64,40 +104,33 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between pb-1.5 border-b-2 border-b-slate-900 gap-3">
+        <div className="flex items-center justify-between pb-1.5 gap-3" style={{ borderBottom: `3px solid ${accent}` }}>
           <div className="flex-1 min-w-0 pr-2">
             <div className="flex items-center space-x-2.5 flex-wrap">
               <h1 className="text-[18px] font-extrabold text-slate-900 tracking-tight leading-snug">
                 {worksheet.title || 'Untitled Math Worksheet'}
               </h1>
-              {(worksheet.style_preset === 'spiral' || worksheet.style_preset === 'homework') && (
-                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xs">
-                  🔄 Spiral Review
-                </span>
-              )}
-              {worksheet.style_preset === 'classwork' && (
-                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xs">
-                  ✏️ Classwork
-                </span>
-              )}
-              {worksheet.style_preset === 'pod' && (
-                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-300 rounded-xs">
-                  ★ Problem of the Day
-                </span>
-              )}
-              {worksheet.style_preset === 'quiz' && (
-                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-red-50 text-red-800 border border-red-200 rounded-xs">
-                  Assessment / Quiz
-                </span>
-              )}
-              {worksheet.style_preset === 'exit_ticket' && (
-                <span className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xs">
-                  Exit Ticket
-                </span>
-              )}
+              <span
+                className="text-[8.5px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-xs"
+                style={
+                  isSolid
+                    ? { backgroundColor: accent, color: '#fff', border: `1px solid ${accent}` }
+                    : { backgroundColor: rgb(theme.tint), color: rgb(theme.ink), border: `1px solid ${accent}` }
+                }
+              >
+                {theme.badgeIcon} {theme.badgeLabel}
+              </span>
             </div>
-            <p className="text-[9.5px] uppercase tracking-widest font-bold text-slate-500 mt-0.5">
-              {worksheet.subject} • {worksheet.grade_level}
+            <p className="text-[9.5px] uppercase tracking-widest font-bold text-slate-500 mt-0.5 flex items-center gap-2">
+              {theme.classLabel && (
+                <span
+                  className="text-[10px] font-black tracking-wider px-2 py-0.5 rounded-xs text-white"
+                  style={{ backgroundColor: accent }}
+                >
+                  {theme.classLabel}
+                </span>
+              )}
+              <span>{worksheet.subject} • {worksheet.grade_level}</span>
             </p>
           </div>
 
@@ -154,35 +187,36 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
             }}
           >
             {pageQuestions.map((q) => {
-              const isClasswork = worksheet.style_preset === 'classwork';
               return (
                 <div
                   key={q.id}
-                  className={`rounded-xs flex flex-col justify-between bg-white h-full overflow-hidden transition-all ${
-                    isClasswork
-                      ? 'border-2 border-slate-700 shadow-2xs ring-1 ring-slate-300'
-                      : 'border border-slate-300'
-                  }`}
+                  className="rounded-xs flex flex-col justify-between bg-white h-full overflow-hidden transition-all"
+                  style={cardBorderStyle}
                 >
-                  {/* 1. Card Top Header Bar */}
+                  {/* 1. Card Top Header Bar (solid / tint / striped / dashed-outline by type) */}
                   <div>
                     <div
-                      className={`px-2.5 py-1 flex items-center justify-between ${
-                        isClasswork
-                          ? 'bg-gradient-to-r from-slate-100 via-slate-50 to-emerald-50/50 border-b-2 border-slate-700'
-                          : 'bg-slate-50 border-b border-slate-200'
-                      }`}
+                      className="px-2.5 py-1 flex items-center justify-between"
+                      style={headerBarStyle}
                     >
                       <div className="flex items-center space-x-2 flex-wrap">
-                        <div className="flex items-center space-x-1.5">
+                        <div className="flex items-center space-x-1.5" style={chipStyle}>
                           <span
-                            className={`w-5 h-5 rounded-xs font-black text-[10.5px] flex items-center justify-center shrink-0 ${
-                              isClasswork ? 'bg-emerald-700 text-white shadow-2xs' : 'bg-slate-900 text-white'
+                            className={`w-5 h-5 font-black text-[10.5px] flex items-center justify-center shrink-0 ${
+                              theme.numberShape === 'circle' ? 'rounded-full' : 'rounded-xs'
                             }`}
+                            style={
+                              isSolid
+                                ? { backgroundColor: '#fff', color: accent }
+                                : { backgroundColor: accent, color: '#fff' }
+                            }
                           >
                             {q.order_index}
                           </span>
-                          <span className="text-[12.5px] font-extrabold text-slate-900 tracking-tight">
+                          <span
+                            className="text-[12.5px] font-extrabold tracking-tight"
+                            style={{ color: isSolid ? '#fff' : rgb(theme.ink) }}
+                          >
                             Question {q.order_index}
                           </span>
                         </div>
@@ -195,11 +229,24 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
                         </span>
                       )}
                     </div>
-                    {q.points && (
-                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-                        {q.points} pt{q.points > 1 ? 's' : ''}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0" style={chipStyle}>
+                      {theme.classLabel && (
+                        <span
+                          className="text-[8.5px] font-black uppercase tracking-widest"
+                          style={{ color: isSolid ? '#fff' : rgb(theme.ink) }}
+                        >
+                          {theme.classLabel}
+                        </span>
+                      )}
+                      {q.points && (
+                        <span
+                          className="text-[9.5px] font-bold uppercase tracking-wider"
+                          style={{ color: isSolid ? '#fff' : rgb(theme.ink) }}
+                        >
+                          {q.points} pt{q.points > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* 2. Problem Prompt & Multiple Choice Options */}
