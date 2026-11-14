@@ -95,6 +95,16 @@ export const WorksheetPage: React.FC<WorksheetPageProps> = ({
       <div className="absolute bottom-[3.5mm] left-[3.5mm] w-[4mm] h-[4mm] bg-black" />
       <div className="absolute bottom-[3.5mm] right-[3.5mm] w-[4mm] h-[4mm] bg-black" />
 
+      {/* OPTIONAL PAGE FRAME (Accelerated POD): bold dashed perimeter between the fiducials */}
+      {theme.pageFrame === 'dashed' && (
+        <>
+          <div className="absolute pointer-events-none" style={{ top: '4.95mm', left: '9.5mm', right: '9.5mm', borderTop: `1.1mm dashed ${accent}` }} />
+          <div className="absolute pointer-events-none" style={{ bottom: '4.95mm', left: '9.5mm', right: '9.5mm', borderTop: `1.1mm dashed ${accent}` }} />
+          <div className="absolute pointer-events-none" style={{ left: '4.95mm', top: '9.5mm', bottom: '9.5mm', borderLeft: `1.1mm dashed ${accent}` }} />
+          <div className="absolute pointer-events-none" style={{ right: '4.95mm', top: '9.5mm', bottom: '9.5mm', borderLeft: `1.1mm dashed ${accent}` }} />
+        </>
+      )}
+
       {/* TOP HEADER SECTION (Publishing-Grade Academic Masthead) */}
       <div className="w-full">
         {/* Answer Key Alert Banner */}

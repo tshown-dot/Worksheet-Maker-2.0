@@ -83,6 +83,22 @@ async function renderWorksheetIntoPDF(
     // Bottom-right
     doc.rect(pageWidth - fiducialOffset - fiducialSize, pageHeight - fiducialOffset - fiducialSize, fiducialSize, fiducialSize, 'F');
 
+    // 1b. OPTIONAL PAGE FRAME (e.g. Accelerated POD): bold dashed line around the
+    // page perimeter, running between the fiducials so the corners stay clear.
+    const pageTheme = getWorksheetTheme(worksheet);
+    if (pageTheme.pageFrame === 'dashed') {
+      const f = fiducialOffset + fiducialSize / 2; // centered on the fiducial band (5.5mm)
+      const gap = fiducialOffset + fiducialSize + 2; // stop 2mm short of each fiducial
+      doc.setDrawColor(...pageTheme.accent);
+      doc.setLineWidth(1.1);
+      doc.setLineDashPattern([4, 2.5], 0);
+      doc.line(gap, f, pageWidth - gap, f); // top
+      doc.line(gap, pageHeight - f, pageWidth - gap, pageHeight - f); // bottom
+      doc.line(f, gap, f, pageHeight - gap); // left
+      doc.line(pageWidth - f, gap, pageWidth - f, pageHeight - gap); // right
+      doc.setLineDashPattern([], 0);
+    }
+
     // 2. GENERATE AND DRAW QR CODE (Compact Top-Right: 12mm x 12mm) + LARGE STUDENT ID BOX
     const qrData = `ASG_${worksheet.short_code}:P${pageNum}`;
     const qrDataUrl = await QRCode.toDataURL(qrData, {

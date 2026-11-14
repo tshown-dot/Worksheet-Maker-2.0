@@ -11,6 +11,7 @@ import { Worksheet } from '../types/worksheet';
 // Distinctions are designed to read instantly on a black & white copy:
 //   - POD cards use a SOLID filled header bar (white text); everything else tinted.
 //   - Accelerated PODs use a DOUBLE card border; Math 6 PODs a single thick one.
+//   - Accelerated PODs also get a bold DASHED frame around the whole page.
 //   - Class tag (MATH 6 / ACCELERATED) is printed in the masthead and every card.
 // ----------------------------------------------------------------------------
 
@@ -42,6 +43,8 @@ export interface WorksheetTheme {
   borderStyle: 'single' | 'thick' | 'heavy' | 'double' | 'heavy-double' | 'dashed';
   /** Question number badge shape. */
   numberShape: 'square' | 'circle';
+  /** Optional bold dashed frame around the page perimeter (between fiducials). */
+  pageFrame?: 'dashed';
 }
 
 /** Detects which class a POD belongs to from its title / folder. */
@@ -69,6 +72,7 @@ export function getWorksheetTheme(
           headerStyle: 'solid',
           borderStyle: 'double',
           numberShape: 'circle',
+          pageFrame: 'dashed',
         };
       }
       if (podClass === 'math6') {
