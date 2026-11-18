@@ -1,8 +1,9 @@
 import pg from 'pg';
+import { requireDbPassword } from './dbPassword.js';
 import fs from 'fs';
 
 const regions = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'eu-central-1', 'eu-west-1'];
-const password = 'nLbpJKgrABKdFuGc';
+const password = requireDbPassword();
 const projectRef = 'dgmkobsqhlfokquolkqf';
 const user = `postgres.${projectRef}`;
 const sql = fs.readFileSync('./supabase/schema.sql', 'utf8');

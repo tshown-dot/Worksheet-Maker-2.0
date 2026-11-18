@@ -21,6 +21,7 @@ const GEMINI_MODEL = 'gemini-3.8-flash';
 const FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
 function gradeWorksheetWithGemini(pdfBlob, manifest) {
+  requireTeacher_();
   const props = PropertiesService.getScriptProperties();
   const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) {
@@ -140,33 +141,104 @@ Output ONLY valid JSON matching this exact schema:
     throw new Error("No response generated from Gemini Vision.");
   }
 
-  const parsed = JSON.parse(candidate);
+  return normalizeGradeResult_(parseGradingJson_(candidate), manifest);
+}
 
-  // Normalize response so callers always receive { assignmentCode, assignmentTitle, submissions: [...] }
-  const topTitle = parsed.assignmentTitle || (parsed.submissions && parsed.submissions[0] && parsed.submissions[0].assignmentTitle) || '';
-  if (Array.isArray(parsed.submissions) && parsed.submissions.length > 0) {
-    const topCode = parsed.assignmentCode || parsed.submissions[0].assignmentCode || 'ALG-701';
+/**
+ * Parses the model's JSON reply, tolerating a ```json code fence around it.
+ */
+function parseGradingJson_(text) {
+  const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error(`Gemini returned a reply that is not valid JSON: ${cleaned.slice(0, 200)}`);
+  }
+}
+
+/**
+ * Normalizes the model reply so callers always receive
+ * `{ assignmentCode, assignmentTitle, submissions: [...] }`, with every
+ * submission's totals recomputed in code from its questions.
+ * An assignment code the model could not read comes back as "" (never a guess).
+ */
+function normalizeGradeResult_(parsed, manifest) {
+  const cleanCode = v => String(v || '').trim().toUpperCase();
+  const cleanTitle = v => String(v || '').trim();
+
+  // The model occasionally returns one flat submission instead of a "submissions" array
+  const rawSubmissions = Array.isArray(parsed.submissions) && parsed.submissions.length > 0
+    ? parsed.submissions
+    : [parsed];
+
+  const topCode = cleanCode(parsed.assignmentCode || rawSubmissions[0].assignmentCode);
+  const topTitle = cleanTitle(parsed.assignmentTitle || rawSubmissions[0].assignmentTitle);
+  const keyPoints = getAnswerKeyPoints_(manifest);
+
+  return {
+    assignmentCode: topCode,
+    assignmentTitle: topTitle,
+    submissions: rawSubmissions.map(s => ({
+      ...scoreSubmission_(s, keyPoints),
+      assignmentCode: cleanCode(s.assignmentCode) || topCode,
+      assignmentTitle: cleanTitle(s.assignmentTitle) || topTitle
+    }))
+  };
+}
+
+/**
+ * Maps each question's order_index to its point value from the answer key.
+ * @returns {Object|null} e.g. { 1: 2, 2: 1 }, or null when there is no answer key
+ */
+function getAnswerKeyPoints_(manifest) {
+  if (!manifest || !Array.isArray(manifest.questions) || manifest.questions.length === 0) return null;
+  const points = {};
+  manifest.questions.forEach(q => {
+    const value = Number(q.points);
+    if (q.order_index != null && isFinite(value)) points[q.order_index] = value;
+  });
+  return Object.keys(points).length > 0 ? points : null;
+}
+
+/**
+ * Recomputes a submission's totals from its questions instead of trusting the
+ * model's arithmetic. Points possible come from the answer key when there is
+ * one (so a question the model skipped still counts against the student);
+ * points earned are clamped to 0..possible.
+ */
+function scoreSubmission_(submission, keyPoints) {
+  const round2 = n => Math.round(n * 100) / 100;
+  const toNumber = v => {
+    const n = parseFloat(v);
+    return isFinite(n) ? n : 0;
+  };
+
+  const rawQuestions = Array.isArray(submission.questions) ? submission.questions : [];
+  if (rawQuestions.length === 0) {
+    // Nothing to add up: keep whatever totals the model reported
     return {
-      assignmentCode: String(topCode).trim().toUpperCase(),
-      assignmentTitle: String(topTitle).trim(),
-      submissions: parsed.submissions.map(s => ({
-        ...s,
-        assignmentCode: String(s.assignmentCode || topCode).trim().toUpperCase(),
-        assignmentTitle: String(s.assignmentTitle || topTitle).trim()
-      }))
+      ...submission,
+      questions: [],
+      totalScore: toNumber(submission.totalScore),
+      totalPossible: toNumber(submission.totalPossible)
     };
   }
 
-  // Fallback if model returned single flat submission object
-  const singleCode = String(parsed.assignmentCode || 'ALG-701').trim().toUpperCase();
+  const questions = rawQuestions.map(q => {
+    const keyed = keyPoints ? keyPoints[q.orderIndex] : undefined;
+    const pointsPossible = keyed !== undefined ? keyed : Math.max(0, toNumber(q.pointsPossible));
+    const pointsEarned = Math.min(Math.max(0, toNumber(q.pointsEarned)), pointsPossible);
+    return { ...q, pointsEarned: round2(pointsEarned), pointsPossible: round2(pointsPossible) };
+  });
+
+  const sum = values => round2(values.reduce((total, v) => total + v, 0));
   return {
-    assignmentCode: singleCode,
-    assignmentTitle: String(topTitle).trim(),
-    submissions: [{
-      ...parsed,
-      assignmentCode: singleCode,
-      assignmentTitle: String(topTitle).trim()
-    }]
+    ...submission,
+    questions: questions,
+    totalScore: sum(questions.map(q => q.pointsEarned)),
+    totalPossible: keyPoints
+      ? sum(Object.keys(keyPoints).map(k => keyPoints[k]))
+      : sum(questions.map(q => q.pointsPossible))
   };
 }
 

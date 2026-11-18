@@ -1,11 +1,12 @@
 import pg from 'pg';
+import { requireDbPassword } from './dbPassword.js';
 
 const host = 'aws-0-us-east-2.pooler.supabase.com';
 const client = new pg.Client({
   host,
   port: 6543,
   user: 'postgres.dgmkobsqhlfokquolkqf',
-  password: 'nLbpJKgrABKdFuGc',
+  password: requireDbPassword(),
   database: 'postgres',
   ssl: { rejectUnauthorized: false },
 });

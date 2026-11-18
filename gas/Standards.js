@@ -171,6 +171,7 @@ function getStandardsMapDictionary() {
  * Sets up the "Standards Map" tab in the Google Sheet
  */
 function setupStandardsMapSheet() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Standards Map');
 
@@ -206,6 +207,7 @@ function setupStandardsMapSheet() {
  * - Structural Blocker (< 20% mastery on prerequisite standards)
  */
 function updateStudentMonitoringSheet() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let monitorSheet = ss.getSheetByName('Student Monitoring');
   if (!monitorSheet) {

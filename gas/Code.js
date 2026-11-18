@@ -25,6 +25,8 @@ function onOpen() {
     .addSeparator()
     .addItem('🔗 Test Connection to Worksheet Maker', 'testSupabaseConnection')
     .addItem('⚙️ Set Gemini API Key', 'setGeminiApiKeyPrompt')
+    .addItem('🔐 Web Access Security Setup', 'setupWebAccessSecurity')
+    .addItem('♻️ Reset Teacher Link Key', 'resetTeacherWebKey')
     .addToUi();
 }
 
@@ -34,10 +36,30 @@ function onOpen() {
 function doGet(e) {
   if (e && e.parameter) {
     if (e.parameter.action === 'studentProgress') {
-      const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.password || e.parameter.lastName || '');
+      const data = getStudentPortalData(e.parameter.studentId || '', e.parameter.password || '');
       return ContentService.createTextOutput(JSON.stringify(data))
         .setMimeType(ContentService.MimeType.JSON);
     }
+
+    // Everything below is teacher-only and needs the Teacher Web Key (?key=...)
+    const teacherActions = ['interventionData', 'reconcileDrive', 'ensureScanFolder', 'organizePodFolders', 'dashboard'];
+    const wantsTeacherView = e.parameter.view === 'teacher' || teacherActions.indexOf(e.parameter.action) !== -1;
+    if (wantsTeacherView) {
+      if (!isValidTeacherKey_(e.parameter.key)) {
+        if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
+          return HtmlService.createHtmlOutput(
+            '<div style="font-family:sans-serif;max-width:520px;margin:80px auto;text-align:center">' +
+            '<h2>Teacher link required</h2>' +
+            '<p>This page needs your private teacher link. In the Google Sheet, open ' +
+            '<b>Math Autograder ➔ Web Access Security Setup</b> to get it.</p></div>'
+          ).setTitle('Teacher link required');
+        }
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Not authorized.' }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      TRUSTED_SERVER_CALL_ = true;
+    }
+
     if (e.parameter.action === 'interventionData') {
       const data = getInterventionDashboardData(
         e.parameter.period || 'ALL',
@@ -64,9 +86,11 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
-      return HtmlService.createHtmlOutputFromFile('TeacherDashboard')
+      // Hand the page its key so its server calls are accepted (see teacherWebCall)
+      const dashboardHtml = HtmlService.createHtmlOutputFromFile('TeacherDashboard').getContent()
+        .replace('/*__TEACHER_WEB_KEY__*/', 'window.TEACHER_WEB_KEY = ' + JSON.stringify(String(e.parameter.key)) + ';');
+      return HtmlService.createHtmlOutput(dashboardHtml)
         .setTitle('Class & Assignment Data Explorer')
-        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     }
   }
@@ -86,6 +110,9 @@ function doPost(e) {
     const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
     const body = JSON.parse(raw);
     const action = body.action || (e && e.parameter && e.parameter.action) || '';
+
+    // Only the Worksheet Maker site, signed in as an allowed teacher, may touch Drive
+    requireTeacherSession_(body.authToken);
 
     let result = { success: false, error: 'Unknown action: ' + action };
     if (action === 'saveWorksheetToDrive') {
@@ -434,6 +461,7 @@ function setGeminiApiKeyPrompt() {
  * Tests the connection to your Supabase database and fetches the demo or latest key
  */
 function testSupabaseConnection() {
+  requireTeacher_();
   const ui = SpreadsheetApp.getUi();
   try {
     const recent = typeof fetchRecentWorksheetsList === 'function' ? fetchRecentWorksheetsList() : [];
@@ -481,6 +509,7 @@ function splitFullName(rawFullName) {
  * Sets up Student Roster, Gradebook, Standards Map, and Student Monitoring sheets
  */
 function setupAllSheets() {
+  requireTeacher_();
   setupRosterSheet(true);
   setupGradebookSheet(true);
   setupStandardsMapSheet();
@@ -503,6 +532,7 @@ function setupAllSheets() {
  * Preserves existing student rows, auto-migrates 4-column rosters, and adds Portal Password column.
  */
 function setupRosterSheet(silent) {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Student Roster');
 
@@ -614,6 +644,7 @@ function normalizeStudentIdKey(rawId) {
  * Reads all rows from the "Student Roster" sheet and builds lookup maps by ID and by Name
  */
 function getRosterData() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Student Roster');
   if (!sheet) {
@@ -720,6 +751,7 @@ function getRosterData() {
  * using either the scanned 2-digit/3-digit ID # box OR the handwritten Name line.
  */
 function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
+  requireTeacher_();
   const roster = existingRosterInfo || getRosterData();
   const cleanId = String(rawId || '').replace(/^#/, '').trim();
   const normId = normalizeStudentIdKey(cleanId);
@@ -791,6 +823,7 @@ function resolveStudentFromRoster(rawId, rawName, existingRosterInfo) {
  * Adds or updates a student in the "Student Roster" tab (supports 2-digit or 3-digit Student IDs, First Name, Last Name, & Passwords)
  */
 function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, password, notes) {
+  requireTeacher_();
   const cleanId = String(studentId || '').replace(/^#/, '').trim();
   let cleanFirst = String(firstName || '').trim();
   let cleanLast = String(lastName || '').trim();
@@ -865,6 +898,7 @@ function addOrUpdateRosterStudent(studentId, firstName, lastName, classPeriod, p
  * and caches them into Script Properties for fast, secure authentication.
  */
 function updateStudentPortalPasswords() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Student Roster');
   if (!sheet) {
@@ -1044,6 +1078,7 @@ function ensureGradebookColumns(sheet) {
  * Creates or formats the "Gradebook" sheet (preserving existing rows)
  */
 function setupGradebookSheet(silent) {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   setupRosterSheet(true);
 
@@ -1080,6 +1115,15 @@ function getStudentPortalData(rawStudentId, rawPassword) {
     return { found: false, error: 'Please enter your student password.' };
   }
 
+  if (isPortalLockedOut_(normInputId)) {
+    return {
+      found: false,
+      error: 'Too many wrong passwords for Student ID #' + cleanInputId + '. Wait 10 minutes and try again, or ask your teacher.'
+    };
+  }
+
+  // This function checks the student's password itself, so it may read the roster
+  TRUSTED_SERVER_CALL_ = true;
   const rosterInfo = getRosterData();
   const rosterMatch = rosterInfo.byId[cleanInputId] || rosterInfo.byNormalizedId[normInputId];
 
@@ -1092,34 +1136,25 @@ function getStudentPortalData(rawStudentId, rawPassword) {
 
   const configuredPass = (rosterMatch && rosterMatch.password) || cachedPasswords[normInputId] || cachedPasswords[cleanInputId] || '';
 
-  if (configuredPass) {
-    // Student has a configured password in Roster/Cache!
-    // Case-insensitive comparison with whitespace trimmed for student convenience
-    if (configuredPass.toLowerCase().trim() !== inputPassClean.toLowerCase()) {
-      return {
-        found: false,
-        error: 'Incorrect password for Student ID #' + cleanInputId + '. If you forgot your password, please ask your teacher.'
-      };
-    }
-  } else {
-    // Fallback: If no password is set yet in Roster, allow checking against student's Last Name or First Name
-    if (rosterMatch && (rosterMatch.lastName || rosterMatch.firstName)) {
-      const rLast = (rosterMatch.lastName || '').toLowerCase();
-      const rFirst = (rosterMatch.firstName || '').toLowerCase();
-      const pLower = inputPassClean.toLowerCase();
-      if (rLast !== pLower && rFirst !== pLower && !rLast.includes(pLower)) {
-        return {
-          found: false,
-          error: 'No password is set yet for Student ID #' + cleanInputId + '. Please ask your teacher to set your password in the roster.'
-        };
-      }
-    } else {
-      return {
-        found: false,
-        error: 'Student ID #' + cleanInputId + ' was not found in the roster. Please check your number or ask your teacher.'
-      };
-    }
+  // A password must be set in the roster. Names are never accepted as a
+  // password: classmates know them. The same message is used for a wrong
+  // password and an unknown ID so IDs cannot be probed.
+  if (!configuredPass) {
+    recordPortalFailure_(normInputId);
+    return {
+      found: false,
+      error: 'No password is set yet for Student ID #' + cleanInputId + ', or the ID is wrong. Please ask your teacher.'
+    };
   }
+  // Case-insensitive comparison with whitespace trimmed for student convenience
+  if (configuredPass.toLowerCase().trim() !== inputPassClean.toLowerCase()) {
+    recordPortalFailure_(normInputId);
+    return {
+      found: false,
+      error: 'Incorrect password for Student ID #' + cleanInputId + '. If you forgot your password, please ask your teacher.'
+    };
+  }
+  clearPortalFailures_(normInputId);
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Gradebook');
@@ -1270,6 +1305,7 @@ function getStudentPortalData(rawStudentId, rawPassword) {
  * Sidebar API: Computes real-time class analytics, roster coverage, and student stats
  */
 function getGradebookAnalytics() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rosterInfo = getRosterData();
   const recentWorksheets = typeof fetchRecentWorksheetsList === 'function' ? fetchRecentWorksheetsList() : [];
@@ -1485,6 +1521,7 @@ function getGradebookAnalytics() {
  * Returns available classes/periods and date info for Gradebook filtering
  */
 function getGradebookFilterOptions() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const periods = new Set();
   
@@ -1535,6 +1572,7 @@ function getGradebookFilterOptions() {
  * @returns {Object} Filter results summary
  */
 function applyGradebookFilter(targetPeriod, datePreset, customStart, customEnd) {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('Gradebook');
   if (!sheet) {
@@ -1653,6 +1691,7 @@ function applyGradebookFilter(targetPeriod, datePreset, customStart, customEnd) 
  * Clears all active filter criteria on the Gradebook sheet so all rows are visible
  */
 function clearGradebookFilter() {
+  requireTeacher_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Gradebook');
   if (!sheet) return { success: false, message: 'Gradebook sheet not found.' };
@@ -1782,6 +1821,7 @@ function fixMisnamedGradebookAssignments_() {
  * @param {string} [selectedAssignmentCode] - Optional short code selected by teacher in Sidebar
  */
 function runGradingFromSidebar(selectedAssignmentCode) {
+  requireTeacher_();
   setupRosterSheet(true);
   const sheet = setupGradebookSheet(true);
   const rosterInfo = getRosterData();
@@ -1838,7 +1878,7 @@ function runGradingFromSidebar(selectedAssignmentCode) {
       let manifest = knownCode ? getManifestCached(knownCode) : null;
 
       let gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
-      const assignmentCode = String(gradeResult.assignmentCode || knownCode || 'ALG-701').trim().toUpperCase();
+      const assignmentCode = String(gradeResult.assignmentCode || knownCode || '').trim().toUpperCase();
 
       if (!manifest && assignmentCode) {
         manifest = getManifestCached(assignmentCode);
@@ -1881,7 +1921,7 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         const lastFormula = buildRosterVlookupFormula(nextRowNum, 3, fallbackLast);
         const periodFormula = buildRosterVlookupFormula(nextRowNum, 4, fallbackPeriod);
 
-        const rowAssignmentCode = String(sub.assignmentCode || assignmentCode || 'ALG-701').trim().toUpperCase();
+        const rowAssignmentCode = String(sub.assignmentCode || assignmentCode || 'UNKNOWN').trim().toUpperCase();
         const rowAssignmentTitle = String(
           sub.assignmentTitle ||
           gradeResult.assignmentTitle ||
@@ -1964,6 +2004,7 @@ function gradeScannedWorksheets() {
  * into Tier 3 (Intensive Intervention), Tier 2 (Strategic Support), and Tier 1 (Mastery).
  */
 function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cutoffTier2) {
+  requireTeacher_();
   targetPeriod = targetPeriod || 'ALL';
   targetCodes = Array.isArray(targetCodes) ? targetCodes : [];
   cutoffTier3 = Number(cutoffTier3) || 60;

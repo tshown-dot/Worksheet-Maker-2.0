@@ -6,6 +6,8 @@
  * browser OAuth token fallback.
  */
 
+import { supabase } from '../lib/supabase';
+
 export const GAS_DRIVE_BRIDGE_URL =
   'https://script.google.com/macros/s/AKfycbzJdtuEFvlv50TPVntAHSeK9MwwXR-WwF3SPyO5GMBy-vCmplS3aNDPNYD1Tv-4CHNp/exec';
 
@@ -44,6 +46,15 @@ async function blobToBase64(blob: Blob): Promise<string> {
  * Calls the permanent Apps Script Drive Bridge over CORS-safe POST (Content-Type: text/plain)
  */
 async function callGasDriveBridge(payload: Record<string, any>): Promise<any> {
+  // The bridge only accepts requests from a signed-in teacher: it checks this
+  // session token with Supabase and compares the email to its allow-list.
+  const { data } = await supabase.auth.getSession();
+  const authToken = data.session?.access_token;
+  if (!authToken) {
+    throw new Error('Sign in with Google to save to Google Drive.');
+  }
+  payload = { ...payload, authToken };
+
   const res = await fetch(GAS_DRIVE_BRIDGE_URL, {
     method: 'POST',
     headers: {
@@ -56,11 +67,11 @@ async function callGasDriveBridge(payload: Record<string, any>): Promise<any> {
     throw new Error(`Drive Bridge HTTP ${res.status}`);
   }
 
-  const data = await res.json();
-  if (!data || data.success === false) {
-    throw new Error(data?.error || 'Drive Bridge request failed');
+  const result = await res.json();
+  if (!result || result.success === false) {
+    throw new Error(result?.error || 'Drive Bridge request failed');
   }
-  return data;
+  return result;
 }
 
 /**
