@@ -88,8 +88,12 @@ function doGet(e) {
     }
     if (e.parameter.view === 'teacher' || e.parameter.action === 'dashboard') {
       // Hand the page its key so its server calls are accepted (see teacherWebCall)
-      const dashboardHtml = HtmlService.createHtmlOutputFromFile('TeacherDashboard').getContent()
-        .replace('/*__TEACHER_WEB_KEY__*/', 'window.TEACHER_WEB_KEY = ' + JSON.stringify(String(e.parameter.key)) + ';');
+      // Added as its own script tag at the top of <head>, so it is set before any page code runs
+      const keyScript = '<script>window.TEACHER_WEB_KEY = ' + JSON.stringify(String(e.parameter.key)) + ';</' + 'script>';
+      const rawDashboardHtml = HtmlService.createHtmlOutputFromFile('TeacherDashboard').getContent();
+      const dashboardHtml = rawDashboardHtml.indexOf('<head>') !== -1
+        ? rawDashboardHtml.replace('<head>', function() { return '<head>' + keyScript; })
+        : keyScript + rawDashboardHtml;
       return HtmlService.createHtmlOutput(dashboardHtml)
         .setTitle('Class & Assignment Data Explorer')
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
