@@ -94,6 +94,8 @@ function doPost(e) {
       result = handleDriveBridgeTrash_(body);
     } else if (action === 'reconcileDrive') {
       result = handleDriveBridgeReconcile_(body);
+    } else if (action === 'generateAndSavePODWeek') {
+      result = handleGenerateAndSavePODWeek_(body);
     }
 
     return ContentService.createTextOutput(JSON.stringify(result))
@@ -2349,5 +2351,233 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     roster: allRosterFormatted,
     standardsDictionary: stdDict,
     itemAnalysis
+  };
+}
+
+/**
+ * Safely parses Gemini JSON output, handling markdown fences, trailing commas,
+ * and unescaped LaTeX backslashes.
+ */
+function robustParseGeneratedJson_(rawText) {
+  let cleaned = String(rawText || '').trim()
+    .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '');
+
+  const firstArray = cleaned.indexOf('[');
+  const firstObj = cleaned.indexOf('{');
+  let start = -1;
+  if (firstArray !== -1 && firstObj !== -1) start = Math.min(firstArray, firstObj);
+  else start = firstArray !== -1 ? firstArray : firstObj;
+
+  const lastArray = cleaned.lastIndexOf(']');
+  const lastObj = cleaned.lastIndexOf('}');
+  const end = Math.max(lastArray, lastObj);
+
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.substring(start, end + 1);
+  }
+
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    cleaned = cleaned.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
+    return JSON.parse(cleaned);
+  }
+}
+
+/**
+ * Calls Gemini with the provided POD prompt, parses the resulting daily worksheets,
+ * saves them to Supabase (`worksheets` + `questions`), and returns the created IDs.
+ */
+function handleGenerateAndSavePODWeek_(body) {
+  const promptText = String((body && body.prompt) || '').trim();
+  if (!promptText) {
+    throw new Error('Missing POD prompt.');
+  }
+
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    throw new Error("Gemini API Key is not set in Worksheet Maker script properties.");
+  }
+
+  const primaryModel = props.getProperty('GEMINI_MODEL') || (typeof GEMINI_MODEL !== 'undefined' ? GEMINI_MODEL : 'gemini-3.8-flash');
+  const fallbackList = (typeof FALLBACK_MODELS !== 'undefined') ? FALLBACK_MODELS : ['gemini-flash-latest', 'gemini-2.5-flash'];
+  const modelsToTry = [primaryModel, ...fallbackList.filter(m => m !== primaryModel)];
+
+  const geminiPayload = {
+    contents: [{ parts: [{ text: promptText }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.35
+    }
+  };
+
+  const fetchOpts = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(geminiPayload),
+    muteHttpExceptions: true
+  };
+
+  let response = null;
+  let status = 0;
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const modelName = modelsToTry[i];
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    response = UrlFetchApp.fetch(endpoint, fetchOpts);
+    status = response.getResponseCode();
+    if (status !== 404) break;
+  }
+
+  if (status !== 200) {
+    throw new Error(`Gemini API Error (${status}): ${response ? response.getContentText() : 'No response'}`);
+  }
+
+  const resJson = JSON.parse(response.getContentText());
+  const candidate = resJson.candidates && resJson.candidates[0] && resJson.candidates[0].content &&
+    resJson.candidates[0].content.parts && resJson.candidates[0].content.parts[0] && resJson.candidates[0].content.parts[0].text;
+  if (!candidate) {
+    throw new Error('Gemini returned an empty response.');
+  }
+
+  const parsed = robustParseGeneratedJson_(candidate);
+  const items = Array.isArray(parsed) ? parsed : (parsed.questions || parsed.problems || []);
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('Gemini did not return any questions in the expected JSON array format.');
+  }
+
+  // Group items by assignmentName in chronological order
+  const groupOrder = [];
+  const groupMap = {};
+  items.forEach(item => {
+    const name = String(item.assignmentName || 'Daily POD').trim();
+    if (!groupMap[name]) {
+      groupMap[name] = [];
+      groupOrder.push(name);
+    }
+    groupMap[name].push(item);
+  });
+
+  const course = String((body && body.course) || 'Math 6').trim();
+  const folderName = String((body && body.folderName) || (course === 'Accelerated' ? 'Accelerated PODs' : 'Math 6 PODs')).trim();
+  const gradeLevel = course === 'Accelerated' ? '7th Grade' : '6th Grade';
+
+  const sbHeaders = {
+    'apikey': SUPABASE_CONFIG.anonKey,
+    'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`,
+    'Content-Type': 'application/json'
+  };
+
+  // Best-effort ensure folder exists in Supabase
+  try {
+    UrlFetchApp.fetch(`${SUPABASE_CONFIG.url}/rest/v1/folders`, {
+      method: 'post',
+      headers: Object.assign({}, sbHeaders, { 'Prefer': 'resolution=ignore-duplicates' }),
+      payload: JSON.stringify({ name: folderName }),
+      muteHttpExceptions: true
+    });
+  } catch (e) {}
+
+  const createdIds = [];
+  const createdCodes = [];
+  const createdTitles = [];
+
+  groupOrder.forEach(groupName => {
+    const groupItems = groupMap[groupName];
+    const shortCode = 'M' + Math.floor(1000 + Math.random() * 9000);
+    const totalPages = groupItems.length > 6 ? 2 : 1;
+    const perPageLimit = totalPages === 2 ? Math.ceil(groupItems.length / 2) : groupItems.length;
+
+    const wsPayload = {
+      short_code: shortCode,
+      title: groupName,
+      subject: 'Mathematics',
+      grade_level: gradeLevel,
+      folder_name: folderName,
+      style_preset: 'pod',
+      total_pages: totalPages,
+      columns: 2,
+      student_id_digits: 3,
+      track_standards: true,
+      layout_config: {
+        border_style: 'solid',
+        header_style: 'clean',
+        show_dot_grid: false,
+        columns: 2,
+        spacing: 'balanced',
+        show_honor_pledge: false,
+        track_standards: true
+      }
+    };
+
+    const wsResp = UrlFetchApp.fetch(`${SUPABASE_CONFIG.url}/rest/v1/worksheets`, {
+      method: 'post',
+      headers: Object.assign({}, sbHeaders, { 'Prefer': 'return=representation' }),
+      payload: JSON.stringify(wsPayload),
+      muteHttpExceptions: true
+    });
+
+    const wsStatus = wsResp.getResponseCode();
+    if (wsStatus < 200 || wsStatus >= 300) {
+      throw new Error(`Supabase worksheet insert failed (${wsStatus}): ${wsResp.getContentText()}`);
+    }
+
+    const wsRows = JSON.parse(wsResp.getContentText());
+    const wsRow = Array.isArray(wsRows) ? wsRows[0] : wsRows;
+    if (!wsRow || !wsRow.id) {
+      throw new Error('Supabase did not return created worksheet ID.');
+    }
+
+    const qPayload = groupItems.map((item, idx) => {
+      const pageNum = totalPages === 2 && idx >= perPageLimit ? 2 : 1;
+      let std = item.standard || '';
+      if (!std && item.rubric_notes) {
+        const m = String(item.rubric_notes).match(/([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)/i);
+        if (m) std = m[1];
+      }
+      const qType = item.question_type || 'numeric';
+      return {
+        worksheet_id: wsRow.id,
+        order_index: idx + 1,
+        page_number: pageNum,
+        prompt: String(item.prompt || item.question || `Problem ${idx + 1}`),
+        question_type: qType,
+        options: Array.isArray(item.options) ? item.options : [],
+        correct_answer: String(item.correct_answer || item.answer || ''),
+        acceptable_alternatives: Array.isArray(item.acceptable_alternatives) ? item.acceptable_alternatives : [],
+        points: Number(item.points) || (qType === 'multi_step' ? 3 : 2),
+        rubric_notes: String(item.rubric_notes || item.explanation || ''),
+        standard: std || null,
+        bounding_box: {}
+      };
+    });
+
+    const qResp = UrlFetchApp.fetch(`${SUPABASE_CONFIG.url}/rest/v1/questions`, {
+      method: 'post',
+      headers: sbHeaders,
+      payload: JSON.stringify(qPayload),
+      muteHttpExceptions: true
+    });
+
+    const qStatus = qResp.getResponseCode();
+    if (qStatus < 200 || qStatus >= 300) {
+      throw new Error(`Supabase questions insert failed (${qStatus}): ${qResp.getContentText()}`);
+    }
+
+    createdIds.push(wsRow.id);
+    createdCodes.push(shortCode);
+    createdTitles.push(groupName);
+  });
+
+  return {
+    success: true,
+    count: createdIds.length,
+    worksheetIds: createdIds,
+    shortCodes: createdCodes,
+    assignments: createdTitles,
+    folderName: folderName
   };
 }

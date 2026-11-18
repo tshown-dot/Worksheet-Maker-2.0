@@ -85,11 +85,90 @@ export const ImportHub: React.FC<ImportHubProps> = ({
   const [shelfFolder, setShelfFolder] = useState<string>('ALL');
   const [selectedShelfIds, setSelectedShelfIds] = useState<string[]>([]);
   const [loadingShelf, setLoadingShelf] = useState(false);
+  const [autoSyncMessage, setAutoSyncMessage] = useState<string>('');
+  const [isAutoSyncing, setIsAutoSyncing] = useState<boolean>(false);
 
   useEffect(() => {
     fetchFolders();
     fetchSavedWorksheets();
+
+    const params = new URLSearchParams(window.location.search);
+    const rawIds = params.get('autoSyncIds');
+    const folderParam = params.get('folder');
+    if (rawIds) {
+      const ids = rawIds.split(',').map((s) => s.trim()).filter(Boolean);
+      window.history.replaceState({}, '', window.location.pathname);
+      if (ids.length > 0) {
+        setSelectedShelfIds(ids);
+        if (folderParam) {
+          setShelfFolder(folderParam);
+        }
+        runAutoSyncForIds(ids, folderParam || undefined);
+      }
+    }
   }, []);
+
+  const runAutoSyncForIds = async (ids: string[], folderOverride?: string) => {
+    setIsAutoSyncing(true);
+    setAutoSyncMessage(`⚡ Generating & syncing Student + Answer Key PDFs for ${ids.length} PODs to Google Drive...`);
+    try {
+      const fullWorksheets = await fetchFullShelfWorksheets(ids);
+      await fetchSavedWorksheets();
+      let syncedCount = 0;
+
+      for (const fullWs of fullWorksheets) {
+        try {
+          const sDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: false });
+          const kDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: true });
+          const safeTitle = (fullWs.title || 'Worksheet').replace(/[^a-zA-Z0-9]/g, '_');
+          const baseName = `${fullWs.short_code}_${safeTitle}`;
+          const targetFolder = fullWs.folder_name || folderOverride || 'Daily Warm-Ups (POD)';
+
+          const driveRes = await saveWorksheetToDrive(
+            providerToken || null,
+            targetFolder,
+            sDoc.output('blob'),
+            kDoc.output('blob'),
+            baseName
+          );
+
+          if (fullWs.id && (driveRes.studentFileId || driveRes.keyFileId)) {
+            await supabase
+              .from('worksheets')
+              .update({
+                layout_config: {
+                  ...(fullWs.layout_config || { columns: 2, spacing: 'balanced', track_standards: true }),
+                  drive_student_file_id: driveRes.studentFileId,
+                  drive_key_file_id: driveRes.keyFileId,
+                },
+              })
+              .eq('id', fullWs.id);
+          }
+          if (driveRes.folderUrl && onDriveFolderSaved) {
+            onDriveFolderSaved(driveRes.folderUrl);
+          }
+          syncedCount++;
+          setAutoSyncMessage(
+            `⚡ Synced ${syncedCount}/${fullWorksheets.length} POD PDFs to Google Drive ("${targetFolder}")...`
+          );
+        } catch (dErr: any) {
+          console.warn('Auto-sync Drive upload warning:', dErr);
+          if (dErr?.message === 'DRIVE_AUTH_EXPIRED' && onDriveTokenExpired) {
+            onDriveTokenExpired();
+          }
+        }
+      }
+
+      await fetchSavedWorksheets();
+      setIsAutoSyncing(false);
+      setAutoSyncMessage(
+        `✅ All ${fullWorksheets.length} Daily PODs generated, saved, and synced to Google Drive! They are pre-selected below for 1-click printing.`
+      );
+    } catch (err: any) {
+      setIsAutoSyncing(false);
+      setAutoSyncMessage(`⚠️ Auto-sync warning: ${err.message}`);
+    }
+  };
 
   const fetchSavedWorksheets = async () => {
     try {
@@ -792,6 +871,31 @@ RULES:
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* AUTO-SYNC PROGRESS / COMPLETION BANNER FROM PLANNER */}
+      {autoSyncMessage && (
+        <div
+          className={`mb-6 p-4 rounded-2xl border-2 flex items-center justify-between gap-3 shadow-sm ${
+            isAutoSyncing
+              ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
+              : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+          }`}
+        >
+          <div className="flex items-center space-x-2.5 text-xs sm:text-sm font-bold">
+            {isAutoSyncing ? <Loader2 className="w-4 h-4 animate-spin shrink-0 text-indigo-600" /> : <Check className="w-4 h-4 shrink-0 text-emerald-600" />}
+            <span>{autoSyncMessage}</span>
+          </div>
+          {!isAutoSyncing && (
+            <button
+              type="button"
+              onClick={() => setAutoSyncMessage('')}
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer px-2 py-1"
+            >
+              Dismiss
+            </button>
+          )}
         </div>
       )}
 
