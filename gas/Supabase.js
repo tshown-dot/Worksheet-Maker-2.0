@@ -73,3 +73,38 @@ function fetchRecentWorksheetsList() {
     return [];
   }
 }
+
+/**
+ * Key used when the script itself writes to Supabase (1-click POD generation).
+ * Uses the secret key stored in Script Properties; falls back to the public key,
+ * which can only write while the database still allows public writes.
+ */
+function getSupabaseWriteKey_() {
+  return PropertiesService.getScriptProperties().getProperty('SUPABASE_SECRET_KEY') || SUPABASE_CONFIG.anonKey;
+}
+
+/**
+ * Menu action: stores the Supabase secret key in Script Properties (never in code).
+ */
+function setSupabaseSecretKeyPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const hasKey = !!props.getProperty('SUPABASE_SECRET_KEY');
+
+  const response = ui.prompt(
+    'Supabase Secret Key',
+    'Paste your Supabase secret key (Supabase Dashboard ➔ Project Settings ➔ API Keys ➔ Secret keys).\n' +
+      'It lets 1-click POD generation save worksheets after the database is locked down.\n\n' +
+      (hasKey ? '(A key is already saved. Leave blank to keep it.)' : '(No key saved yet.)'),
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+
+  const newKey = response.getResponseText().trim();
+  if (newKey) {
+    props.setProperty('SUPABASE_SECRET_KEY', newKey);
+    ui.alert('Saved ✅', 'Supabase secret key stored securely in Script Properties.', ui.ButtonSet.OK);
+  } else {
+    ui.alert('Notice', 'Key was not changed.', ui.ButtonSet.OK);
+  }
+}

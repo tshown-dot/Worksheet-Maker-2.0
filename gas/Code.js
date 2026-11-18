@@ -27,6 +27,7 @@ function onOpen() {
     .addItem('⚙️ Set Gemini API Key', 'setGeminiApiKeyPrompt')
     .addItem('🔐 Web Access Security Setup', 'setupWebAccessSecurity')
     .addItem('♻️ Reset Teacher Link Key', 'resetTeacherWebKey')
+    .addItem('🗝️ Set Supabase Secret Key', 'setSupabaseSecretKeyPrompt')
     .addToUi();
 }
 
@@ -111,8 +112,11 @@ function doPost(e) {
     const body = JSON.parse(raw);
     const action = body.action || (e && e.parameter && e.parameter.action) || '';
 
-    // Only the Worksheet Maker site, signed in as an allowed teacher, may touch Drive
-    requireTeacherSession_(body.authToken);
+    // Callers must prove they are the teacher: the Worksheet Maker site sends its
+    // signed-in session token; scripts and automations send the Teacher Web Key.
+    if (!isValidTeacherKey_(body.key)) {
+      requireTeacherSession_(body.authToken);
+    }
 
     let result = { success: false, error: 'Unknown action: ' + action };
     if (action === 'saveWorksheetToDrive') {
@@ -2506,9 +2510,11 @@ function handleGenerateAndSavePODWeek_(body) {
   const folderName = String((body && body.folderName) || (course === 'Accelerated' ? 'Accelerated PODs' : 'Math 6 PODs')).trim();
   const gradeLevel = course === 'Accelerated' ? '7th Grade' : '6th Grade';
 
+  // Writing worksheets needs the Supabase secret key once the database is locked down
+  const sbWriteKey = getSupabaseWriteKey_();
   const sbHeaders = {
-    'apikey': SUPABASE_CONFIG.anonKey,
-    'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`,
+    'apikey': sbWriteKey,
+    'Authorization': `Bearer ${sbWriteKey}`,
     'Content-Type': 'application/json'
   };
 
