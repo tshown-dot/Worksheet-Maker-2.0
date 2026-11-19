@@ -1829,12 +1829,14 @@ function fixMisnamedGradebookAssignments_() {
 }
 
 const GRADING_TIME_BUDGET_MS = 4.5 * 60 * 1000; // Apps Script stops a run at 6 minutes
-const GRADED_FILE_IDS_PROP = 'GRADED_FILE_IDS';
+const GRADED_FILE_IDS_PROP = 'GRADED_NOT_YET_MOVED_FILE_IDS';
 const GRADED_FILE_IDS_KEEP = 400;
 
 /**
- * IDs of scan files whose rows are already in the Gradebook, so a file that was
- * graded but not moved (for example the run was cut off) is never graded twice.
+ * IDs of scan files whose rows are in the Gradebook but which have not yet been
+ * moved to "Scanned" (for example the run was cut off between the two steps),
+ * so such a file is never graded twice. Once a file has been moved it is
+ * forgotten, so a teacher who puts it back in the folder gets a fresh grade.
  */
 function getGradedFileIds_() {
   try {
@@ -1853,6 +1855,14 @@ function rememberGradedFile_(fileId) {
     GRADED_FILE_IDS_PROP,
     JSON.stringify(list.slice(-GRADED_FILE_IDS_KEEP))
   );
+}
+
+function forgetGradedFile_(fileId) {
+  const list = getGradedFileIds_();
+  const remaining = list.filter(id => id !== fileId);
+  if (remaining.length !== list.length) {
+    PropertiesService.getScriptProperties().setProperty(GRADED_FILE_IDS_PROP, JSON.stringify(remaining));
+  }
 }
 
 /**
@@ -2143,6 +2153,7 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         if (alreadyGraded.indexOf(file.getId()) !== -1) {
           // Its rows are already in the Gradebook; only the move was missed
           file.moveTo(scannedFolder);
+          forgetGradedFile_(file.getId());
           alreadyGradedCount++;
           continue;
         }
@@ -2175,6 +2186,7 @@ function runGradingFromSidebar(selectedAssignmentCode) {
         writeGradebookRows_(sheet, startRow, builtRows);
         rememberGradedFile_(file.getId());
         file.moveTo(scannedFolder);
+        forgetGradedFile_(file.getId());
 
         builtRows.forEach(r => {
           if (r.needsReview) needsReviewCount++;
