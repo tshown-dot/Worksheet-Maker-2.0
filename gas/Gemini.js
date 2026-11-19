@@ -20,6 +20,98 @@
 const GEMINI_MODEL = 'gemini-3.8-flash';
 const FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
+/**
+ * The exact reply shape Gemini must use when grading, so the format no longer
+ * depends on an example in the prompt (example values used to leak into results).
+ */
+const GRADING_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    assignmentCode: { type: 'STRING' },
+    assignmentTitle: { type: 'STRING' },
+    submissions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          studentId: { type: 'STRING' },
+          studentName: { type: 'STRING' },
+          assignmentCode: { type: 'STRING' },
+          assignmentTitle: { type: 'STRING' },
+          confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+          questions: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                orderIndex: { type: 'INTEGER' },
+                standard: { type: 'STRING' },
+                studentAnswer: { type: 'STRING' },
+                workShown: { type: 'STRING' },
+                isCorrect: { type: 'BOOLEAN' },
+                pointsEarned: { type: 'NUMBER' },
+                pointsPossible: { type: 'NUMBER' },
+                feedback: { type: 'STRING' }
+              },
+              required: ['orderIndex', 'studentAnswer', 'workShown', 'isCorrect', 'pointsEarned', 'pointsPossible', 'feedback']
+            }
+          }
+        },
+        required: ['studentId', 'confidence', 'questions']
+      }
+    }
+  },
+  required: ['submissions']
+};
+
+/**
+ * Price of the grading model in US dollars per million tokens, used only for
+ * the cost estimate shown after grading. These are the reported Gemini 3.8
+ * Flash rates through Dec 31, 2026 (expected to double on Jan 1, 2027).
+ * Override without editing code by setting the Script Properties
+ * GEMINI_PRICE_INPUT_PER_MILLION and GEMINI_PRICE_OUTPUT_PER_MILLION.
+ */
+const GEMINI_PRICE_INPUT_PER_MILLION = 0.75;
+const GEMINI_PRICE_OUTPUT_PER_MILLION = 3.75;
+
+// Tokens used by Gemini calls during the current run (reset when grading starts)
+var GEMINI_USAGE_ = { calls: 0, inputTokens: 0, outputTokens: 0 };
+
+function resetGeminiUsage_() {
+  GEMINI_USAGE_ = { calls: 0, inputTokens: 0, outputTokens: 0 };
+}
+
+/**
+ * Adds one reply's token counts to the running total. Output includes the
+ * model's hidden "thinking" tokens, which are billed at the output rate.
+ */
+function recordGeminiUsage_(usageMetadata) {
+  const usage = usageMetadata || {};
+  GEMINI_USAGE_.calls++;
+  GEMINI_USAGE_.inputTokens += Number(usage.promptTokenCount) || 0;
+  GEMINI_USAGE_.outputTokens += (Number(usage.candidatesTokenCount) || 0) + (Number(usage.thoughtsTokenCount) || 0);
+}
+
+/**
+ * One-line summary of what the current run's Gemini calls cost, or '' if none ran.
+ */
+function describeGeminiUsage_() {
+  if (GEMINI_USAGE_.calls === 0) return '';
+  const props = PropertiesService.getScriptProperties();
+  const priceIn = Number(props.getProperty('GEMINI_PRICE_INPUT_PER_MILLION')) || GEMINI_PRICE_INPUT_PER_MILLION;
+  const priceOut = Number(props.getProperty('GEMINI_PRICE_OUTPUT_PER_MILLION')) || GEMINI_PRICE_OUTPUT_PER_MILLION;
+  const withCommas = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  if (GEMINI_USAGE_.inputTokens + GEMINI_USAGE_.outputTokens === 0) {
+    return `💲 AI usage: ${GEMINI_USAGE_.calls} request(s); Gemini did not report token counts, so no cost estimate.`;
+  }
+
+  const dollars = (GEMINI_USAGE_.inputTokens * priceIn + GEMINI_USAGE_.outputTokens * priceOut) / 1000000;
+  const cents = dollars * 100;
+  const costText = cents < 1 ? 'under 1¢' : (cents < 100 ? `about ${Math.round(cents)}¢` : `about $${dollars.toFixed(2)}`);
+  return `💲 AI cost for this run: ${costText} (${withCommas(GEMINI_USAGE_.inputTokens)} tokens in, ${withCommas(GEMINI_USAGE_.outputTokens)} out, ${GEMINI_USAGE_.calls} request(s), priced at $${priceIn} / $${priceOut} per million).`;
+}
+
 function gradeWorksheetWithGemini(pdfBlob, manifest) {
   requireTeacher_();
   const props = PropertiesService.getScriptProperties();
@@ -37,60 +129,62 @@ Your job is to read the handwritten student submission(s) in this PDF and grade 
 LAYOUT & HEADER EXTRACTION RULES:
 1. STUDENT ID ("studentId"):
    - Look in the top-right header area directly to the left of the QR code for the large box labeled "STUDENT ID #" (or "ID #").
-   - Extract the exact 2-digit or 3-digit ID number written inside the box (e.g., "14", "07", "23", "104", "215"). Strip any leading "#" or spaces. If blank or unreadable, return "".
+   - Copy the exact 2-digit or 3-digit number written inside the box, keeping any leading zero. Strip any leading "#" or spaces.
+   - If the box is blank or you cannot read it with confidence, return "". Never guess a number.
 2. STUDENT NAME ("studentName"):
    - Privacy-safe OCR worksheets only use the Student ID box and do not have a Name line; return "" unless a legacy worksheet has a handwritten name.
 3. ASSIGNMENT CODE ("assignmentCode"):
-   - Read the printed Assignment Code in the top-right corner next to the QR code or in the header (e.g., "ALG-701", "M4821", "M8539", "M6287").
+   - Copy the printed Assignment Code in the top-right corner next to the QR code or in the header, exactly as printed on that student's page.
+   - If you cannot read it, return "". Never fill it in from memory or from these instructions.
 4. ASSIGNMENT TITLE ("assignmentTitle"):
-   - Read the exact printed assignment title in the header (e.g., "Math 6 POD Mon 11/2", "Math 6 POD Tue 11/3", "Accelerated POD Mon 11/2", "Accelerated POD Tue 11/3").
+   - Copy the exact printed assignment title in the header. If you cannot read it, return "".
 5. MULTI-PAGE / COPIER BATCH SUPPORT:
    - A single PDF file may contain ONE student's worksheet (1 or 2 pages) OR a stack of MULTIPLE students' worksheets scanned together at the copier.
    - Group pages belonging to the same student together, and output one entry per student in the "submissions" array.
 
 GRADING & MATHEMATICAL EQUIVALENCE RULES:
 For each question on the student's worksheet:
-- Identify the NJSLS / Common Core Standard (e.g., "7.EE.B.4", "6.NS.C.7a") from the Official Answer Key or the standard badge printed on the question header.
-- Read the student's final answer in the "FINAL ANSWER" box (or selected bubble A/B/C/D for multiple choice).
-- Inspect the student's scratch work in the open workspace area above the answer box.
-- Mathematical Equivalence: Accept mathematically equivalent answers (e.g., "0.5", ".5", and "1/2"; or "x = 4" and "4") unless the prompt or rubric explicitly requires a specific form (such as simplest fraction form).
-- Partial Credit: If the final answer has a minor arithmetic sign/rounding error but the workspace clearly demonstrates the correct algebraic method, award appropriate partial credit if warranted by the rubric notes.
-- Diagnostic Feedback: Provide a concise, constructive diagnostic note ending with the standard tag in brackets, e.g., "Correct solution. [7.EE.B.4]" or "Distributed -3 to first term only; sign error on constant. [7.EE.A.1]".
+- Use the question's number as "orderIndex". When an Official Answer Key is given below, return exactly one entry for every question in the key, using the key's order_index, even if the student left it blank (then "studentAnswer" is "" and "pointsEarned" is 0).
+- Identify the NJSLS / Common Core Standard from the Official Answer Key or the standard badge printed on the question header, and return it as "standard".
+- Read the student's final answer in the "FINAL ANSWER" box (or selected bubble A/B/C/D for multiple choice). Write down what the student actually wrote, even when it is wrong; do not replace it with the expected answer.
+- Mathematical Equivalence: Accept mathematically equivalent answers (for example a decimal and its equal fraction, or an answer with and without "x =") unless the prompt or rubric explicitly requires a specific form (such as simplest fraction form).
 
-Output ONLY valid JSON matching this exact schema:
-{
-  "assignmentCode": "ALG-701",
-  "assignmentTitle": "Accelerated POD Mon 11/2",
-  "submissions": [
-    {
-      "studentId": "104",
-      "studentName": "Alex Rivera",
-      "assignmentCode": "ALG-701",
-      "assignmentTitle": "Accelerated POD Mon 11/2",
-      "confidence": "high",
-      "questions": [
-        {
-          "orderIndex": 1,
-          "standard": "7.EE.A.1",
-          "studentAnswer": "12.78",
-          "isCorrect": true,
-          "pointsEarned": 2.0,
-          "pointsPossible": 2.0,
-          "feedback": "Correct substitution and evaluation. [7.EE.A.1]"
-        }
-      ],
-      "totalScore": 2.0,
-      "totalPossible": 2.0
-    }
-  ]
-}`;
+SCRATCH WORK & PARTIAL CREDIT (apply to EVERY question, not only correct ones):
+- The scratch work in the open workspace above the answer box is part of the student's answer. Read it for every question BEFORE deciding the score, and describe what you saw in "workShown" in a few words (for example which steps or calculations are written). Use "no work shown" only when the workspace is truly empty.
+- Full credit: the final answer is correct or mathematically equivalent.
+- Partial credit: when the final answer is wrong, incomplete or blank, go through the question's rubric notes one step at a time and award the points for every step the student's work clearly shows done correctly. For example, on a 2-point question whose rubric gives 1 point for the setup and 1 point for the result, a correct setup followed by a calculation slip earns 1 point.
+- If a question has no rubric notes, award up to half of its points when the work shows a correct method that went wrong through a small calculation, sign or copying slip.
+- Do not award partial credit for a wrong answer with no supporting work, and never give more than the question's points.
+- Diagnostic Feedback: Provide a concise, constructive note saying which steps were earned and where the work went wrong, ending with the question's standard code in square brackets.
+
+CONFIDENCE ("confidence"), one value per student:
+- "high": the Student ID and every answer were clearly legible.
+- "medium": one or two characters were unclear but you are fairly sure of your reading.
+- "low": the Student ID or any answer was hard to read, smudged, cut off or ambiguous.
+
+Output ONLY valid JSON: an object with "assignmentCode", "assignmentTitle" and a "submissions" array.
+Each submission has "studentId", "studentName", "assignmentCode", "assignmentTitle", "confidence" and a "questions" array.
+Each question has "orderIndex" (number), "standard", "studentAnswer", "workShown", "isCorrect" (true/false), "pointsEarned" (number), "pointsPossible" (number) and "feedback".`;
 
   if (manifest && manifest.questions) {
     const wsInfo = manifest.worksheet || {};
-    promptText += `\n\nOFFICIAL WORKSHEET METADATA:\nTitle: ${wsInfo.title || 'Math Assignment'}\nShort Code: ${wsInfo.short_code || ''}\nTotal Pages per Student: ${wsInfo.total_pages || 1}\n\nOFFICIAL ANSWER KEY & RUBRIC:\n${JSON.stringify(manifest.questions, null, 2)}`;
+    // Only the fields the grader needs; layout data would just be noise
+    const keyForPrompt = manifest.questions.map(q => ({
+      order_index: q.order_index,
+      page_number: q.page_number,
+      question_type: q.question_type,
+      standard: q.standard,
+      prompt: q.prompt,
+      options: q.options,
+      correct_answer: q.correct_answer,
+      acceptable_alternatives: q.acceptable_alternatives,
+      points: q.points,
+      rubric_notes: q.rubric_notes
+    }));
+    promptText += `\n\nOFFICIAL WORKSHEET METADATA:\nTitle: ${wsInfo.title || 'Math Assignment'}\nShort Code: ${wsInfo.short_code || ''}\nTotal Pages per Student: ${wsInfo.total_pages || 1}\n\nOFFICIAL ANSWER KEY & RUBRIC:\n${JSON.stringify(keyForPrompt, null, 2)}`;
   }
 
-  return normalizeGradeResult_(callGeminiForJson_(apiKey, configuredModel, promptText, base64Data), manifest);
+  return normalizeGradeResult_(callGeminiForJson_(apiKey, configuredModel, promptText, base64Data, GRADING_RESPONSE_SCHEMA), manifest);
 }
 
 /**
@@ -137,25 +231,33 @@ Output ONLY valid JSON in this shape:
  * Sends a prompt plus a PDF to Gemini and returns the parsed JSON reply.
  * Tries the fallback models when a model name is unknown (404), waits and
  * retries when Gemini is busy (429 / 503), and refuses a reply that was cut off.
+ * When a reply schema is given, Gemini must answer in exactly that shape; if the
+ * model does not accept the schema (400), the request is repeated without it.
  */
-function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf) {
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      contents: [{
-        parts: [
-          { text: promptText },
-          { inlineData: { mimeType: 'application/pdf', data: base64Pdf } }
-        ]
-      }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.1
-      }
-    }),
-    muteHttpExceptions: true
+function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf, responseSchema) {
+  const buildOptions = function(schema) {
+    const generationConfig = {
+      responseMimeType: 'application/json',
+      temperature: 0.1
+    };
+    if (schema) generationConfig.responseSchema = schema;
+    return {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType: 'application/pdf', data: base64Pdf } }
+          ]
+        }],
+        generationConfig: generationConfig
+      }),
+      muteHttpExceptions: true
+    };
   };
+  const schemaOptions = buildOptions(responseSchema);
+  let options = schemaOptions;
 
   const modelsToTry = [configuredModel, ...FALLBACK_MODELS.filter(m => m !== configuredModel)];
   const busyWaitsMs = [4000, 12000];
@@ -171,6 +273,12 @@ function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf) {
         Utilities.sleep(busyWaitsMs[attempt]);
         continue;
       }
+      if (status === 400 && responseSchema && options === schemaOptions) {
+        // This model rejected the reply-shape rules: ask again without them
+        options = buildOptions(null);
+        attempt = -1;
+        continue;
+      }
       break;
     }
     if (status !== 404) break;
@@ -181,6 +289,7 @@ function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf) {
   }
 
   const resJson = JSON.parse(response.getContentText());
+  recordGeminiUsage_(resJson.usageMetadata);
   const firstCandidate = resJson.candidates?.[0];
   if (firstCandidate?.finishReason === 'MAX_TOKENS') {
     throw new Error('Gemini ran out of room before finishing its reply. Scan fewer worksheets into one PDF and try again.');

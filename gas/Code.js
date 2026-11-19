@@ -1982,6 +1982,9 @@ function buildGradebookRow_(sub, rowNum, context) {
     if (slot >= GRADEBOOK_MAX_QUESTIONS) return;
 
     let feedback = String(q.feedback || '');
+    // Show what scratch work the AI saw, so partial-credit decisions can be checked
+    const workShown = String(q.workShown || '').trim();
+    if (workShown) feedback = `Work seen: ${workShown.replace(/[.\s]+$/, '')}. ${feedback}`;
     const standard = context.keyStandards[number];
     if (standard && feedback.toUpperCase().indexOf(String(standard).toUpperCase()) === -1) {
       feedback = `${feedback} [${standard}]`.trim();
@@ -2063,6 +2066,7 @@ function runGradingFromSidebar(selectedAssignmentCode) {
 
   try {
     const startedAt = Date.now();
+    resetGeminiUsage_();
     setupRosterSheet(true);
     const sheet = setupGradebookSheet(true);
     const rosterInfo = getRosterData();
@@ -2214,6 +2218,8 @@ function runGradingFromSidebar(selectedAssignmentCode) {
     if (filesLeftForNextRun > 0) {
       parts.push(`⏱️ Stopped to stay inside Google's time limit with ${filesLeftForNextRun} file(s) left. Click Grade again to continue.`);
     }
+    const usageLine = describeGeminiUsage_();
+    if (usageLine) parts.push(usageLine);
     const message = parts.join(' ');
 
     // Nothing at all was graded: show it as an error, not a success
