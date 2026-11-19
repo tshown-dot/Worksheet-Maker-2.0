@@ -112,17 +112,142 @@ function describeGeminiUsage_() {
   return `💲 AI cost for this run: ${costText} (${withCommas(GEMINI_USAGE_.inputTokens)} tokens in, ${withCommas(GEMINI_USAGE_.outputTokens)} out, ${GEMINI_USAGE_.calls} request(s), priced at $${priceIn} / $${priceOut} per million).`;
 }
 
-function gradeWorksheetWithGemini(pdfBlob, manifest) {
-  requireTeacher_();
+/**
+ * Above this size a PDF is uploaded to Gemini's file service instead of being
+ * sent inside the request (inline requests are size-limited, and base64 adds a third).
+ */
+const INLINE_PDF_MAX_BYTES = 14 * 1024 * 1024;
+
+/**
+ * Reply shape for the second, transcription-only read of a scan.
+ */
+const SECOND_READ_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    students: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          studentId: { type: 'STRING' },
+          assignmentCode: { type: 'STRING' },
+          answers: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                orderIndex: { type: 'INTEGER' },
+                answer: { type: 'STRING' }
+              },
+              required: ['orderIndex', 'answer']
+            }
+          }
+        },
+        required: ['studentId', 'answers']
+      }
+    }
+  },
+  required: ['students']
+};
+
+function getGeminiSettings_() {
   const props = PropertiesService.getScriptProperties();
   const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) {
     throw new Error("Gemini API Key is not set. Please go to '📐 Math Autograder ➔ ⚙️ Set Gemini API Key'.");
   }
+  return {
+    apiKey: apiKey,
+    model: props.getProperty('GEMINI_MODEL') || GEMINI_MODEL,
+    // The second read is on unless the Script Property SECOND_READ is set to "off"
+    secondRead: String(props.getProperty('SECOND_READ') || 'on').trim().toLowerCase() !== 'off'
+  };
+}
 
-  const configuredModel = props.getProperty('GEMINI_MODEL') || GEMINI_MODEL;
-  const base64Data = Utilities.base64Encode(pdfBlob.getBytes());
+/**
+ * Gets a scanned PDF ready to send to Gemini, once per file. Small PDFs travel
+ * inside each request; large ones are uploaded once and referenced by address.
+ * Call release() when finished so an uploaded copy is deleted.
+ * @returns {{part: Object, release: Function}}
+ */
+function preparePdfForGemini_(pdfBlob) {
+  const settings = getGeminiSettings_();
+  const bytes = pdfBlob.getBytes();
+  if (bytes.length <= INLINE_PDF_MAX_BYTES) {
+    return {
+      part: { inlineData: { mimeType: 'application/pdf', data: Utilities.base64Encode(bytes) } },
+      release: function() {}
+    };
+  }
+  const uploaded = uploadPdfToGemini_(settings.apiKey, bytes, pdfBlob.getName() || 'scan.pdf');
+  return {
+    part: { fileData: { mimeType: 'application/pdf', fileUri: uploaded.uri } },
+    release: function() { deleteGeminiFile_(settings.apiKey, uploaded.name); }
+  };
+}
 
+/**
+ * Uploads a PDF to the Gemini Files API (resumable upload) and waits until
+ * Gemini has finished processing it.
+ */
+function uploadPdfToGemini_(apiKey, bytes, displayName) {
+  const start = UrlFetchApp.fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(bytes.length),
+      'X-Goog-Upload-Header-Content-Type': 'application/pdf'
+    },
+    payload: JSON.stringify({ file: { display_name: String(displayName).slice(0, 120) } }),
+    muteHttpExceptions: true
+  });
+  const startHeaders = start.getAllHeaders();
+  const uploadUrlKey = Object.keys(startHeaders).filter(k => k.toLowerCase() === 'x-goog-upload-url')[0];
+  if (start.getResponseCode() !== 200 || !uploadUrlKey) {
+    throw new Error(`Could not start uploading the large PDF to Gemini (Status ${start.getResponseCode()}): ${start.getContentText().slice(0, 200)}`);
+  }
+
+  const upload = UrlFetchApp.fetch(startHeaders[uploadUrlKey], {
+    method: 'post',
+    contentType: 'application/pdf',
+    headers: {
+      'X-Goog-Upload-Offset': '0',
+      'X-Goog-Upload-Command': 'upload, finalize'
+    },
+    payload: bytes,
+    muteHttpExceptions: true
+  });
+  if (upload.getResponseCode() !== 200) {
+    throw new Error(`Uploading the large PDF to Gemini failed (Status ${upload.getResponseCode()}): ${upload.getContentText().slice(0, 200)}`);
+  }
+
+  let file = JSON.parse(upload.getContentText()).file || {};
+  for (let waited = 0; file.state === 'PROCESSING' && waited < 90000; waited += 3000) {
+    Utilities.sleep(3000);
+    const check = UrlFetchApp.fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}?key=${apiKey}`, { muteHttpExceptions: true });
+    if (check.getResponseCode() === 200) file = JSON.parse(check.getContentText());
+  }
+  if (!file.uri || (file.state && file.state !== 'ACTIVE')) {
+    throw new Error(`Gemini could not process the large PDF (state: ${file.state || 'unknown'}).`);
+  }
+  return { uri: file.uri, name: file.name };
+}
+
+function deleteGeminiFile_(apiKey, name) {
+  if (!name) return;
+  try {
+    UrlFetchApp.fetch(`https://generativelanguage.googleapis.com/v1beta/${name}?key=${apiKey}`, { method: 'delete', muteHttpExceptions: true });
+  } catch (e) {
+    console.warn('Could not delete uploaded PDF from Gemini (it expires on its own in 48 hours):', e);
+  }
+}
+
+/**
+ * Builds the grading instructions, including every answer key that may apply.
+ */
+function buildGradingPrompt_(manifests) {
   let promptText = `You are an expert automated grading system for middle school math worksheets (Worksheet Maker 2.0) scanned at 300 DPI.
 Your job is to read the handwritten student submission(s) in this PDF and grade each student's work with high accuracy.
 
@@ -168,10 +293,14 @@ Output ONLY valid JSON: an object with "assignmentCode", "assignmentTitle" and a
 Each submission has "studentId", "studentName", "assignmentCode", "assignmentTitle", "confidence" and a "questions" array.
 Each question has "orderIndex" (number), "standard", "studentAnswer", "workShown", "isCorrect" (true/false), "pointsEarned" (number), "pointsPossible" (number) and "feedback".`;
 
-  if (manifest && manifest.questions) {
+  if (manifests.length > 1) {
+    promptText += `\n\nMORE THAN ONE ASSIGNMENT: this PDF contains worksheets for ${manifests.length} different assignments. For each student, read the Assignment Code printed on that student's page, set "assignmentCode" to it, and grade that student ONLY against the answer key with the same Short Code below.`;
+  }
+
+  manifests.forEach(manifest => {
     const wsInfo = manifest.worksheet || {};
     // Only the fields the grader needs; layout data would just be noise
-    const keyForPrompt = manifest.questions.map(q => ({
+    const keyForPrompt = (manifest.questions || []).map(q => ({
       order_index: q.order_index,
       page_number: q.page_number,
       question_type: q.question_type,
@@ -183,24 +312,78 @@ Each question has "orderIndex" (number), "standard", "studentAnswer", "workShown
       points: q.points,
       rubric_notes: q.rubric_notes
     }));
-    promptText += `\n\nOFFICIAL WORKSHEET METADATA:\nTitle: ${wsInfo.title || 'Math Assignment'}\nShort Code: ${wsInfo.short_code || ''}\nTotal Pages per Student: ${wsInfo.total_pages || 1}\n\nOFFICIAL ANSWER KEY & RUBRIC:\n${JSON.stringify(keyForPrompt, null, 2)}`;
-  }
+    promptText += `\n\nOFFICIAL WORKSHEET METADATA:\nTitle: ${wsInfo.title || 'Math Assignment'}\nShort Code: ${wsInfo.short_code || ''}\nTotal Pages per Student: ${wsInfo.total_pages || 1}\n\nOFFICIAL ANSWER KEY & RUBRIC (Short Code ${wsInfo.short_code || ''}):\n${JSON.stringify(keyForPrompt, null, 2)}`;
+  });
 
-  return normalizeGradeResult_(callGeminiForJson_(apiKey, configuredModel, promptText, base64Data, GRADING_RESPONSE_SCHEMA), manifest);
+  return promptText;
+}
+
+/**
+ * Instructions for the second read: copy IDs and final answers only. It is
+ * given no answer key on purpose, so its reading cannot lean on the expected answers.
+ */
+function buildSecondReadPrompt_(manifests) {
+  const numbers = {};
+  manifests.forEach(m => (m.questions || []).forEach(q => { if (q.order_index != null) numbers[q.order_index] = true; }));
+  const list = Object.keys(numbers).map(Number).sort((a, b) => a - b);
+  return `Transcribe only. This PDF contains one or more students' printed math worksheets with handwritten answers.
+For each student's worksheet, in page order, copy:
+- "studentId": the number written in the box labeled "STUDENT ID #" (or "ID #") in the top-right header. Keep leading zeros. Use "" if it is blank or unreadable. Never guess.
+- "assignmentCode": the printed Assignment Code next to the QR code.
+- "answers": for each question number ${list.length ? '(' + list.join(', ') + ')' : 'on the page'}, the student's final answer: what is written in that question's FINAL ANSWER box, or the bubble letter chosen for multiple choice. If the box is empty but a final answer is clearly marked in the work area (circled, boxed, underlined or the last line of the work), copy that. Otherwise use "".
+Copy exactly what the student wrote, even if it looks wrong. Do not solve, check or grade anything.
+Output ONLY valid JSON: { "students": [ { "studentId": "", "assignmentCode": "", "answers": [ { "orderIndex": 1, "answer": "" } ] } ] }`;
+}
+
+/**
+ * Grades a scanned PDF against one or more answer keys.
+ * When the second read is on, a transcription-only read of the same PDF is sent
+ * at the same moment, and any student whose ID or answers it reads differently
+ * is marked for review.
+ *
+ * @param {Blob|{part: Object}} pdf - the PDF, or the result of preparePdfForGemini_
+ * @param {Object|Object[]} manifestOrList - answer key manifest(s) from Supabase
+ * @returns {Object} `{ assignmentCode, assignmentTitle, submissions, notes }`
+ */
+function gradeWorksheetWithGemini(pdf, manifestOrList) {
+  requireTeacher_();
+  const settings = getGeminiSettings_();
+  const manifests = (Array.isArray(manifestOrList) ? manifestOrList : [manifestOrList]).filter(Boolean);
+
+  const prepared = pdf && pdf.part ? pdf : preparePdfForGemini_(pdf);
+  try {
+    const jobs = [{ promptText: buildGradingPrompt_(manifests), schema: GRADING_RESPONSE_SCHEMA }];
+    const useSecondRead = settings.secondRead && manifests.length > 0;
+    if (useSecondRead) {
+      jobs.push({ promptText: buildSecondReadPrompt_(manifests), schema: SECOND_READ_RESPONSE_SCHEMA });
+    }
+
+    const results = callGeminiJobs_(settings, prepared.part, jobs);
+    if (results[0].error) throw results[0].error;
+
+    const graded = normalizeGradeResult_(results[0].value, manifests);
+    graded.notes = [];
+    if (useSecondRead) {
+      if (results[1].error) {
+        graded.notes.push('second read failed, so answers were not double-checked: ' + String(results[1].error.message || results[1].error).slice(0, 120));
+      } else {
+        applySecondRead_(graded, results[1].value);
+      }
+    }
+    return graded;
+  } finally {
+    if (prepared !== pdf) prepared.release();
+  }
 }
 
 /**
  * Asks Gemini only which assignment(s) a scanned PDF contains, without grading.
  * Used when neither the teacher nor the file name says which answer key applies.
+ * @param {Blob|{part: Object}} pdf - the PDF, or the result of preparePdfForGemini_
  * @returns {Array<{assignmentCode: string, assignmentTitle: string}>} one entry per distinct code read
  */
-function identifyWorksheetWithGemini_(pdfBlob) {
-  const props = PropertiesService.getScriptProperties();
-  const apiKey = props.getProperty('GEMINI_API_KEY');
-  if (!apiKey) {
-    throw new Error("Gemini API Key is not set. Please go to '📐 Math Autograder ➔ ⚙️ Set Gemini API Key'.");
-  }
-
+function identifyWorksheetWithGemini_(pdf) {
+  const settings = getGeminiSettings_();
   const promptText = `This PDF is a scan of one or more printed math worksheets.
 Each worksheet has a printed Assignment Code in the top-right header next to a QR code (a short code of letters and digits, sometimes with a hyphen) and a printed assignment title in the header.
 
@@ -210,12 +393,13 @@ Copy the code and title exactly as printed. Do not guess: if a code cannot be re
 Output ONLY valid JSON in this shape:
 { "worksheets": [ { "assignmentCode": "", "assignmentTitle": "" } ] }`;
 
-  const parsed = callGeminiForJson_(
-    apiKey,
-    props.getProperty('GEMINI_MODEL') || GEMINI_MODEL,
-    promptText,
-    Utilities.base64Encode(pdfBlob.getBytes())
-  );
+  const prepared = pdf && pdf.part ? pdf : preparePdfForGemini_(pdf);
+  let parsed;
+  try {
+    parsed = callGeminiForJson_(settings.apiKey, settings.model, promptText, prepared.part);
+  } finally {
+    if (prepared !== pdf) prepared.release();
+  }
 
   const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.worksheets) ? parsed.worksheets : [parsed]);
   const seen = {};
@@ -229,36 +413,81 @@ Output ONLY valid JSON in this shape:
   return worksheets;
 }
 
+function buildGeminiRequestOptions_(promptText, pdfPart, schema) {
+  const generationConfig = {
+    responseMimeType: 'application/json',
+    temperature: 0.1
+  };
+  if (schema) generationConfig.responseSchema = schema;
+  return {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      contents: [{ parts: [{ text: promptText }, pdfPart] }],
+      generationConfig: generationConfig
+    }),
+    muteHttpExceptions: true
+  };
+}
+
+/**
+ * Reads one successful Gemini reply: records its token use, refuses a reply
+ * that was cut off, and parses the JSON it contains.
+ */
+function parseGeminiReply_(response) {
+  const resJson = JSON.parse(response.getContentText());
+  recordGeminiUsage_(resJson.usageMetadata);
+  const firstCandidate = resJson.candidates?.[0];
+  if (firstCandidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('Gemini ran out of room before finishing its reply. Scan fewer worksheets into one PDF and try again.');
+  }
+  const text = firstCandidate?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('No response generated from Gemini Vision.');
+  }
+  return parseGradingJson_(text);
+}
+
+/**
+ * Sends several requests about the same PDF at the same moment. Any request
+ * that does not succeed first time is retried on its own with the usual
+ * fallbacks. Never throws: each result is `{value}` or `{error}`.
+ */
+function callGeminiJobs_(settings, pdfPart, jobs) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.apiKey}`;
+  let responses = [];
+  try {
+    responses = UrlFetchApp.fetchAll(jobs.map(job => Object.assign(
+      { url: endpoint },
+      buildGeminiRequestOptions_(job.promptText, pdfPart, job.schema)
+    )));
+  } catch (e) {
+    responses = [];
+  }
+
+  return jobs.map((job, i) => {
+    const response = responses[i];
+    try {
+      if (response && response.getResponseCode() === 200) {
+        return { value: parseGeminiReply_(response) };
+      }
+      return { value: callGeminiForJson_(settings.apiKey, settings.model, job.promptText, pdfPart, job.schema) };
+    } catch (err) {
+      return { error: err };
+    }
+  });
+}
+
 /**
  * Sends a prompt plus a PDF to Gemini and returns the parsed JSON reply.
  * Tries the fallback models when a model name is unknown (404), waits and
  * retries when Gemini is busy (429 / 503), and refuses a reply that was cut off.
  * When a reply schema is given, Gemini must answer in exactly that shape; if the
  * model does not accept the schema (400), the request is repeated without it.
+ * @param {Object} pdfPart - `{inlineData: ...}` or `{fileData: ...}` from preparePdfForGemini_
  */
-function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf, responseSchema) {
-  const buildOptions = function(schema) {
-    const generationConfig = {
-      responseMimeType: 'application/json',
-      temperature: 0.1
-    };
-    if (schema) generationConfig.responseSchema = schema;
-    return {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: promptText },
-            { inlineData: { mimeType: 'application/pdf', data: base64Pdf } }
-          ]
-        }],
-        generationConfig: generationConfig
-      }),
-      muteHttpExceptions: true
-    };
-  };
-  const schemaOptions = buildOptions(responseSchema);
+function callGeminiForJson_(apiKey, configuredModel, promptText, pdfPart, responseSchema) {
+  const schemaOptions = buildGeminiRequestOptions_(promptText, pdfPart, responseSchema);
   let options = schemaOptions;
 
   const modelsToTry = [configuredModel, ...FALLBACK_MODELS.filter(m => m !== configuredModel)];
@@ -277,7 +506,7 @@ function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf, resp
       }
       if (status === 400 && responseSchema && options === schemaOptions) {
         // This model rejected the reply-shape rules: ask again without them
-        options = buildOptions(null);
+        options = buildGeminiRequestOptions_(promptText, pdfPart, null);
         attempt = -1;
         continue;
       }
@@ -289,19 +518,7 @@ function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf, resp
   if (status !== 200) {
     throw new Error(`Gemini API Error (Status ${status}): ${response.getContentText().slice(0, 300)}`);
   }
-
-  const resJson = JSON.parse(response.getContentText());
-  recordGeminiUsage_(resJson.usageMetadata);
-  const firstCandidate = resJson.candidates?.[0];
-  if (firstCandidate?.finishReason === 'MAX_TOKENS') {
-    throw new Error('Gemini ran out of room before finishing its reply. Scan fewer worksheets into one PDF and try again.');
-  }
-
-  const text = firstCandidate?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error('No response generated from Gemini Vision.');
-  }
-  return parseGradingJson_(text);
+  return parseGeminiReply_(response);
 }
 
 /**
@@ -320,9 +537,12 @@ function parseGradingJson_(text) {
  * Normalizes the model reply so callers always receive
  * `{ assignmentCode, assignmentTitle, submissions: [...] }`, with every
  * submission's totals recomputed in code from its questions.
+ * Each submission gets `manifest`: the answer key it was scored against, or
+ * null when it carries a code that matches none of the keys (mixed stacks).
  * An assignment code the model could not read comes back as "" (never a guess).
  */
-function normalizeGradeResult_(parsed, manifest) {
+function normalizeGradeResult_(parsed, manifestOrList) {
+  const manifests = (Array.isArray(manifestOrList) ? manifestOrList : [manifestOrList]).filter(Boolean);
   const cleanCode = v => String(v || '').trim().toUpperCase();
   const cleanTitle = v => String(v || '').trim();
 
@@ -333,17 +553,45 @@ function normalizeGradeResult_(parsed, manifest) {
 
   const topCode = cleanCode(parsed.assignmentCode || rawSubmissions[0].assignmentCode);
   const topTitle = cleanTitle(parsed.assignmentTitle || rawSubmissions[0].assignmentTitle);
-  const keyPoints = getAnswerKeyPoints_(manifest);
+
+  const byCode = {};
+  manifests.forEach(m => { byCode[cleanCode(m.worksheet && m.worksheet.short_code)] = m; });
 
   return {
     assignmentCode: topCode,
     assignmentTitle: topTitle,
-    submissions: rawSubmissions.map(s => ({
-      ...scoreSubmission_(s, keyPoints),
-      assignmentCode: cleanCode(s.assignmentCode) || topCode,
-      assignmentTitle: cleanTitle(s.assignmentTitle) || topTitle
-    }))
+    submissions: rawSubmissions.map(s => {
+      const pageCode = cleanCode(s.assignmentCode) || topCode;
+      const manifest = manifests.length === 1 ? manifests[0] : (byCode[pageCode] || null);
+      return {
+        ...scoreSubmission_(s, getAnswerKeyDetails_(manifest)),
+        assignmentCode: pageCode,
+        assignmentTitle: cleanTitle(s.assignmentTitle) || topTitle,
+        manifest: manifest
+      };
+    })
   };
+}
+
+/**
+ * Maps each question's order_index to what the key says about it.
+ * @returns {Object|null} e.g. { 1: {points, type, expected, rubric}, ... }, or null without a key
+ */
+function getAnswerKeyDetails_(manifest) {
+  if (!manifest || !Array.isArray(manifest.questions) || manifest.questions.length === 0) return null;
+  const details = {};
+  manifest.questions.forEach(q => {
+    const value = Number(q.points);
+    if (q.order_index == null || !isFinite(value)) return;
+    const alternatives = Array.isArray(q.acceptable_alternatives) ? q.acceptable_alternatives : [];
+    details[q.order_index] = {
+      points: value,
+      type: String(q.question_type || '').toLowerCase(),
+      expected: [q.correct_answer].concat(alternatives).map(v => String(v === undefined || v === null ? '' : v).trim()).filter(Boolean),
+      rubric: String(q.rubric_notes || '')
+    };
+  });
+  return Object.keys(details).length > 0 ? details : null;
 }
 
 /**
@@ -351,13 +599,153 @@ function normalizeGradeResult_(parsed, manifest) {
  * @returns {Object|null} e.g. { 1: 2, 2: 1 }, or null when there is no answer key
  */
 function getAnswerKeyPoints_(manifest) {
-  if (!manifest || !Array.isArray(manifest.questions) || manifest.questions.length === 0) return null;
+  const details = getAnswerKeyDetails_(manifest);
+  if (!details) return null;
   const points = {};
-  manifest.questions.forEach(q => {
-    const value = Number(q.points);
-    if (q.order_index != null && isFinite(value)) points[q.order_index] = value;
+  Object.keys(details).forEach(n => { points[n] = details[n].points; });
+  return points;
+}
+
+/** "A", "(b)", "C) 14" -> the choice letter; otherwise ''. */
+function choiceLetter_(value) {
+  const m = String(value || '').trim().match(/^\(?\s*([A-D])\s*\)?(?=$|[\s.):,-])/i);
+  return m ? m[1].toUpperCase() : '';
+}
+
+/** Lower-case, spaceless form of an answer for exact comparison. */
+function canonicalAnswerText_(value) {
+  return String(value || '')
+    .replace(/[−–—]/g, '-')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/^[a-z]=/, '')
+    .replace(/\$/g, '')
+    .replace(/\.$/, '');
+}
+
+/**
+ * Reads a written answer as a single number when it plainly is one:
+ * "12", "-8", "x = 5", "$42", "15%", "0.5", ".5", "3/4", "7 7/8", "12 bouquets".
+ * Lists, coordinates and expressions return null.
+ */
+function parseAnswerNumber_(value) {
+  let t = String(value || '').trim()
+    .replace(/[−–—]/g, '-')
+    .replace(/^[a-z]\s*=\s*/i, '')
+    .replace(/\$/g, '')
+    .trim();
+  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?/.test(t)) t = t.replace(/,(?=\d{3})/g, '');
+  t = t.replace(/\s*(%|percent|degrees?|°.*|\^\\circ.*|[a-z][a-z ]*)$/i, '').trim();
+
+  let m = t.match(/^(-?)(\d+)\s+(\d+)\/(\d+)$/);
+  if (m) {
+    const whole = Number(m[2]) + Number(m[3]) / Number(m[4]);
+    return Number(m[4]) === 0 ? null : (m[1] ? -whole : whole);
+  }
+  m = t.match(/^(-?\d*\.?\d+)\/(-?\d*\.?\d+)$/);
+  if (m) {
+    return Number(m[2]) === 0 ? null : Number(m[1]) / Number(m[2]);
+  }
+  if (/^-?(\d+\.?\d*|\.\d+)$/.test(t)) return Number(t);
+  return null;
+}
+
+/** True when two written answers say the same thing. Blank never equals non-blank. */
+function sameWrittenAnswer_(a, b) {
+  const blank = v => { const t = String(v || '').trim(); return !t || t === '—' || t === '-'; };
+  if (blank(a) || blank(b)) return blank(a) && blank(b);
+  if (canonicalAnswerText_(a) === canonicalAnswerText_(b)) return true;
+  const la = choiceLetter_(a);
+  const lb = choiceLetter_(b);
+  if (la && lb) return la === lb;
+  const na = parseAnswerNumber_(a);
+  const nb = parseAnswerNumber_(b);
+  return na !== null && nb !== null && Math.abs(na - nb) <= 1e-9 * Math.max(1, Math.abs(na));
+}
+
+/**
+ * Compares a student's written answer with the key in code, without the AI.
+ * @returns {string} 'match', 'mismatch', or 'unknown' when code cannot tell
+ */
+function checkAnswerAgainstKey_(studentAnswer, keyQuestion) {
+  const answer = String(studentAnswer || '').trim();
+  if (!answer || answer === '—' || !keyQuestion || keyQuestion.expected.length === 0) return 'unknown';
+
+  if (keyQuestion.type === 'multiple_choice') {
+    const keyLetter = keyQuestion.expected.map(choiceLetter_).filter(Boolean)[0];
+    const studentLetter = choiceLetter_(answer);
+    if (keyLetter && studentLetter) return keyLetter === studentLetter ? 'match' : 'mismatch';
+  }
+
+  const studentText = canonicalAnswerText_(answer);
+  if (keyQuestion.expected.some(e => canonicalAnswerText_(e) === studentText)) return 'match';
+
+  if (keyQuestion.type === 'numeric' || keyQuestion.type === 'fraction') {
+    const studentNumber = parseAnswerNumber_(answer);
+    const keyNumbers = keyQuestion.expected.map(parseAnswerNumber_).filter(n => n !== null);
+    if (studentNumber !== null && keyNumbers.length > 0) {
+      const equal = keyNumbers.some(k => Math.abs(k - studentNumber) <= 1e-9 * Math.max(1, Math.abs(k)));
+      // An equal value in a different form may not count when the rubric demands a form
+      if (equal) return /simplest|simplif|lowest terms|reduced/i.test(keyQuestion.rubric) ? 'unknown' : 'match';
+      return 'mismatch';
+    }
+  }
+  return 'unknown';
+}
+
+/**
+ * Compares the second, transcription-only read with the graded read and marks
+ * every student whose ID or answers were read differently. Students are paired
+ * by ID where both reads agree on it, and otherwise in page order.
+ */
+function applySecondRead_(graded, secondRead) {
+  const students = Array.isArray(secondRead && secondRead.students) ? secondRead.students : [];
+  const subs = graded.submissions;
+  subs.forEach(s => { s.reviewNotes = s.reviewNotes || []; });
+
+  if (students.length !== subs.length) {
+    subs.forEach(s => s.reviewNotes.push(`second read found ${students.length} student(s) in this PDF, first read ${subs.length}`));
+    return;
+  }
+
+  const idKey = v => normalizeStudentIdKey(String(v || '').replace(/^#/, '').trim());
+  const used = {};
+  const pairs = [];
+  subs.forEach((s, i) => {
+    const key = idKey(s.studentId);
+    if (!key) return;
+    const j = students.findIndex((st, k) => !used[k] && idKey(st.studentId) === key);
+    if (j !== -1) { used[j] = true; pairs[i] = students[j]; }
   });
-  return Object.keys(points).length > 0 ? points : null;
+  let next = 0;
+  subs.forEach((s, i) => {
+    if (pairs[i]) return;
+    while (used[next]) next++;
+    used[next] = true;
+    pairs[i] = students[next];
+  });
+
+  subs.forEach((s, i) => {
+    const other = pairs[i];
+    if (idKey(s.studentId) !== idKey(other.studentId)) {
+      s.reviewNotes.push(`second read saw ID ${String(other.studentId || '').trim() || 'blank'}`);
+    }
+    const answers = {};
+    (Array.isArray(other.answers) ? other.answers : []).forEach(a => { answers[parseInt(a.orderIndex, 10)] = a.answer; });
+    const disagreements = [];
+    (s.questions || []).forEach(q => {
+      if (q.notGraded) return;
+      const n = parseInt(q.orderIndex, 10);
+      if (!(n in answers)) return;
+      if (!sameWrittenAnswer_(q.studentAnswer, answers[n])) {
+        const shown = String(answers[n] || '').trim() || 'blank';
+        disagreements.push(`Q${n} (second read: "${shown.slice(0, 20)}")`);
+      }
+    });
+    if (disagreements.length > 0) {
+      s.reviewNotes.push('second read disagrees on ' + disagreements.join(', '));
+    }
+  });
 }
 
 /**
@@ -369,8 +757,14 @@ function getAnswerKeyPoints_(manifest) {
  * not return is added as "not graded" (worth 0, listed in `missingQuestions`)
  * so later answers can never slide into the wrong question's column.
  * Points possible come from the key; points earned are clamped to 0..possible.
+ * A written answer that code can confirm matches the key gets full credit; a
+ * wrong multiple-choice letter gets none; a full-credit answer that code can
+ * see is a different number is listed in `reviewNotes`.
  */
-function scoreSubmission_(submission, keyPoints) {
+function scoreSubmission_(submission, keyDetails) {
+  const keyPoints = keyDetails
+    ? Object.keys(keyDetails).reduce((acc, n) => { acc[n] = keyDetails[n].points; return acc; }, {})
+    : null;
   const round2 = n => Math.round(n * 100) / 100;
   const toNumber = v => {
     const n = parseFloat(v);
@@ -419,6 +813,7 @@ function scoreSubmission_(submission, keyPoints) {
   }
 
   const missingQuestions = [];
+  const keyCheckWarnings = [];
   const questions = keyNumbers.map(n => {
     const pointsPossible = round2(keyPoints[n]);
     const q = byNumber[n];
@@ -434,14 +829,33 @@ function scoreSubmission_(submission, keyPoints) {
         notGraded: true
       };
     }
-    const pointsEarned = Math.min(Math.max(0, toNumber(q.pointsEarned)), pointsPossible);
-    return { ...q, orderIndex: n, pointsEarned: round2(pointsEarned), pointsPossible: pointsPossible };
+    let pointsEarned = Math.min(Math.max(0, toNumber(q.pointsEarned)), pointsPossible);
+    let feedback = String(q.feedback || '');
+    let isCorrect = q.isCorrect;
+
+    // Check the written answer against the key in code, so a question with one
+    // right answer cannot be scored differently from one read to the next
+    const check = checkAnswerAgainstKey_(q.studentAnswer, keyDetails[n]);
+    if (check === 'match' && pointsEarned < pointsPossible) {
+      pointsEarned = pointsPossible;
+      isCorrect = true;
+      feedback = (feedback + ' (Answer-key check: the answer matches the key, so full credit.)').trim();
+    } else if (check === 'mismatch' && keyDetails[n].type === 'multiple_choice' && pointsEarned > 0) {
+      pointsEarned = 0;
+      isCorrect = false;
+      feedback = (feedback + ' (Answer-key check: a different choice than the key, so no credit.)').trim();
+    } else if (check === 'mismatch' && pointsEarned >= pointsPossible) {
+      keyCheckWarnings.push(`Q${n} answer "${String(q.studentAnswer).slice(0, 20)}" differs from the key but got full credit`);
+    }
+
+    return { ...q, orderIndex: n, isCorrect: isCorrect, feedback: feedback, pointsEarned: round2(pointsEarned), pointsPossible: pointsPossible };
   });
 
   return {
     ...submission,
     questions: questions,
     missingQuestions: missingQuestions,
+    reviewNotes: (Array.isArray(submission.reviewNotes) ? submission.reviewNotes : []).concat(keyCheckWarnings),
     totalScore: sum(questions.map(q => q.pointsEarned)),
     totalPossible: sum(questions.map(q => q.pointsPossible))
   };

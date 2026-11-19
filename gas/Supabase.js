@@ -21,19 +21,12 @@ function fetchWorksheetManifest(shortCode) {
   const cleanCode = String(shortCode).trim().toUpperCase();
   const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/rpc/get_worksheet_manifest?lookup_code=${encodeURIComponent(cleanCode)}`;
   
-  const options = {
-    method: 'get',
-    headers: {
-      'apikey': SUPABASE_CONFIG.anonKey,
-      'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`,
-      'Content-Type': 'application/json'
-    },
-    muteHttpExceptions: true
-  };
-  
-  const response = UrlFetchApp.fetch(endpoint, options);
+  const response = UrlFetchApp.fetch(endpoint, buildSupabaseServerRequest_());
   const status = response.getResponseCode();
-  
+
+  if (status === 401 || status === 403 || /permission denied/i.test(response.getContentText())) {
+    throw new Error("Answer keys are locked in the database and this script has no Supabase secret key. In the Google Sheet, run 'Math Autograder ➔ 🗝️ Set Supabase Secret Key'.");
+  }
   if (status !== 200) {
     throw new Error(`Failed to fetch from Supabase (Status ${status}): ${response.getContentText()}`);
   }
@@ -54,17 +47,7 @@ function fetchWorksheetManifest(shortCode) {
 function fetchRecentWorksheetsList() {
   try {
     const endpoint = `${SUPABASE_CONFIG.url}/rest/v1/worksheets?select=short_code,title,grade_level,folder_name,updated_at&order=updated_at.desc&limit=25`;
-    const options = {
-      method: 'get',
-      headers: {
-        'apikey': SUPABASE_CONFIG.anonKey,
-        'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`,
-        'Content-Type': 'application/json'
-      },
-      muteHttpExceptions: true
-    };
-
-    const response = UrlFetchApp.fetch(endpoint, options);
+    const response = UrlFetchApp.fetch(endpoint, buildSupabaseServerRequest_());
     if (response.getResponseCode() !== 200) return [];
     const list = JSON.parse(response.getContentText());
     return Array.isArray(list) ? list : [];
@@ -75,12 +58,56 @@ function fetchRecentWorksheetsList() {
 }
 
 /**
- * Key used when the script itself writes to Supabase (1-click POD generation).
- * Uses the secret key stored in Script Properties; falls back to the public key,
- * which can only write while the database still allows public writes.
+ * Key the script uses for Supabase: the secret key stored in Script Properties,
+ * which can read answer keys and write worksheets once the database is locked
+ * down, or else the public key, which only works while it is not.
  */
-function getSupabaseWriteKey_() {
+function getSupabaseServerKey_() {
   return PropertiesService.getScriptProperties().getProperty('SUPABASE_SECRET_KEY') || SUPABASE_CONFIG.anonKey;
+}
+
+// Kept for the 1-click POD generator, which writes worksheets
+function getSupabaseWriteKey_() {
+  return getSupabaseServerKey_();
+}
+
+function buildSupabaseServerRequest_() {
+  const key = getSupabaseServerKey_();
+  return {
+    method: 'get',
+    headers: {
+      'apikey': key,
+      'Authorization': `Bearer ${key}`,
+      'Content-Type': 'application/json'
+    },
+    muteHttpExceptions: true
+  };
+}
+
+/**
+ * Fetches several answer-key manifests at once.
+ * @param {string[]} codes - assignment short codes
+ * @returns {Object} code -> manifest, or null when the code has no worksheet or could not be read
+ */
+function fetchWorksheetManifestsBatch_(codes) {
+  const clean = codes.map(c => String(c || '').trim().toUpperCase()).filter(Boolean);
+  const result = {};
+  if (clean.length === 0) return result;
+  const base = buildSupabaseServerRequest_();
+  const responses = UrlFetchApp.fetchAll(clean.map(code => Object.assign({
+    url: `${SUPABASE_CONFIG.url}/rest/v1/rpc/get_worksheet_manifest?lookup_code=${encodeURIComponent(code)}`
+  }, base)));
+  responses.forEach((response, i) => {
+    let manifest = null;
+    try {
+      if (response.getResponseCode() === 200) {
+        const data = JSON.parse(response.getContentText());
+        if (data && data.worksheet) manifest = data;
+      }
+    } catch (e) {}
+    result[clean[i]] = manifest;
+  });
+  return result;
 }
 
 /**

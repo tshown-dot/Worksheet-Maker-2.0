@@ -920,8 +920,10 @@
 
     function formatFeedbackWithStandardsMap(feedbackText) {
       if (!feedbackText) return '';
-      return String(feedbackText).replace(/\[([4-8]\.[A-Z]+\.[A-Z0-9\.]+)\]/gi, function(match, code) {
-        const translated = getStandardLabel(code);
+      return String(feedbackText).replace(/\[([^\[\]]{3,24})\]/g, function(match, code) {
+        // Any standard code, e.g. 6.NS.C.7a or A-REI.B.3
+        if (!/\d/.test(code) || !/^[A-Z0-9]{1,4}[.-][A-Z]{1,4}(?:[.-][A-Z0-9]{1,4})+$/i.test(code.trim())) return match;
+        const translated = getStandardLabel(code.trim());
         return translated ? ('[' + translated + ']') : match;
       });
     }

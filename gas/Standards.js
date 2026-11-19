@@ -145,6 +145,108 @@ function translateStandard(code, customDict) {
 }
 
 /**
+ * True for a standard code such as "6.NS.C.7a", "7.RP.A.3" or "A-REI.B.3".
+ */
+function isStandardCode_(text) {
+  const t = String(text || '').trim();
+  return /\d/.test(t) && /^[A-Z0-9]{1,4}[.-][A-Z]{1,4}(?:[.-][A-Z0-9]{1,4})+$/i.test(t);
+}
+
+/**
+ * Pulls the standard code out of a Gradebook feedback cell. The grader ends
+ * feedback with the code in brackets, e.g. "... [6.NS.C.7a]"; the last such
+ * tag wins. Older rows without brackets fall back to a plain grade 4-8 code.
+ * @returns {string|null} upper-cased code, or null
+ */
+function extractStandardCode_(feedback) {
+  const text = String(feedback || '');
+  const tags = text.match(/\[([^\[\]]{3,24})\]/g) || [];
+  for (let i = tags.length - 1; i >= 0; i--) {
+    const inner = tags[i].slice(1, -1).trim();
+    if (isStandardCode_(inner)) return inner.toUpperCase();
+  }
+  const legacy = text.match(/\b([4-8]\.[A-Z]{1,4}\.[A-Z]\.\d+[a-z]?)/i);
+  return legacy ? legacy[1].toUpperCase() : null;
+}
+
+/**
+ * Builds a function that says how much of a question's credit a score is
+ * (0 to 1), so partial credit counts as partial in mastery figures.
+ * Points possible come from the answer key (cached for 6 hours); when a key is
+ * gone, the highest score anyone got on that question stands in for it.
+ */
+function buildQuestionCreditResolver_(rows, codeCol, q1ScoreCol) {
+  const cleanCode = v => String(v || '').trim().toUpperCase();
+  const maxObserved = {};
+  const codes = {};
+  rows.forEach(r => {
+    const code = cleanCode(r[codeCol]);
+    if (!code) return;
+    codes[code] = true;
+    for (let q = 0; q < GRADEBOOK_MAX_QUESTIONS; q++) {
+      const v = parseFloat(r[q1ScoreCol + q * 3]);
+      const k = code + '|' + (q + 1);
+      if (isFinite(v) && v > (maxObserved[k] || 0)) maxObserved[k] = v;
+    }
+  });
+
+  const keyPoints = getKeyPointsForAssignments_(Object.keys(codes));
+  return function(code, questionNumber, score) {
+    const c = cleanCode(code);
+    let possible = Number((keyPoints[c] || {})[questionNumber]);
+    if (!(possible > 0)) possible = maxObserved[c + '|' + questionNumber] || 0;
+    if (!(possible > 0)) return score > 0 ? 1 : 0;
+    return Math.max(0, Math.min(1, score / possible));
+  };
+}
+
+/**
+ * Points per question for each assignment code, e.g. { M5311: { 1: 2, 3: 3 } }.
+ * Uses the script cache, and fetches all missing codes in one batch.
+ */
+function getKeyPointsForAssignments_(codes) {
+  const out = {};
+  if (codes.length === 0) return out;
+  const cache = CacheService.getScriptCache();
+  const cacheKey = c => 'key_points_v1_' + c;
+  let cached = {};
+  try {
+    cached = cache.getAll(codes.map(cacheKey)) || {};
+  } catch (e) {}
+
+  const missing = [];
+  codes.forEach(c => {
+    const hit = cached[cacheKey(c)];
+    if (hit !== undefined && hit !== null) {
+      try { out[c] = JSON.parse(hit); return; } catch (e) {}
+    }
+    missing.push(c);
+  });
+  if (missing.length === 0) return out;
+
+  let manifests = {};
+  try {
+    manifests = fetchWorksheetManifestsBatch_(missing);
+  } catch (e) {
+    console.warn('Could not load answer keys for mastery figures:', e);
+    return out;
+  }
+  const found = {};
+  const notFound = {};
+  missing.forEach(c => {
+    const points = getAnswerKeyPoints_(manifests[c]) || {};
+    out[c] = points;
+    if (Object.keys(points).length > 0) found[cacheKey(c)] = JSON.stringify(points);
+    else notFound[cacheKey(c)] = '{}';
+  });
+  try {
+    if (Object.keys(found).length > 0) cache.putAll(found, 21600);
+    if (Object.keys(notFound).length > 0) cache.putAll(notFound, 3600);
+  } catch (e) {}
+  return out;
+}
+
+/**
  * Returns the complete Standards Map dictionary, merging built-in STANDARDS_DICTIONARY
  * with any custom rows from the "Standards Map" sheet tab.
  */
@@ -248,7 +350,9 @@ function updateStudentMonitoringSheet() {
     const periodCol = headers.indexOf('class / period');
     const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 5;
     const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 6;
-    const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 8;
+    const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 11;
+    const codeCol = headers.indexOf('assignment code') !== -1 ? headers.indexOf('assignment code') : 5;
+    const creditFor = buildQuestionCreditResolver_(rows, codeCol, q1ScoreCol);
 
     for (const r of rows) {
       const rawId = String(r[idCol] || '').trim();
@@ -314,15 +418,14 @@ function updateStudentMonitoringSheet() {
         const qScore = parseFloat(cellVal) || 0;
         const qFeedback = String(r[baseCol + 2] || '');
 
-        const stdMatch = qFeedback.match(/([4-8]\.[A-Z]+\.[A-Z0-9\.]+)/i);
-        const stdCode = stdMatch ? stdMatch[1].toUpperCase() : null;
+        const stdCode = extractStandardCode_(qFeedback);
 
         if (stdCode) {
           if (!sData.standards[stdCode]) {
             sData.standards[stdCode] = { attempts: 0, correct: 0 };
           }
           sData.standards[stdCode].attempts++;
-          if (qScore > 0) sData.standards[stdCode].correct++;
+          sData.standards[stdCode].correct += creditFor(r[codeCol], q + 1, qScore);
         }
       }
     }

@@ -16,6 +16,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🔍 Filter Gradebook (Class & Date)', 'openGradebookFilterDialog')
     .addItem('🔄 Clear Gradebook Filter (Show All)', 'clearGradebookFilter')
+    .addItem('🧹 Remove Older Duplicate Grades', 'removeOlderDuplicateGrades')
     .addItem('🔑 Update & Lock Student Passwords', 'updateStudentPortalPasswords')
     .addSeparator()
     .addItem('🚀 Grade Scanned Worksheets (from Drive)', 'gradeScannedWorksheets')
@@ -1199,10 +1200,10 @@ function getStudentPortalData(rawStudentId, rawPassword) {
     const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 8;
     const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 9;
     const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 11;
+    const studentRows = rows.filter(r => normalizeStudentIdKey(String(r[idCol] || '').replace(/^#/, '').trim()) === normInputId);
+    const creditFor = buildQuestionCreditResolver_(studentRows, codeCol, q1ScoreCol);
 
-    for (const r of rows) {
-      const rowId = String(r[idCol] || '').replace(/^#/, '').trim();
-      if (normalizeStudentIdKey(rowId) !== normInputId) continue;
+    for (const r of studentRows) {
 
       if (!resolvedFirst && firstCol !== -1 && r[firstCol]) resolvedFirst = String(r[firstCol]).trim();
       if (!resolvedLast && lastCol !== -1 && r[lastCol]) resolvedLast = String(r[lastCol]).trim();
@@ -1240,11 +1241,10 @@ function getStudentPortalData(rawStudentId, rawPassword) {
         const qAns = String(r[baseCol + 1] || '');
         const qFeedback = String(r[baseCol + 2] || '');
 
-        const stdMatch = qFeedback.match(/([4-8]\.[A-Z]+\.[A-Z0-9\.]+)/i);
-        const stdCode = stdMatch ? stdMatch[1].toUpperCase() : null;
-        const cleanFeedback = qFeedback.replace(/\[([4-8]\.[A-Z]+\.[A-Z0-9\.]+)\]/gi, function(m, c) {
-          const translated = typeof translateStandard === 'function' ? translateStandard(c) : c;
-          return `[${translated}]`;
+        const stdCode = extractStandardCode_(qFeedback);
+        const cleanFeedback = qFeedback.replace(/\[([^\[\]]{3,24})\]/g, function(m, c) {
+          if (!isStandardCode_(c)) return m;
+          return `[${translateStandard(c.trim())}]`;
         });
 
         questions.push({
@@ -1258,7 +1258,7 @@ function getStudentPortalData(rawStudentId, rawPassword) {
             standardsMap[stdCode] = { code: stdCode, attempts: 0, correct: 0 };
           }
           standardsMap[stdCode].attempts++;
-          if (qScore > 0) standardsMap[stdCode].correct++;
+          standardsMap[stdCode].correct += creditFor(r[codeCol], qIdx + 1, qScore);
         }
       }
 
@@ -1360,6 +1360,7 @@ function getGradebookAnalytics() {
   const ptsCol = headers.indexOf('points') !== -1 ? headers.indexOf('points') : 8;
   const totalPtsCol = headers.indexOf('total pts') !== -1 ? headers.indexOf('total pts') : 9;
   const q1ScoreCol = headers.indexOf('q1 score') !== -1 ? headers.indexOf('q1 score') : 11;
+  const creditFor = buildQuestionCreditResolver_(rows, codeCol, q1ScoreCol);
 
   let totalScoreSum = 0;
   let passingCount = 0;
@@ -1430,20 +1431,19 @@ function getGradebookAnalytics() {
 
       if (!isNaN(parseFloat(cellVal))) {
         qAccumulator[qIdx].attempts++;
-        if (qScore > 0) qAccumulator[qIdx].earnedSum++;
+        qAccumulator[qIdx].earnedSum += creditFor(row[codeCol], qIdx + 1, qScore);
         if (qScore === 0 && qFeedback) {
           qAccumulator[qIdx].feedbackSamples.push(qFeedback);
         }
       }
 
-      const stdMatch = qFeedback.match(/([4-8]\.[A-Z]+\.[A-Z0-9\.]+)/i);
-      const stdCode = stdMatch ? stdMatch[1].toUpperCase() : null;
+      const stdCode = extractStandardCode_(qFeedback);
       if (stdCode) {
         if (!studentStandards[stdCode]) {
           studentStandards[stdCode] = { attempts: 0, correct: 0 };
         }
         studentStandards[stdCode].attempts++;
-        if (qScore > 0) studentStandards[stdCode].correct++;
+        studentStandards[stdCode].correct += creditFor(row[codeCol], qIdx + 1, qScore);
       }
     }
 
@@ -1702,6 +1702,112 @@ function applyGradebookFilter(targetPeriod, datePreset, customStart, customEnd) 
 }
 
 /**
+ * Menu action: keeps only the newest grade for each student and assignment.
+ * Shows the teacher how many older rows would go, per assignment, and deletes
+ * nothing unless they confirm. Rows with an unreadable student ID are never
+ * touched. The kept rows lose their "already has a row" review note.
+ */
+function removeOlderDuplicateGrades() {
+  requireTeacher_();
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Gradebook');
+  if (!sheet || sheet.getLastRow() <= 2) {
+    ui.alert('Nothing to remove', 'The Gradebook has no repeated grades.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  const values = sheet.getRange(2, 1, lastRow - 1, 11).getValues(); // Timestamp .. Status
+  const timeOf = v => (v instanceof Date ? v.getTime() : (Date.parse(String(v || '').replace(' ', 'T')) || 0));
+  const keyOf = r => {
+    const id = normalizeStudentIdKey(r[1]);
+    const code = String(r[5] || '').trim().toUpperCase();
+    return id && code ? id + '|' + code : '';
+  };
+
+  // Newest row per student + assignment (later rows win ties)
+  const newest = {};
+  values.forEach((r, i) => {
+    const key = keyOf(r);
+    if (!key) return;
+    if (newest[key] === undefined || timeOf(r[0]) >= timeOf(values[newest[key]][0])) newest[key] = i;
+  });
+
+  const rowsToDelete = [];
+  const perAssignment = {};
+  values.forEach((r, i) => {
+    const key = keyOf(r);
+    if (!key || newest[key] === i) return;
+    rowsToDelete.push(i + 2);
+    const code = String(r[5] || '').trim().toUpperCase();
+    perAssignment[code] = (perAssignment[code] || 0) + 1;
+  });
+
+  if (rowsToDelete.length === 0) {
+    ui.alert('Nothing to remove', 'Every student has at most one grade per assignment.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const summary = Object.keys(perAssignment).sort().map(c => `${c}: ${perAssignment[c]} older row(s)`).join('\n');
+  const answer = ui.alert(
+    'Remove older duplicate grades?',
+    `${rowsToDelete.length} row(s) are older grades for a student who has a newer grade on the same assignment:\n\n${summary}\n\n` +
+      'The newest grade for each student and assignment is kept and the older rows are deleted. ' +
+      'Rows with an unreadable student ID are not touched.\n\nIf you need them back later, File ➔ Version history ➔ See version history can restore the sheet.\n\nDelete them?',
+    ui.ButtonSet.YES_NO
+  );
+  if (answer !== ui.Button.YES) return;
+
+  // Delete from the bottom up, a run of neighbouring rows at a time
+  rowsToDelete.sort((a, b) => b - a);
+  for (let i = 0; i < rowsToDelete.length;) {
+    let start = rowsToDelete[i];
+    let count = 1;
+    while (i + count < rowsToDelete.length && rowsToDelete[i + count] === start - 1) {
+      start--;
+      count++;
+    }
+    sheet.deleteRows(start, count);
+    i += count;
+  }
+
+  // The kept rows are no longer repeats: drop that review note
+  const remaining = sheet.getLastRow() - 1;
+  if (remaining > 0) {
+    const statusRange = sheet.getRange(2, 11, remaining, 1);
+    const statuses = statusRange.getValues();
+    const scores = sheet.getRange(2, 8, remaining, 1).getValues();
+    let changed = false;
+    const newStatuses = statuses.map((cell, i) => {
+      const status = String(cell[0] || '');
+      if (status.indexOf(DUPLICATE_ROW_REASON) === -1) return [cell[0]];
+      changed = true;
+      const reasons = status.replace(/^Needs Review\s*—\s*/, '').split(';').map(x => x.trim()).filter(x => x && x !== DUPLICATE_ROW_REASON);
+      if (reasons.length > 0) return ['Needs Review — ' + reasons.join('; ')];
+      let pct = parseFloat(String(scores[i][0]).replace('%', ''));
+      if (typeof scores[i][0] === 'number' && scores[i][0] <= 1) pct = scores[i][0] * 100;
+      return [pct >= 70 ? 'Passed' : 'Needs Practice'];
+    });
+    if (changed) {
+      statusRange.setValues(newStatuses);
+      const review = newStatuses.map(r => /^Needs Review/.test(String(r[0])));
+      statusRange
+        .setBackgrounds(review.map(x => [x ? '#ffedd5' : null]))
+        .setFontColors(review.map(x => [x ? '#9a3412' : null]))
+        .setFontWeights(review.map(x => [x ? 'bold' : 'normal']));
+    }
+  }
+
+  try {
+    updateStudentMonitoringSheet();
+  } catch (e) {
+    console.warn('Monitoring refresh warning:', e);
+  }
+
+  ui.alert('Done ✅', `Removed ${rowsToDelete.length} older duplicate row(s). Standards monitoring has been refreshed.`, ui.ButtonSet.OK);
+}
+
+/**
  * Clears all active filter criteria on the Gradebook sheet so all rows are visible
  */
 function clearGradebookFilter() {
@@ -1878,20 +1984,22 @@ function assignmentTitlesAgree_(scannedTitle, storedTitle) {
 }
 
 /**
- * Works out which answer key a scan file should be graded against.
+ * Works out which answer key(s) a scan file should be graded against.
  * Order of trust: the teacher's choice in the sidebar, a code in the file name,
- * then the code Gemini reads off the page (which must also match the title).
- * Throws a teacher-readable reason when no single key can be chosen, because a
+ * then the code(s) Gemini reads off the pages (each must also match its title).
+ * A stack holding several assignments gets one key per assignment.
+ * Throws a teacher-readable reason when the keys cannot be settled, because a
  * worksheet is never graded without its answer key.
+ * @returns {Object[]} one manifest per assignment in the file
  */
-function resolveManifestForScan_(file, pdfBlob, selectedManifest, getManifestCached) {
-  if (selectedManifest) return selectedManifest;
+function resolveManifestsForScan_(file, pdf, selectedManifest, getManifestCached) {
+  if (selectedManifest) return [selectedManifest];
 
   const fileCodeHint = detectAssignmentCodeFromFileName(file.getName());
   const hinted = fileCodeHint ? getManifestCached(fileCodeHint) : null;
-  if (hinted) return hinted;
+  if (hinted) return [hinted];
 
-  const found = identifyWorksheetWithGemini_(pdfBlob);
+  const found = identifyWorksheetWithGemini_(pdf);
   if (found.length === 0) {
     throw new Error('could not read an assignment code on the page. Choose the assignment in the dropdown and grade again.');
   }
@@ -1909,22 +2017,24 @@ function resolveManifestForScan_(file, pdfBlob, selectedManifest, getManifestCac
     }
   });
 
-  if (matches.length === 1 && problems.length === 0) return matches[0];
-  if (matches.length > 1) {
-    const codes = matches.map(m => m.worksheet.short_code).join(', ');
-    throw new Error(`this PDF mixes more than one assignment (${codes}). Scan each assignment as its own PDF.`);
-  }
+  if (matches.length > 0 && problems.length === 0) return matches;
   throw new Error(`${problems.join('; ')}. Choose the assignment in the dropdown and grade again.`);
 }
+
+const DUPLICATE_ROW_REASON = 'this student already has a row for this assignment';
 
 /**
  * Turns one graded submission into a Gradebook row plus the reasons, if any,
  * that a teacher should look at it.
  */
 function buildGradebookRow_(sub, rowNum, context) {
-  const manifest = context.manifest;
+  const manifest = sub.manifest || context.manifest;
   const manifestCode = String(manifest.worksheet.short_code || '').trim().toUpperCase();
   const reviewReasons = [];
+  const keyStandards = {};
+  (manifest.questions || []).forEach(q => {
+    if (q.order_index != null && q.standard) keyStandards[q.order_index] = String(q.standard).trim();
+  });
 
   const extractedId = String(sub.studentId || '').replace(/^#/, '').trim();
   const extractedName = String(sub.studentName || '').trim();
@@ -1949,10 +2059,12 @@ function buildGradebookRow_(sub, rowNum, context) {
   if (/low/i.test(String(sub.confidence || ''))) {
     reviewReasons.push('AI was unsure of the handwriting');
   }
+  (Array.isArray(sub.reviewNotes) ? sub.reviewNotes : []).forEach(note => reviewReasons.push(note));
 
   const duplicateKey = normalizeStudentIdKey(finalStudentId) + '|' + manifestCode;
   if (finalStudentId !== '???' && context.existingKeys[duplicateKey]) {
-    reviewReasons.push('this student already has a row for this assignment');
+    reviewReasons.push(DUPLICATE_ROW_REASON);
+    context.duplicateCount = (context.duplicateCount || 0) + 1;
   }
   context.existingKeys[duplicateKey] = true;
 
@@ -1995,7 +2107,7 @@ function buildGradebookRow_(sub, rowNum, context) {
     // Show what scratch work the AI saw, so partial-credit decisions can be checked
     const workShown = String(q.workShown || '').trim();
     if (workShown) feedback = `Work seen: ${workShown.replace(/[.\s]+$/, '')}. ${feedback}`;
-    const standard = context.keyStandards[number];
+    const standard = keyStandards[number];
     if (standard && feedback.toUpperCase().indexOf(String(standard).toUpperCase()) === -1) {
       feedback = `${feedback} [${standard}]`.trim();
     }
@@ -2139,7 +2251,9 @@ function runGradingFromSidebar(selectedAssignmentCode) {
     let needsReviewCount = 0;
     let alreadyGradedCount = 0;
     let filesLeftForNextRun = 0;
+    let duplicateRowsCount = 0;
     const failures = [];
+    const fileNotes = [];
 
     for (let fileIndex = 0; fileIndex < filesToGrade.length; fileIndex++) {
       const file = filesToGrade[fileIndex];
@@ -2158,30 +2272,42 @@ function runGradingFromSidebar(selectedAssignmentCode) {
           continue;
         }
 
-        const pdfBlob = file.getBlob();
-        const manifest = resolveManifestForScan_(file, pdfBlob, selectedManifest, getManifestCached);
-        const gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
+        // Prepared once and shared by every Gemini request about this file
+        const pdf = preparePdfForGemini_(file.getBlob());
+        let gradeResult;
+        let manifests;
+        try {
+          manifests = resolveManifestsForScan_(file, pdf, selectedManifest, getManifestCached);
+          gradeResult = gradeWorksheetWithGemini(pdf, manifests);
+        } finally {
+          pdf.release();
+        }
+
         const submissions = Array.isArray(gradeResult.submissions) ? gradeResult.submissions : [];
         if (submissions.length === 0) {
           throw new Error('the AI did not find any student work in this PDF.');
         }
-
-        const keyStandards = {};
-        manifest.questions.forEach(q => {
-          if (q.order_index != null && q.standard) keyStandards[q.order_index] = String(q.standard).trim();
-        });
+        const unmatched = submissions.filter(sub => !sub.manifest);
+        if (unmatched.length > 0) {
+          const ids = unmatched.map(sub => String(sub.studentId || '').trim() || 'unreadable ID').join(', ');
+          throw new Error(`this PDF holds more than one assignment and the AI could not tell which one the paper(s) for ${ids} belong to. Scan each assignment as its own PDF.`);
+        }
 
         const context = {
-          manifest: manifest,
+          manifest: manifests[0],
           rosterInfo: rosterInfo,
           existingKeys: existingKeys,
-          keyStandards: keyStandards,
           now: new Date(),
           fileNameClean: file.getName().replace(/\.pdf$/i, '').trim()
         };
 
         const startRow = sheet.getLastRow() + 1;
         const builtRows = submissions.map((sub, i) => buildGradebookRow_(sub, startRow + i, context));
+        duplicateRowsCount += context.duplicateCount || 0;
+        (gradeResult.notes || []).forEach(note => fileNotes.push(`${file.getName().replace(/[<>]/g, '')}: ${String(note).replace(/[<>]/g, '')}`));
+        if (manifests.length > 1) {
+          fileNotes.push(`${file.getName().replace(/[<>]/g, '')}: graded as a mixed stack (${manifests.map(m => m.worksheet.short_code).join(', ')})`);
+        }
 
         writeGradebookRows_(sheet, startRow, builtRows);
         rememberGradedFile_(file.getId());
@@ -2220,6 +2346,12 @@ function runGradingFromSidebar(selectedAssignmentCode) {
     }
     if (needsReviewCount > 0) {
       parts.push(`⚠️ ${needsReviewCount} row(s) are marked "Needs Review" in the Status column.`);
+    }
+    if (duplicateRowsCount > 0) {
+      parts.push(`${duplicateRowsCount} of them repeat an assignment the student already had a grade for; use "🧹 Remove Older Duplicate Grades" in the menu to keep only the newest.`);
+    }
+    if (fileNotes.length > 0) {
+      parts.push(`Notes: ${fileNotes.join(' | ')}.`);
     }
     if (alreadyGradedCount > 0) {
       parts.push(`${alreadyGradedCount} file(s) were already in the Gradebook and were just moved to "Scanned".`);
@@ -2457,10 +2589,8 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
       const qAns = qAnsIndex !== -1 ? String(row[qAnsIndex] || '') : '';
       const qFeedback = qFeedbackIndex !== -1 ? String(row[qFeedbackIndex] || '') : '';
 
-      // Extract standard from feedback e.g. [6.NS.C.6b] or 6.NS.C.6b
-      let stdCode = '';
-      const stdMatch = qFeedback.match(/\[?([4-8]\.[A-Z]+\.[A-Z]+(?:\.[0-9a-zA-Z]+)?)\]?/i);
-      if (stdMatch) stdCode = stdMatch[1];
+      // Standard tag at the end of the feedback, e.g. [6.NS.C.6b] or [A-REI.B.3]
+      const stdCode = extractStandardCode_(qFeedback) || '';
 
       if (activeCodesSet.has(code)) {
         const itemKey = `${code}_Q${q}`;
