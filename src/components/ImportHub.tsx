@@ -344,6 +344,9 @@ RULES:
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
 - Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}, {"label": "C", "text": "14"}, {"label": "D", "text": "16"}]. Keep each option text short and concise (under 8 words) so it does not crowd the student workspace box.
+- "rubric_notes" must split the points into steps that can be checked from what the student writes on the page: a written setup or calculation, a specific intermediate result, or the final answer. Name the exact value or expression each step expects (e.g. "1 pt for writing 10^3 = 1000, 1 pt for 5^3 = 125, 1 pt for 875").
+- Never write a rubric step about what the student thinks, recognises or understands (e.g. "1 pt for identifying this is a GCF problem"), and never give a point for leaving a number from the question unchanged (e.g. "1 pt for keeping x the same"). Describe the written evidence instead (e.g. "1 pt if the work lists the factors of both 24 and 36, or the answer is a common factor other than 12").
+- The rubric steps must add up to "points". For multiple choice and one-step questions write "N pts for the correct answer; no partial credit." When a specific wrong answer should earn partial or zero credit, name that exact answer.
 - Output ONLY the JSON array inside a \`\`\`json code block, with no conversational text or follow-up tags.`;
 
   // 2. Prompt for Generating Brand New Content
@@ -371,6 +374,9 @@ RULES:
 - "standard" must be the middle school NJSLS / Common Core math standard (e.g. "6.NS.C.7a", "6.EE.B.7", "5.NF.B.6", "7.RP.A.2").
 - Wrap inline math expressions in $...$ delimiters (e.g. "Evaluate $3x^2 - 4.5$ when $x = 2.4$."). Keep English words like "when" outside the $...$ delimiters, and do not add raw \\quad spacing.
 - For multiple choice, include "options": [{"label": "A", "text": "10"}, {"label": "B", "text": "12"}, {"label": "C", "text": "14"}, {"label": "D", "text": "16"}]. Keep each option text short and concise (under 8 words) so it does not crowd the student workspace box.
+- "rubric_notes" must split the points into steps that can be checked from what the student writes on the page: a written setup or calculation, a specific intermediate result, or the final answer. Name the exact value or expression each step expects (e.g. "1 pt for writing 10^3 = 1000, 1 pt for 5^3 = 125, 1 pt for 875").
+- Never write a rubric step about what the student thinks, recognises or understands (e.g. "1 pt for identifying this is a GCF problem"), and never give a point for leaving a number from the question unchanged (e.g. "1 pt for keeping x the same"). Describe the written evidence instead (e.g. "1 pt if the work lists the factors of both 24 and 36, or the answer is a common factor other than 12").
+- The rubric steps must add up to "points". For multiple choice and one-step questions write "N pts for the correct answer; no partial credit." When a specific wrong answer should earn partial or zero credit, name that exact answer.
 - Output ONLY the JSON array inside a \`\`\`json code block, with no conversational text or follow-up tags.`;
 
   const handleCopy = (type: 'convert' | 'generate') => {

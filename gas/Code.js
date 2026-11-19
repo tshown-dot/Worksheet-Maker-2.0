@@ -2687,11 +2687,23 @@ function robustParseGeneratedJson_(rawText) {
  * Calls Gemini with the provided POD prompt, parses the resulting daily worksheets,
  * saves them to Supabase (`worksheets` + `questions`), and returns the created IDs.
  */
+/**
+ * Rules for writing rubric notes that the autograder can apply the same way on
+ * every read: each step must be something visible on the student's page.
+ * Added to every POD generation prompt, whatever the caller sent.
+ */
+const CHECKABLE_RUBRIC_RULES = [
+  "- \"rubric_notes\" must split the points into steps that can be checked from what the student writes on the page: a written setup or calculation, a specific intermediate result, or the final answer. Name the exact value or expression each step expects (e.g. \"1 pt for writing 10^3 = 1000, 1 pt for 5^3 = 125, 1 pt for 875\").",
+  "- Never write a rubric step about what the student thinks, recognises or understands (e.g. \"1 pt for identifying this is a GCF problem\"), and never give a point for leaving a number from the question unchanged (e.g. \"1 pt for keeping x the same\"). Describe the written evidence instead (e.g. \"1 pt if the work lists the factors of both 24 and 36, or the answer is a common factor other than 12\").",
+  "- The rubric steps must add up to \"points\". For multiple choice and one-step questions write \"N pts for the correct answer; no partial credit.\" When a specific wrong answer should earn partial or zero credit, name that exact answer."
+].join('\n');
+
 function handleGenerateAndSavePODWeek_(body) {
-  const promptText = String((body && body.prompt) || '').trim();
-  if (!promptText) {
+  const callerPrompt = String((body && body.prompt) || '').trim();
+  if (!callerPrompt) {
     throw new Error('Missing POD prompt.');
   }
+  const promptText = callerPrompt + '\n\nRUBRIC RULES (these override any earlier rubric instructions):\n' + CHECKABLE_RUBRIC_RULES;
 
   const props = PropertiesService.getScriptProperties();
   const apiKey = props.getProperty('GEMINI_API_KEY');
