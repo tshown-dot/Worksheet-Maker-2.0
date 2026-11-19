@@ -119,31 +119,17 @@ function describeGeminiUsage_() {
 const INLINE_PDF_MAX_BYTES = 14 * 1024 * 1024;
 
 /**
- * Reply shape for the second, transcription-only read of a scan.
+ * Reply shape for the ID check: each student's ID, in page order.
  */
-const SECOND_READ_RESPONSE_SCHEMA = {
+const ID_CHECK_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
     students: {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
-        properties: {
-          studentId: { type: 'STRING' },
-          assignmentCode: { type: 'STRING' },
-          answers: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                orderIndex: { type: 'INTEGER' },
-                answer: { type: 'STRING' }
-              },
-              required: ['orderIndex', 'answer']
-            }
-          }
-        },
-        required: ['studentId', 'answers']
+        properties: { studentId: { type: 'STRING' } },
+        required: ['studentId']
       }
     }
   },
@@ -159,8 +145,8 @@ function getGeminiSettings_() {
   return {
     apiKey: apiKey,
     model: props.getProperty('GEMINI_MODEL') || GEMINI_MODEL,
-    // The second read is on unless the Script Property SECOND_READ is set to "off"
-    secondRead: String(props.getProperty('SECOND_READ') || 'on').trim().toLowerCase() !== 'off'
+    // The ID check is on unless the Script Property ID_CHECK is set to "off"
+    idCheck: String(props.getProperty('ID_CHECK') || 'on').trim().toLowerCase() !== 'off'
   };
 }
 
@@ -265,7 +251,7 @@ LAYOUT & HEADER EXTRACTION RULES:
    - Copy the exact printed assignment title in the header. If you cannot read it, return "".
 5. MULTI-PAGE / COPIER BATCH SUPPORT:
    - A single PDF file may contain ONE student's worksheet (1 or 2 pages) OR a stack of MULTIPLE students' worksheets scanned together at the copier.
-   - Group pages belonging to the same student together, and output one entry per student in the "submissions" array.
+   - Group pages belonging to the same student together, and output one entry per student in the "submissions" array, in the order the students appear in the PDF.
 
 GRADING & MATHEMATICAL EQUIVALENCE RULES:
 For each question on the student's worksheet:
@@ -319,27 +305,19 @@ Each question has "orderIndex" (number), "standard", "studentAnswer", "workShown
 }
 
 /**
- * Instructions for the second read: copy IDs and final answers only. It is
- * given no answer key on purpose, so its reading cannot lean on the expected answers.
+ * Instructions for the ID check: read each student's ID and nothing else.
  */
-function buildSecondReadPrompt_(manifests) {
-  const numbers = {};
-  manifests.forEach(m => (m.questions || []).forEach(q => { if (q.order_index != null) numbers[q.order_index] = true; }));
-  const list = Object.keys(numbers).map(Number).sort((a, b) => a - b);
-  return `Transcribe only. This PDF contains one or more students' printed math worksheets with handwritten answers.
-For each student's worksheet, in page order, copy:
-- "studentId": the number written in the box labeled "STUDENT ID #" (or "ID #") in the top-right header. Keep leading zeros. Use "" if it is blank or unreadable. Never guess.
-- "assignmentCode": the printed Assignment Code next to the QR code.
-- "answers": for each question number ${list.length ? '(' + list.join(', ') + ')' : 'on the page'}, the student's final answer: what is written in that question's FINAL ANSWER box, or the bubble letter chosen for multiple choice. If the box is empty but a final answer is clearly marked in the work area (circled, boxed, underlined or the last line of the work), copy that. Otherwise use "".
-Copy exactly what the student wrote, even if it looks wrong. Do not solve, check or grade anything.
-Output ONLY valid JSON: { "students": [ { "studentId": "", "assignmentCode": "", "answers": [ { "orderIndex": 1, "answer": "" } ] } ] }`;
+function buildIdCheckPrompt_() {
+  return `This PDF contains one or more students' printed math worksheets. A student's worksheet may have several pages; only its first page has the header.
+For each student's worksheet, in page order, copy "studentId": the number written in the box labeled "STUDENT ID #" (or "ID #") in the top-right header. Keep leading zeros. Use "" if it is blank or unreadable. Never guess.
+Read nothing else. Output ONLY valid JSON: { "students": [ { "studentId": "" } ] }`;
 }
 
 /**
  * Grades a scanned PDF against one or more answer keys.
- * When the second read is on, a transcription-only read of the same PDF is sent
- * at the same moment, and any student whose ID or answers it reads differently
- * is marked for review.
+ * When the ID check is on, a second request that reads only the student IDs is
+ * sent at the same moment, and any paper whose ID it reads differently is
+ * marked for review. Answers are read once.
  *
  * @param {Blob|{part: Object}} pdf - the PDF, or the result of preparePdfForGemini_
  * @param {Object|Object[]} manifestOrList - answer key manifest(s) from Supabase
@@ -353,9 +331,8 @@ function gradeWorksheetWithGemini(pdf, manifestOrList) {
   const prepared = pdf && pdf.part ? pdf : preparePdfForGemini_(pdf);
   try {
     const jobs = [{ promptText: buildGradingPrompt_(manifests), schema: GRADING_RESPONSE_SCHEMA }];
-    const useSecondRead = settings.secondRead && manifests.length > 0;
-    if (useSecondRead) {
-      jobs.push({ promptText: buildSecondReadPrompt_(manifests), schema: SECOND_READ_RESPONSE_SCHEMA });
+    if (settings.idCheck) {
+      jobs.push({ promptText: buildIdCheckPrompt_(), schema: ID_CHECK_RESPONSE_SCHEMA });
     }
 
     const results = callGeminiJobs_(settings, prepared.part, jobs);
@@ -363,11 +340,11 @@ function gradeWorksheetWithGemini(pdf, manifestOrList) {
 
     const graded = normalizeGradeResult_(results[0].value, manifests);
     graded.notes = [];
-    if (useSecondRead) {
+    if (settings.idCheck) {
       if (results[1].error) {
-        graded.notes.push('second read failed, so answers were not double-checked: ' + String(results[1].error.message || results[1].error).slice(0, 120));
+        graded.notes.push('ID check failed, so student IDs were not double-checked: ' + String(results[1].error.message || results[1].error).slice(0, 120));
       } else {
-        applySecondRead_(graded, results[1].value);
+        applyIdCheck_(graded, results[1].value);
       }
     }
     return graded;
@@ -650,19 +627,6 @@ function parseAnswerNumber_(value) {
   return null;
 }
 
-/** True when two written answers say the same thing. Blank never equals non-blank. */
-function sameWrittenAnswer_(a, b) {
-  const blank = v => { const t = String(v || '').trim(); return !t || t === '—' || t === '-'; };
-  if (blank(a) || blank(b)) return blank(a) && blank(b);
-  if (canonicalAnswerText_(a) === canonicalAnswerText_(b)) return true;
-  const la = choiceLetter_(a);
-  const lb = choiceLetter_(b);
-  if (la && lb) return la === lb;
-  const na = parseAnswerNumber_(a);
-  const nb = parseAnswerNumber_(b);
-  return na !== null && nb !== null && Math.abs(na - nb) <= 1e-9 * Math.max(1, Math.abs(na));
-}
-
 /**
  * Compares a student's written answer with the key in code, without the AI.
  * @returns {string} 'match', 'mismatch', or 'unknown' when code cannot tell
@@ -694,56 +658,24 @@ function checkAnswerAgainstKey_(studentAnswer, keyQuestion) {
 }
 
 /**
- * Compares the second, transcription-only read with the graded read and marks
- * every student whose ID or answers were read differently. Students are paired
- * by ID where both reads agree on it, and otherwise in page order.
+ * Compares the ID check with the IDs the grading read saw, paper by paper in
+ * page order, and marks every paper whose ID was read differently.
  */
-function applySecondRead_(graded, secondRead) {
-  const students = Array.isArray(secondRead && secondRead.students) ? secondRead.students : [];
+function applyIdCheck_(graded, idCheck) {
+  const students = Array.isArray(idCheck && idCheck.students) ? idCheck.students : [];
   const subs = graded.submissions;
   subs.forEach(s => { s.reviewNotes = s.reviewNotes || []; });
 
   if (students.length !== subs.length) {
-    subs.forEach(s => s.reviewNotes.push(`second read found ${students.length} student(s) in this PDF, first read ${subs.length}`));
+    subs.forEach(s => s.reviewNotes.push(`ID check found ${students.length} student(s) in this PDF, grading found ${subs.length}`));
     return;
   }
 
   const idKey = v => normalizeStudentIdKey(String(v || '').replace(/^#/, '').trim());
-  const used = {};
-  const pairs = [];
   subs.forEach((s, i) => {
-    const key = idKey(s.studentId);
-    if (!key) return;
-    const j = students.findIndex((st, k) => !used[k] && idKey(st.studentId) === key);
-    if (j !== -1) { used[j] = true; pairs[i] = students[j]; }
-  });
-  let next = 0;
-  subs.forEach((s, i) => {
-    if (pairs[i]) return;
-    while (used[next]) next++;
-    used[next] = true;
-    pairs[i] = students[next];
-  });
-
-  subs.forEach((s, i) => {
-    const other = pairs[i];
-    if (idKey(s.studentId) !== idKey(other.studentId)) {
-      s.reviewNotes.push(`second read saw ID ${String(other.studentId || '').trim() || 'blank'}`);
-    }
-    const answers = {};
-    (Array.isArray(other.answers) ? other.answers : []).forEach(a => { answers[parseInt(a.orderIndex, 10)] = a.answer; });
-    const disagreements = [];
-    (s.questions || []).forEach(q => {
-      if (q.notGraded) return;
-      const n = parseInt(q.orderIndex, 10);
-      if (!(n in answers)) return;
-      if (!sameWrittenAnswer_(q.studentAnswer, answers[n])) {
-        const shown = String(answers[n] || '').trim() || 'blank';
-        disagreements.push(`Q${n} (second read: "${shown.slice(0, 20)}")`);
-      }
-    });
-    if (disagreements.length > 0) {
-      s.reviewNotes.push('second read disagrees on ' + disagreements.join(', '));
+    const other = String(students[i].studentId || '').replace(/^#/, '').trim();
+    if (idKey(s.studentId) !== idKey(other)) {
+      s.reviewNotes.push(`ID check read ${other || 'blank'}`);
     }
   });
 }
