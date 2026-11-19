@@ -999,6 +999,9 @@ function updateStudentPortalPasswords() {
 /**
  * Builds the canonical Gradebook headers (including Student ID, First Name, Last Name, Class / Period, and Q1..Q10)
  */
+const GRADEBOOK_MAX_QUESTIONS = 20; // Q1..Q20, three columns each
+const GRADEBOOK_FIRST_QUESTION_COL = 12; // 1-based column of "Q1 Score"
+
 function getCanonicalGradebookHeaders() {
   const headers = [
     'Timestamp',
@@ -1013,7 +1016,7 @@ function getCanonicalGradebookHeaders() {
     'Total Pts',
     'Status'
   ];
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= GRADEBOOK_MAX_QUESTIONS; i++) {
     headers.push(`Q${i} Score`, `Q${i} Student Ans`, `Q${i} Feedback`);
   }
   return headers;
@@ -1064,6 +1067,9 @@ function ensureGradebookColumns(sheet) {
   }
 
   const headers = getCanonicalGradebookHeaders();
+  if (sheet.getMaxColumns() < headers.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  }
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
   const headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -1224,7 +1230,7 @@ function getStudentPortalData(rawStudentId, rawPassword) {
       totalPossible += poss;
 
       const questions = [];
-      for (let qIdx = 0; qIdx < 10; qIdx++) {
+      for (let qIdx = 0; qIdx < GRADEBOOK_MAX_QUESTIONS; qIdx++) {
         const baseCol = q1ScoreCol + (qIdx * 3);
         if (baseCol + 2 >= r.length) break;
         const cellVal = r[baseCol];
@@ -1360,7 +1366,7 @@ function getGradebookAnalytics() {
   const students = [];
   const submittedNormalizedIds = new Set();
 
-  const qAccumulator = Array.from({ length: 10 }, () => ({
+  const qAccumulator = Array.from({ length: GRADEBOOK_MAX_QUESTIONS }, () => ({
     attempts: 0,
     earnedSum: 0,
     possibleSum: 0,
@@ -1404,7 +1410,7 @@ function getGradebookAnalytics() {
     const studentQuestions = [];
     const studentStandards = {};
 
-    for (let qIdx = 0; qIdx < 10; qIdx++) {
+    for (let qIdx = 0; qIdx < GRADEBOOK_MAX_QUESTIONS; qIdx++) {
       const baseCol = q1ScoreCol + (qIdx * 3);
       if (baseCol + 2 >= row.length) break;
 
@@ -1478,7 +1484,7 @@ function getGradebookAnalytics() {
   let lowestAccuracy = 101;
   let mostMissed = null;
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < GRADEBOOK_MAX_QUESTIONS; i++) {
     const stat = qAccumulator[i];
     if (stat.attempts > 0) {
       const accuracy = Math.round((stat.earnedSum / stat.attempts) * 100);
@@ -1822,178 +1828,402 @@ function fixMisnamedGradebookAssignments_() {
   }
 }
 
+const GRADING_TIME_BUDGET_MS = 4.5 * 60 * 1000; // Apps Script stops a run at 6 minutes
+const GRADED_FILE_IDS_PROP = 'GRADED_FILE_IDS';
+const GRADED_FILE_IDS_KEEP = 400;
+
+/**
+ * IDs of scan files whose rows are already in the Gradebook, so a file that was
+ * graded but not moved (for example the run was cut off) is never graded twice.
+ */
+function getGradedFileIds_() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty(GRADED_FILE_IDS_PROP);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function rememberGradedFile_(fileId) {
+  const list = getGradedFileIds_().filter(id => id !== fileId);
+  list.push(fileId);
+  PropertiesService.getScriptProperties().setProperty(
+    GRADED_FILE_IDS_PROP,
+    JSON.stringify(list.slice(-GRADED_FILE_IDS_KEEP))
+  );
+}
+
+/**
+ * Compares a title read from the scan with the title stored for the code.
+ * Ignores case, spacing and punctuation; a blank title on either side passes.
+ */
+function assignmentTitlesAgree_(scannedTitle, storedTitle) {
+  const norm = v => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const a = norm(scannedTitle);
+  const b = norm(storedTitle);
+  if (!a || !b) return true;
+  return a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
+}
+
+/**
+ * Works out which answer key a scan file should be graded against.
+ * Order of trust: the teacher's choice in the sidebar, a code in the file name,
+ * then the code Gemini reads off the page (which must also match the title).
+ * Throws a teacher-readable reason when no single key can be chosen, because a
+ * worksheet is never graded without its answer key.
+ */
+function resolveManifestForScan_(file, pdfBlob, selectedManifest, getManifestCached) {
+  if (selectedManifest) return selectedManifest;
+
+  const fileCodeHint = detectAssignmentCodeFromFileName(file.getName());
+  const hinted = fileCodeHint ? getManifestCached(fileCodeHint) : null;
+  if (hinted) return hinted;
+
+  const found = identifyWorksheetWithGemini_(pdfBlob);
+  if (found.length === 0) {
+    throw new Error('could not read an assignment code on the page. Choose the assignment in the dropdown and grade again.');
+  }
+
+  const matches = [];
+  const problems = [];
+  found.forEach(w => {
+    const manifest = getManifestCached(w.assignmentCode);
+    if (!manifest) {
+      problems.push(`code "${w.assignmentCode}" is not a saved worksheet`);
+    } else if (!assignmentTitlesAgree_(w.assignmentTitle, manifest.worksheet && manifest.worksheet.title)) {
+      problems.push(`code "${w.assignmentCode}" belongs to "${manifest.worksheet.title}" but the page title reads "${w.assignmentTitle}"`);
+    } else {
+      matches.push(manifest);
+    }
+  });
+
+  if (matches.length === 1 && problems.length === 0) return matches[0];
+  if (matches.length > 1) {
+    const codes = matches.map(m => m.worksheet.short_code).join(', ');
+    throw new Error(`this PDF mixes more than one assignment (${codes}). Scan each assignment as its own PDF.`);
+  }
+  throw new Error(`${problems.join('; ')}. Choose the assignment in the dropdown and grade again.`);
+}
+
+/**
+ * Turns one graded submission into a Gradebook row plus the reasons, if any,
+ * that a teacher should look at it.
+ */
+function buildGradebookRow_(sub, rowNum, context) {
+  const manifest = context.manifest;
+  const manifestCode = String(manifest.worksheet.short_code || '').trim().toUpperCase();
+  const reviewReasons = [];
+
+  const extractedId = String(sub.studentId || '').replace(/^#/, '').trim();
+  const extractedName = String(sub.studentName || '').trim();
+  const resolved = resolveStudentFromRoster(extractedId, extractedName, context.rosterInfo);
+  const finalStudentId = resolved.studentId || extractedId || '???';
+  const fallbackFirst = resolved.firstName || '';
+  const fallbackLast = resolved.lastName || '';
+
+  if (finalStudentId === '???') {
+    reviewReasons.push('student ID not readable');
+  } else if (!resolved.matchedInRoster) {
+    reviewReasons.push(`ID ${finalStudentId} is not in the roster`);
+  }
+
+  const scannedCode = String(sub.assignmentCode || '').trim().toUpperCase();
+  if (scannedCode && scannedCode !== manifestCode) {
+    reviewReasons.push(`page shows code ${scannedCode}`);
+  }
+  if (Array.isArray(sub.missingQuestions) && sub.missingQuestions.length > 0) {
+    reviewReasons.push(`AI skipped Q${sub.missingQuestions.join(', Q')}`);
+  }
+  if (/low/i.test(String(sub.confidence || ''))) {
+    reviewReasons.push('AI was unsure of the handwriting');
+  }
+
+  const duplicateKey = normalizeStudentIdKey(finalStudentId) + '|' + manifestCode;
+  if (finalStudentId !== '???' && context.existingKeys[duplicateKey]) {
+    reviewReasons.push('this student already has a row for this assignment');
+  }
+  context.existingKeys[duplicateKey] = true;
+
+  const totalScore = parseFloat(sub.totalScore) || 0;
+  const totalPossible = parseFloat(sub.totalPossible) || 0;
+  const scorePct = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : 0;
+
+  const status = reviewReasons.length > 0
+    ? 'Needs Review — ' + reviewReasons.join('; ')
+    : (scorePct >= 70 ? 'Passed' : 'Needs Practice');
+
+  const row = [
+    Utilities.formatDate(context.now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+    finalStudentId,
+    buildRosterVlookupFormula(rowNum, 2, fallbackFirst),
+    buildRosterVlookupFormula(rowNum, 3, fallbackLast),
+    buildRosterVlookupFormula(rowNum, 4, resolved.classPeriod || ''),
+    manifestCode,
+    String(manifest.worksheet.title || sub.assignmentTitle || context.fileNameClean || 'Scanned Assignment').trim(),
+    `${scorePct}%`,
+    totalScore,
+    totalPossible,
+    status
+  ];
+
+  // Each question goes in the columns for its own number, never by list position
+  const questionCells = [];
+  for (let i = 0; i < GRADEBOOK_MAX_QUESTIONS * 3; i++) questionCells.push('');
+  const asText = v => {
+    const text = String(v === undefined || v === null ? '' : v);
+    return /^[=+]/.test(text) ? "'" + text : text; // keep "=5" from becoming a formula
+  };
+  const qList = Array.isArray(sub.questions) ? sub.questions : [];
+  qList.forEach((q, listIndex) => {
+    const number = parseInt(q.orderIndex, 10);
+    const slot = (number >= 1 ? number : listIndex + 1) - 1;
+    if (slot >= GRADEBOOK_MAX_QUESTIONS) return;
+
+    let feedback = String(q.feedback || '');
+    const standard = context.keyStandards[number];
+    if (standard && feedback.toUpperCase().indexOf(String(standard).toUpperCase()) === -1) {
+      feedback = `${feedback} [${standard}]`.trim();
+    }
+
+    questionCells[slot * 3] = q.notGraded ? '' : (q.pointsEarned !== undefined ? q.pointsEarned : '');
+    questionCells[slot * 3 + 1] = asText(q.studentAnswer || '—');
+    questionCells[slot * 3 + 2] = asText(feedback);
+  });
+
+  return {
+    values: row.concat(questionCells),
+    scorePct: scorePct,
+    needsReview: reviewReasons.length > 0,
+    autoRosterAdd: (!resolved.matchedInRoster && finalStudentId !== '???' && (fallbackFirst || fallbackLast))
+      ? { studentId: finalStudentId, firstName: fallbackFirst, lastName: fallbackLast }
+      : null
+  };
+}
+
+/**
+ * Writes all of one file's rows to the Gradebook in a single step, so a file is
+ * either fully recorded or not recorded at all.
+ */
+function writeGradebookRows_(sheet, startRow, builtRows) {
+  const count = builtRows.length;
+  const width = builtRows[0].values.length;
+  const lastNeededRow = startRow + count - 1;
+  if (sheet.getMaxRows() < lastNeededRow) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), lastNeededRow - sheet.getMaxRows());
+  }
+
+  // Text format first, so IDs like "07" and answers like "1/2" are kept as written
+  sheet.getRange(startRow, 2, count, 1).setNumberFormat('@');
+  const questionFormats = [];
+  for (let r = 0; r < count; r++) {
+    const formats = [];
+    for (let q = 0; q < GRADEBOOK_MAX_QUESTIONS; q++) formats.push('General', '@', '@');
+    questionFormats.push(formats);
+  }
+  sheet.getRange(startRow, GRADEBOOK_FIRST_QUESTION_COL, count, GRADEBOOK_MAX_QUESTIONS * 3).setNumberFormats(questionFormats);
+
+  sheet.getRange(startRow, 1, count, width).setValues(builtRows.map(r => r.values));
+
+  sheet.getRange(startRow, 2, count, 1).setHorizontalAlignment('center').setFontWeight('bold');
+
+  const scoreColors = builtRows.map(r => {
+    if (r.scorePct >= 80) return ['#dcfce7', '#166534'];
+    if (r.scorePct >= 60) return ['#fef9c3', '#854d0e'];
+    return ['#fee2e2', '#991b1b'];
+  });
+  sheet.getRange(startRow, 8, count, 1)
+    .setBackgrounds(scoreColors.map(c => [c[0]]))
+    .setFontColors(scoreColors.map(c => [c[1]]))
+    .setFontWeight('bold');
+
+  sheet.getRange(startRow, 11, count, 1)
+    .setBackgrounds(builtRows.map(r => [r.needsReview ? '#ffedd5' : null]))
+    .setFontColors(builtRows.map(r => [r.needsReview ? '#9a3412' : null]))
+    .setFontWeights(builtRows.map(r => [r.needsReview ? 'bold' : 'normal']));
+}
+
 /**
  * Sidebar API: Runs the autograder directly from the sidebar button.
  * Scans https://drive.google.com/drive/u/0/folders/15ZdjhTl_CRi_BRFeGa2wMAU3PwvUbi8T
  * and moves graded PDFs into the "Scanned" subfolder inside it.
+ *
+ * A file is graded only against a known answer key. Files that cannot be
+ * graded stay in the folder and are named, with the reason, in the result.
  * @param {string} [selectedAssignmentCode] - Optional short code selected by teacher in Sidebar
  */
 function runGradingFromSidebar(selectedAssignmentCode) {
   requireTeacher_();
-  setupRosterSheet(true);
-  const sheet = setupGradebookSheet(true);
-  const rosterInfo = getRosterData();
 
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (!apiKey) {
-    throw new Error("Gemini API key is not set. Click '⚙️ Set Gemini Key' at the bottom of the panel.");
-  }
-
-  const { scanFolder, scannedFolder } = getAutograderScanFolders_();
-  const folderName = scanFolder.getName();
-
-  const pdfFiles = scanFolder.getFilesByType(MimeType.PDF);
-  const filesToGrade = [];
-  while (pdfFiles.hasNext()) {
-    const f = pdfFiles.next();
-    if (!f.isTrashed()) {
-      filesToGrade.push(f);
-    }
-  }
-
-  if (filesToGrade.length === 0) {
-    throw new Error(`No new scanned PDFs found in "${folderName}". Drop your copier scans into the folder and try again.`);
-  }
-
-  let processedFolder = scannedFolder;
-
-  let gradedSubmissionsCount = 0;
-  let gradedFilesCount = 0;
-  const manifestCache = {};
-
-  const getManifestCached = function(code) {
-    if (!code) return null;
-    const clean = String(code).trim().toUpperCase();
-    if (manifestCache[clean] !== undefined) return manifestCache[clean];
-    try {
-      manifestCache[clean] = fetchWorksheetManifest(clean);
-    } catch (e) {
-      manifestCache[clean] = null;
-    }
-    return manifestCache[clean];
-  };
-
-  for (const file of filesToGrade) {
-    try {
-      const pdfBlob = file.getBlob();
-      const fileNameClean = file.getName().replace(/\.pdf$/i, '').trim();
-      const fileCodeHint = typeof detectAssignmentCodeFromFileName === 'function'
-        ? detectAssignmentCodeFromFileName(file.getName())
-        : null;
-
-      // When the teacher did not lock to a specific assignment, detect each file independently
-      const knownCode = selectedAssignmentCode || fileCodeHint;
-      let manifest = knownCode ? getManifestCached(knownCode) : null;
-
-      let gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
-      const assignmentCode = String(gradeResult.assignmentCode || knownCode || '').trim().toUpperCase();
-
-      if (!manifest && assignmentCode) {
-        manifest = getManifestCached(assignmentCode);
-        // Only re-grade if the manifest title matches the detected assignmentTitle or no title detected
-        if (manifest && (!gradeResult.assignmentTitle || !manifest.worksheet || !manifest.worksheet.title || manifest.worksheet.title.toLowerCase() === gradeResult.assignmentTitle.toLowerCase())) {
-          gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
-        }
-      }
-
-      const submissions = Array.isArray(gradeResult.submissions) ? gradeResult.submissions : [gradeResult];
-
-      for (const sub of submissions) {
-        const now = new Date();
-        const extractedId = String(sub.studentId || '').replace(/^#/, '').trim();
-        const extractedName = String(sub.studentName || '').trim();
-
-        const resolved = resolveStudentFromRoster(extractedId, extractedName, rosterInfo);
-        const finalStudentId = resolved.studentId || extractedId || '???';
-        const fallbackFirst = resolved.firstName || '';
-        const fallbackLast = resolved.lastName || '';
-        const fallbackPeriod = resolved.classPeriod || '';
-
-        if (!resolved.matchedInRoster && finalStudentId !== '???' && (fallbackFirst || fallbackLast)) {
-          try {
-            addOrUpdateRosterStudent(finalStudentId, fallbackFirst, fallbackLast, '', 'Auto-added from worksheet scan');
-          } catch (autoErr) {
-            console.warn('Auto-roster add skipped:', autoErr);
-          }
-        }
-
-        const totalScore = parseFloat(sub.totalScore) || 0;
-        const totalPossible = parseFloat(sub.totalPossible) || 0;
-        const scorePct = totalPossible > 0
-          ? Math.round((totalScore / totalPossible) * 100)
-          : 0;
-
-        const nextRowNum = sheet.getLastRow() + 1;
-
-        const firstFormula = buildRosterVlookupFormula(nextRowNum, 2, fallbackFirst);
-        const lastFormula = buildRosterVlookupFormula(nextRowNum, 3, fallbackLast);
-        const periodFormula = buildRosterVlookupFormula(nextRowNum, 4, fallbackPeriod);
-
-        const rowAssignmentCode = String(sub.assignmentCode || assignmentCode || 'UNKNOWN').trim().toUpperCase();
-        const rowAssignmentTitle = String(
-          sub.assignmentTitle ||
-          gradeResult.assignmentTitle ||
-          (manifest && manifest.worksheet ? manifest.worksheet.title : '') ||
-          fileNameClean ||
-          'Scanned Assignment'
-        ).trim();
-
-        const row = [
-          Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
-          finalStudentId,
-          firstFormula,
-          lastFormula,
-          periodFormula,
-          rowAssignmentCode,
-          rowAssignmentTitle,
-          `${scorePct}%`,
-          totalScore,
-          totalPossible,
-          scorePct >= 70 ? 'Passed' : 'Needs Practice'
-        ];
-
-        const qList = Array.isArray(sub.questions) ? sub.questions : [];
-        for (let i = 0; i < 10; i++) {
-          const q = qList[i];
-          if (q) {
-            row.push(q.pointsEarned !== undefined ? q.pointsEarned : '');
-            row.push(q.studentAnswer || '—');
-            row.push(q.feedback || '');
-          } else {
-            row.push('', '', '');
-          }
-        }
-
-        sheet.appendRow(row);
-
-        const lastRow = sheet.getLastRow();
-        sheet.getRange(lastRow, 2).setNumberFormat('@').setHorizontalAlignment('center').setFontWeight('bold');
-        const scoreCell = sheet.getRange(lastRow, 8); // Column 8 is Score %
-        if (scorePct >= 80) {
-          scoreCell.setBackground('#dcfce7').setFontColor('#166534').setFontWeight('bold');
-        } else if (scorePct >= 60) {
-          scoreCell.setBackground('#fef9c3').setFontColor('#854d0e').setFontWeight('bold');
-        } else {
-          scoreCell.setBackground('#fee2e2').setFontColor('#991b1b').setFontWeight('bold');
-        }
-
-        gradedSubmissionsCount++;
-      }
-
-      file.moveTo(processedFolder);
-      gradedFilesCount++;
-    } catch (err) {
-      console.error(`Grading error for ${file.getName()}:`, err);
-    }
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(2000)) {
+    throw new Error('Grading is already running. Wait for it to finish, then try again.');
   }
 
   try {
-    updateStudentMonitoringSheet();
-  } catch (e) {
-    console.error('Monitoring update error:', e);
-  }
+    const startedAt = Date.now();
+    setupRosterSheet(true);
+    const sheet = setupGradebookSheet(true);
+    const rosterInfo = getRosterData();
 
-  return `Graded ${gradedSubmissionsCount} student worksheet(s) from ${gradedFilesCount} PDF file(s)! Roster names, scores, and standards monitoring updated.`;
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey) {
+      throw new Error("Gemini API key is not set. Click '⚙️ Set Gemini Key' at the bottom of the panel.");
+    }
+
+    const { scanFolder, scannedFolder } = getAutograderScanFolders_();
+    const folderName = scanFolder.getName();
+
+    const pdfFiles = scanFolder.getFilesByType(MimeType.PDF);
+    const filesToGrade = [];
+    while (pdfFiles.hasNext()) {
+      const f = pdfFiles.next();
+      if (!f.isTrashed()) {
+        filesToGrade.push(f);
+      }
+    }
+
+    if (filesToGrade.length === 0) {
+      throw new Error(`No new scanned PDFs found in "${folderName}". Drop your copier scans into the folder and try again.`);
+    }
+
+    const manifestCache = {};
+    const getManifestCached = function(code) {
+      if (!code) return null;
+      const clean = String(code).trim().toUpperCase();
+      if (manifestCache[clean] !== undefined) return manifestCache[clean];
+      try {
+        const manifest = fetchWorksheetManifest(clean);
+        const hasKey = manifest && Array.isArray(manifest.questions) && manifest.questions.length > 0;
+        manifestCache[clean] = hasKey ? manifest : null;
+      } catch (e) {
+        manifestCache[clean] = null;
+      }
+      return manifestCache[clean];
+    };
+
+    const cleanSelected = String(selectedAssignmentCode || '').trim();
+    const selectedManifest = cleanSelected ? getManifestCached(cleanSelected) : null;
+    if (cleanSelected && !selectedManifest) {
+      throw new Error(`Assignment "${cleanSelected.toUpperCase()}" has no saved answer key in Worksheet Maker, so nothing was graded.`);
+    }
+
+    // Student + assignment pairs already in the Gradebook, to flag repeats
+    const existingKeys = {};
+    if (sheet.getLastRow() > 1) {
+      sheet.getRange(2, 2, sheet.getLastRow() - 1, 5).getValues().forEach(r => {
+        const id = normalizeStudentIdKey(r[0]);
+        const code = String(r[4] || '').trim().toUpperCase();
+        if (id && code) existingKeys[id + '|' + code] = true;
+      });
+    }
+
+    const alreadyGraded = getGradedFileIds_();
+    let gradedSubmissionsCount = 0;
+    let gradedFilesCount = 0;
+    let needsReviewCount = 0;
+    let alreadyGradedCount = 0;
+    let filesLeftForNextRun = 0;
+    const failures = [];
+
+    for (let fileIndex = 0; fileIndex < filesToGrade.length; fileIndex++) {
+      const file = filesToGrade[fileIndex];
+
+      if (Date.now() - startedAt > GRADING_TIME_BUDGET_MS) {
+        filesLeftForNextRun = filesToGrade.length - fileIndex;
+        break;
+      }
+
+      try {
+        if (alreadyGraded.indexOf(file.getId()) !== -1) {
+          // Its rows are already in the Gradebook; only the move was missed
+          file.moveTo(scannedFolder);
+          alreadyGradedCount++;
+          continue;
+        }
+
+        const pdfBlob = file.getBlob();
+        const manifest = resolveManifestForScan_(file, pdfBlob, selectedManifest, getManifestCached);
+        const gradeResult = gradeWorksheetWithGemini(pdfBlob, manifest);
+        const submissions = Array.isArray(gradeResult.submissions) ? gradeResult.submissions : [];
+        if (submissions.length === 0) {
+          throw new Error('the AI did not find any student work in this PDF.');
+        }
+
+        const keyStandards = {};
+        manifest.questions.forEach(q => {
+          if (q.order_index != null && q.standard) keyStandards[q.order_index] = String(q.standard).trim();
+        });
+
+        const context = {
+          manifest: manifest,
+          rosterInfo: rosterInfo,
+          existingKeys: existingKeys,
+          keyStandards: keyStandards,
+          now: new Date(),
+          fileNameClean: file.getName().replace(/\.pdf$/i, '').trim()
+        };
+
+        const startRow = sheet.getLastRow() + 1;
+        const builtRows = submissions.map((sub, i) => buildGradebookRow_(sub, startRow + i, context));
+
+        writeGradebookRows_(sheet, startRow, builtRows);
+        rememberGradedFile_(file.getId());
+        file.moveTo(scannedFolder);
+
+        builtRows.forEach(r => {
+          if (r.needsReview) needsReviewCount++;
+          if (r.autoRosterAdd) {
+            try {
+              addOrUpdateRosterStudent(r.autoRosterAdd.studentId, r.autoRosterAdd.firstName, r.autoRosterAdd.lastName, '', 'Auto-added from worksheet scan');
+            } catch (autoErr) {
+              console.warn('Auto-roster add skipped:', autoErr);
+            }
+          }
+        });
+
+        gradedSubmissionsCount += builtRows.length;
+        gradedFilesCount++;
+      } catch (err) {
+        console.error(`Grading error for ${file.getName()}:`, err);
+        const reason = String((err && err.message) || err).replace(/[<>]/g, '').slice(0, 220);
+        failures.push(`${file.getName().replace(/[<>]/g, '')}: ${reason}`);
+      }
+    }
+
+    try {
+      updateStudentMonitoringSheet();
+    } catch (e) {
+      console.error('Monitoring update error:', e);
+    }
+
+    const parts = [];
+    if (gradedFilesCount > 0) {
+      parts.push(`Graded ${gradedSubmissionsCount} student worksheet(s) from ${gradedFilesCount} PDF file(s).`);
+    }
+    if (needsReviewCount > 0) {
+      parts.push(`⚠️ ${needsReviewCount} row(s) are marked "Needs Review" in the Status column.`);
+    }
+    if (alreadyGradedCount > 0) {
+      parts.push(`${alreadyGradedCount} file(s) were already in the Gradebook and were just moved to "Scanned".`);
+    }
+    if (failures.length > 0) {
+      parts.push(`⚠️ ${failures.length} file(s) were NOT graded and are still in "${folderName}": ${failures.join(' | ')}`);
+    }
+    if (filesLeftForNextRun > 0) {
+      parts.push(`⏱️ Stopped to stay inside Google's time limit with ${filesLeftForNextRun} file(s) left. Click Grade again to continue.`);
+    }
+    const message = parts.join(' ');
+
+    // Nothing at all was graded: show it as an error, not a success
+    if (gradedFilesCount === 0 && alreadyGradedCount === 0 && failures.length > 0) {
+      throw new Error(message);
+    }
+    return message;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -2196,8 +2426,7 @@ function getInterventionDashboardData(targetPeriod, targetCodes, cutoffTier3, cu
     const subQuestions = [];
     const assignmentTitle = titleCol !== -1 ? String(row[titleCol] || code).trim() : code;
 
-    // Scan up to 10 questions
-    for (let q = 1; q <= 10; q++) {
+    for (let q = 1; q <= GRADEBOOK_MAX_QUESTIONS; q++) {
       const qScoreIndex = headers.indexOf(`q${q} score`);
       if (qScoreIndex === -1) break;
       const qScoreVal = row[qScoreIndex];

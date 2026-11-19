@@ -305,7 +305,7 @@ function updateStudentMonitoringSheet() {
       sData.totalEarned += earned;
       sData.totalPossible += possible;
 
-      for (let q = 0; q < 10; q++) {
+      for (let q = 0; q < GRADEBOOK_MAX_QUESTIONS; q++) {
         const baseCol = q1ScoreCol + (q * 3);
         if (baseCol + 2 >= r.length) break;
         const cellVal = r[baseCol];

@@ -90,58 +90,107 @@ Output ONLY valid JSON matching this exact schema:
     promptText += `\n\nOFFICIAL WORKSHEET METADATA:\nTitle: ${wsInfo.title || 'Math Assignment'}\nShort Code: ${wsInfo.short_code || ''}\nTotal Pages per Student: ${wsInfo.total_pages || 1}\n\nOFFICIAL ANSWER KEY & RUBRIC:\n${JSON.stringify(manifest.questions, null, 2)}`;
   }
 
-  const payload = {
-    contents: [
-      {
-        parts: [
-          { text: promptText },
-          {
-            inlineData: {
-              mimeType: "application/pdf",
-              data: base64Data
-            }
-          }
-        ]
-      }
-    ],
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.1
-    }
-  };
+  return normalizeGradeResult_(callGeminiForJson_(apiKey, configuredModel, promptText, base64Data), manifest);
+}
 
+/**
+ * Asks Gemini only which assignment(s) a scanned PDF contains, without grading.
+ * Used when neither the teacher nor the file name says which answer key applies.
+ * @returns {Array<{assignmentCode: string, assignmentTitle: string}>} one entry per distinct code read
+ */
+function identifyWorksheetWithGemini_(pdfBlob) {
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) {
+    throw new Error("Gemini API Key is not set. Please go to '📐 Math Autograder ➔ ⚙️ Set Gemini API Key'.");
+  }
+
+  const promptText = `This PDF is a scan of one or more printed math worksheets.
+Each worksheet has a printed Assignment Code in the top-right header next to a QR code (a short code of letters and digits, sometimes with a hyphen) and a printed assignment title in the header.
+
+Look at every page and list each DISTINCT Assignment Code that appears, with the printed title of that worksheet.
+Copy the code and title exactly as printed. Do not guess: if a code cannot be read, leave it out.
+
+Output ONLY valid JSON in this shape:
+{ "worksheets": [ { "assignmentCode": "", "assignmentTitle": "" } ] }`;
+
+  const parsed = callGeminiForJson_(
+    apiKey,
+    props.getProperty('GEMINI_MODEL') || GEMINI_MODEL,
+    promptText,
+    Utilities.base64Encode(pdfBlob.getBytes())
+  );
+
+  const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.worksheets) ? parsed.worksheets : [parsed]);
+  const seen = {};
+  const worksheets = [];
+  list.forEach(w => {
+    const code = String((w && w.assignmentCode) || '').trim().toUpperCase();
+    if (!code || seen[code]) return;
+    seen[code] = true;
+    worksheets.push({ assignmentCode: code, assignmentTitle: String((w && w.assignmentTitle) || '').trim() });
+  });
+  return worksheets;
+}
+
+/**
+ * Sends a prompt plus a PDF to Gemini and returns the parsed JSON reply.
+ * Tries the fallback models when a model name is unknown (404), waits and
+ * retries when Gemini is busy (429 / 503), and refuses a reply that was cut off.
+ */
+function callGeminiForJson_(apiKey, configuredModel, promptText, base64Pdf) {
   const options = {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify(payload),
+    payload: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: promptText },
+          { inlineData: { mimeType: 'application/pdf', data: base64Pdf } }
+        ]
+      }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1
+      }
+    }),
     muteHttpExceptions: true
   };
 
   const modelsToTry = [configuredModel, ...FALLBACK_MODELS.filter(m => m !== configuredModel)];
+  const busyWaitsMs = [4000, 12000];
   let response = null;
   let status = 0;
 
   for (const modelName of modelsToTry) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    response = UrlFetchApp.fetch(endpoint, options);
-    status = response.getResponseCode();
-    if (status !== 404) {
+    for (let attempt = 0; ; attempt++) {
+      response = UrlFetchApp.fetch(endpoint, options);
+      status = response.getResponseCode();
+      if ((status === 429 || status === 503) && attempt < busyWaitsMs.length) {
+        Utilities.sleep(busyWaitsMs[attempt]);
+        continue;
+      }
       break;
     }
+    if (status !== 404) break;
   }
 
   if (status !== 200) {
-    throw new Error(`Gemini API Error (Status ${status}): ${response.getContentText()}`);
+    throw new Error(`Gemini API Error (Status ${status}): ${response.getContentText().slice(0, 300)}`);
   }
 
   const resJson = JSON.parse(response.getContentText());
-  const candidate = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!candidate) {
-    throw new Error("No response generated from Gemini Vision.");
+  const firstCandidate = resJson.candidates?.[0];
+  if (firstCandidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('Gemini ran out of room before finishing its reply. Scan fewer worksheets into one PDF and try again.');
   }
 
-  return normalizeGradeResult_(parseGradingJson_(candidate), manifest);
+  const text = firstCandidate?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('No response generated from Gemini Vision.');
+  }
+  return parseGradingJson_(text);
 }
 
 /**
@@ -202,9 +251,13 @@ function getAnswerKeyPoints_(manifest) {
 
 /**
  * Recomputes a submission's totals from its questions instead of trusting the
- * model's arithmetic. Points possible come from the answer key when there is
- * one (so a question the model skipped still counts against the student);
- * points earned are clamped to 0..possible.
+ * model's arithmetic.
+ *
+ * With an answer key, the questions are lined up to the key by question number:
+ * every key question appears exactly once, in order. A question the model did
+ * not return is added as "not graded" (worth 0, listed in `missingQuestions`)
+ * so later answers can never slide into the wrong question's column.
+ * Points possible come from the key; points earned are clamped to 0..possible.
  */
 function scoreSubmission_(submission, keyPoints) {
   const round2 = n => Math.round(n * 100) / 100;
@@ -212,33 +265,74 @@ function scoreSubmission_(submission, keyPoints) {
     const n = parseFloat(v);
     return isFinite(n) ? n : 0;
   };
-
+  const sum = values => round2(values.reduce((total, v) => total + v, 0));
   const rawQuestions = Array.isArray(submission.questions) ? submission.questions : [];
-  if (rawQuestions.length === 0) {
-    // Nothing to add up: keep whatever totals the model reported
+
+  if (!keyPoints) {
+    if (rawQuestions.length === 0) {
+      // Nothing to add up: keep whatever totals the model reported
+      return {
+        ...submission,
+        questions: [],
+        missingQuestions: [],
+        totalScore: toNumber(submission.totalScore),
+        totalPossible: toNumber(submission.totalPossible)
+      };
+    }
+    const questions = rawQuestions.map(q => {
+      const pointsPossible = Math.max(0, toNumber(q.pointsPossible));
+      const pointsEarned = Math.min(Math.max(0, toNumber(q.pointsEarned)), pointsPossible);
+      return { ...q, pointsEarned: round2(pointsEarned), pointsPossible: round2(pointsPossible) };
+    });
     return {
       ...submission,
-      questions: [],
-      totalScore: toNumber(submission.totalScore),
-      totalPossible: toNumber(submission.totalPossible)
+      questions: questions,
+      missingQuestions: [],
+      totalScore: sum(questions.map(q => q.pointsEarned)),
+      totalPossible: sum(questions.map(q => q.pointsPossible))
     };
   }
 
-  const questions = rawQuestions.map(q => {
-    const keyed = keyPoints ? keyPoints[q.orderIndex] : undefined;
-    const pointsPossible = keyed !== undefined ? keyed : Math.max(0, toNumber(q.pointsPossible));
+  const keyNumbers = Object.keys(keyPoints).map(Number).sort((x, y) => x - y);
+
+  // Match the model's questions to the key by question number (first one wins)
+  const byNumber = {};
+  rawQuestions.forEach(q => {
+    const n = parseInt(q.orderIndex, 10);
+    if (keyPoints[n] !== undefined && byNumber[n] === undefined) byNumber[n] = q;
+  });
+  // If the model numbered nothing usefully but returned exactly one answer per
+  // key question, its order is the only information there is: use it.
+  if (Object.keys(byNumber).length === 0 && rawQuestions.length === keyNumbers.length) {
+    keyNumbers.forEach((n, i) => { byNumber[n] = rawQuestions[i]; });
+  }
+
+  const missingQuestions = [];
+  const questions = keyNumbers.map(n => {
+    const pointsPossible = round2(keyPoints[n]);
+    const q = byNumber[n];
+    if (!q) {
+      missingQuestions.push(n);
+      return {
+        orderIndex: n,
+        studentAnswer: '',
+        isCorrect: false,
+        pointsEarned: 0,
+        pointsPossible: pointsPossible,
+        feedback: 'Not graded: the AI did not return this question.',
+        notGraded: true
+      };
+    }
     const pointsEarned = Math.min(Math.max(0, toNumber(q.pointsEarned)), pointsPossible);
-    return { ...q, pointsEarned: round2(pointsEarned), pointsPossible: round2(pointsPossible) };
+    return { ...q, orderIndex: n, pointsEarned: round2(pointsEarned), pointsPossible: pointsPossible };
   });
 
-  const sum = values => round2(values.reduce((total, v) => total + v, 0));
   return {
     ...submission,
     questions: questions,
+    missingQuestions: missingQuestions,
     totalScore: sum(questions.map(q => q.pointsEarned)),
-    totalPossible: keyPoints
-      ? sum(Object.keys(keyPoints).map(k => keyPoints[k]))
-      : sum(questions.map(q => q.pointsPossible))
+    totalPossible: sum(questions.map(q => q.pointsPossible))
   };
 }
 
@@ -253,6 +347,7 @@ function scoreSubmission_(submission, keyPoints) {
 function detectAssignmentCodeFromFileName(fileName) {
   if (!fileName) return null;
   // Match patterns like ALG-701, M1024, MATH-101, etc.
-  const match = String(fileName).match(/\b([A-Z]{1,5}-?\d{3,5})\b/i);
+  // Letters/digits must not touch the code, but "_" may (as in "ALG-701_Scan.pdf")
+  const match = String(fileName).match(/(?<![A-Za-z0-9])([A-Z]{1,5}-?\d{3,5})(?![A-Za-z0-9])/i);
   return match ? match[1].toUpperCase() : null;
 }
