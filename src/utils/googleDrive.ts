@@ -238,7 +238,7 @@ export async function uploadFileToDrive(
 }
 
 /**
- * Saves both Student and Answer Key PDFs to the teacher's Drive:
+ * Saves the student copy PDF to the teacher's Drive (answer keys stay in the app):
  * Path: Google Drive / Worksheet Maker / [Folder Name] / ...
  *
  * Uses the permanent Apps Script Drive Bridge so it NEVER fails due to expired OAuth tokens!
@@ -247,36 +247,27 @@ export async function saveWorksheetToDrive(
   accessToken: string | null | undefined,
   folderName: string,
   studentPdfBlob: Blob,
-  keyPdfBlob: Blob,
   baseFilename: string
 ): Promise<{
   folderUrl?: string;
   studentFileUrl?: string;
-  keyFileUrl?: string;
   studentFileId?: string;
-  keyFileId?: string;
 }> {
   // 1. Try permanent Apps Script Drive Bridge first (no expiring token needed!)
   try {
-    const [studentPdfBase64, keyPdfBase64] = await Promise.all([
-      blobToBase64(studentPdfBlob),
-      blobToBase64(keyPdfBlob),
-    ]);
+    const studentPdfBase64 = await blobToBase64(studentPdfBlob);
 
     const bridgeRes = await callGasDriveBridge({
       action: 'saveWorksheetToDrive',
       folderName: folderName || 'General',
       baseFilename,
       studentPdfBase64,
-      keyPdfBase64,
     });
 
     return {
       folderUrl: bridgeRes.folderUrl || DEFAULT_WORKSHEET_DRIVE_FOLDER_URL,
       studentFileUrl: bridgeRes.studentFileUrl,
-      keyFileUrl: bridgeRes.keyFileUrl,
       studentFileId: bridgeRes.studentFileId,
-      keyFileId: bridgeRes.keyFileId,
     };
   } catch (bridgeErr) {
     console.warn('Apps Script Drive Bridge fallback to OAuth:', bridgeErr);
@@ -296,19 +287,10 @@ export async function saveWorksheetToDrive(
     subFolder.id
   );
 
-  const keyResult = await uploadFileToDrive(
-    accessToken!,
-    keyPdfBlob,
-    `${baseFilename}_AnswerKey.pdf`,
-    subFolder.id
-  );
-
   return {
     folderUrl: subFolder.webViewLink,
     studentFileUrl: studentResult.webViewLink,
-    keyFileUrl: keyResult.webViewLink,
     studentFileId: studentResult.id,
-    keyFileId: keyResult.id,
   };
 }
 

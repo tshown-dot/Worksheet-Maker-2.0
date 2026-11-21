@@ -110,7 +110,7 @@ export const ImportHub: React.FC<ImportHubProps> = ({
 
   const runAutoSyncForIds = async (ids: string[], folderOverride?: string) => {
     setIsAutoSyncing(true);
-    setAutoSyncMessage(`⚡ Generating & syncing Student + Answer Key PDFs for ${ids.length} PODs to Google Drive...`);
+    setAutoSyncMessage(`⚡ Generating & syncing student PDFs for ${ids.length} PODs to Google Drive...`);
     try {
       const fullWorksheets = await fetchFullShelfWorksheets(ids);
       await fetchSavedWorksheets();
@@ -119,7 +119,6 @@ export const ImportHub: React.FC<ImportHubProps> = ({
       for (const fullWs of fullWorksheets) {
         try {
           const sDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: false });
-          const kDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: true });
           const safeTitle = (fullWs.title || 'Worksheet').replace(/[^a-zA-Z0-9]/g, '_');
           const baseName = `${fullWs.short_code}_${safeTitle}`;
           const targetFolder = fullWs.folder_name || folderOverride || 'Daily Warm-Ups (POD)';
@@ -128,18 +127,16 @@ export const ImportHub: React.FC<ImportHubProps> = ({
             providerToken || null,
             targetFolder,
             sDoc.output('blob'),
-            kDoc.output('blob'),
             baseName
           );
 
-          if (fullWs.id && (driveRes.studentFileId || driveRes.keyFileId)) {
+          if (fullWs.id && driveRes.studentFileId) {
             await supabase
               .from('worksheets')
               .update({
                 layout_config: {
                   ...(fullWs.layout_config || { columns: 2, spacing: 'balanced', track_standards: true }),
                   drive_student_file_id: driveRes.studentFileId,
-                  drive_key_file_id: driveRes.keyFileId,
                 },
               })
               .eq('id', fullWs.id);
@@ -703,16 +700,14 @@ RULES:
         (async () => {
           try {
             const sDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: false });
-            const kDoc = await generateWorksheetPDF(fullWs, { isAnswerKey: true });
             const baseName = `${code}_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
             const driveRes = await saveWorksheetToDrive(
               providerToken,
               targetFolder,
               sDoc.output('blob'),
-              kDoc.output('blob'),
               baseName
             );
-            if (wsData?.id && (driveRes.studentFileId || driveRes.keyFileId)) {
+            if (wsData?.id && driveRes.studentFileId) {
               await supabase
                 .from('worksheets')
                 .update({
@@ -721,7 +716,6 @@ RULES:
                     spacing: 'balanced',
                     track_standards: true,
                     drive_student_file_id: driveRes.studentFileId,
-                    drive_key_file_id: driveRes.keyFileId,
                   },
                 })
                 .eq('id', wsData.id);

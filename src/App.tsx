@@ -318,23 +318,20 @@ export function App() {
       (async () => {
         try {
           const studentDoc = await generateWorksheetPDF(wsSnapshot, { isAnswerKey: false });
-          const keyDoc = await generateWorksheetPDF(wsSnapshot, { isAnswerKey: true });
           const studentBlob = studentDoc.output('blob');
-          const keyBlob = keyDoc.output('blob');
           const baseName = `${wsSnapshot.short_code}_${wsSnapshot.title.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
           const driveRes = await saveWorksheetToDrive(
             activeDriveToken,
             resolvedFolder,
             studentBlob,
-            keyBlob,
             baseName
           );
           if (driveRes.folderUrl) {
             setDriveFolderUrl(driveRes.folderUrl);
             localStorage.setItem('wm_drive_folder_url', driveRes.folderUrl);
           }
-          if (savedId && (driveRes.studentFileId || driveRes.keyFileId)) {
+          if (savedId && driveRes.studentFileId) {
             await supabase
               .from('worksheets')
               .update({
@@ -344,7 +341,6 @@ export function App() {
                   spacing: wsSnapshot.spacing,
                   track_standards: wsSnapshot.track_standards !== false,
                   drive_student_file_id: driveRes.studentFileId,
-                  drive_key_file_id: driveRes.keyFileId,
                 },
               })
               .eq('id', savedId);
