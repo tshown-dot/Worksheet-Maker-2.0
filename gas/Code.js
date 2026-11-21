@@ -26,6 +26,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🔗 Test Connection to Worksheet Maker', 'testSupabaseConnection')
     .addItem('⚙️ Set Gemini API Key', 'setGeminiApiKeyPrompt')
+    .addItem('⚙️ Set Claude API Key', 'setClaudeApiKeyPrompt')
     .addItem('🔐 Web Access Security Setup', 'setupWebAccessSecurity')
     .addItem('♻️ Reset Teacher Link Key', 'resetTeacherWebKey')
     .addItem('🗝️ Set Supabase Secret Key', 'setSupabaseSecretKeyPrompt')
@@ -442,28 +443,52 @@ function showSidebar() {
 }
 
 /**
- * Teacher Settings Dialog to store Gemini API Key securely in ScriptProperties
+ * Shared prompt helper for securely storing API keys in ScriptProperties.
  */
-function setGeminiApiKeyPrompt() {
+function promptAndSaveApiKey_(dialogTitle, inputPrompt, propName, successMsg) {
   const ui = SpreadsheetApp.getUi();
-  const currentKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const maskedKey = currentKey ? `(Current key: ${currentKey.slice(0, 6)}...${currentKey.slice(-4)})` : '(No key set yet)';
+  const currentKey = PropertiesService.getScriptProperties().getProperty(propName);
+  const maskedKey = currentKey ? `(Current key: ${currentKey.slice(0, 10)}...${currentKey.slice(-4)})` : '(No key set yet)';
 
   const response = ui.prompt(
-    'Configure Gemini Vision API Key',
-    `Enter your Google AI Studio / Gemini API key:\n${maskedKey}`,
+    dialogTitle,
+    `${inputPrompt}\n${maskedKey}`,
     ui.ButtonSet.OK_CANCEL
   );
 
   if (response.getSelectedButton() === ui.Button.OK) {
     const newKey = response.getResponseText().trim();
     if (newKey) {
-      PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', newKey);
-      ui.alert('Success ✅', 'Gemini API Key saved securely!', ui.ButtonSet.OK);
+      PropertiesService.getScriptProperties().setProperty(propName, newKey);
+      ui.alert('Success ✅', successMsg, ui.ButtonSet.OK);
     } else {
       ui.alert('Notice', 'Key was not changed.', ui.ButtonSet.OK);
     }
   }
+}
+
+/**
+ * Teacher Settings Dialog to store Gemini API Key securely in ScriptProperties
+ */
+function setGeminiApiKeyPrompt() {
+  promptAndSaveApiKey_(
+    'Configure Gemini Vision API Key',
+    'Enter your Google AI Studio / Gemini API key:',
+    'GEMINI_API_KEY',
+    'Gemini API Key saved securely!'
+  );
+}
+
+/**
+ * Teacher Settings Dialog to store Anthropic Claude API Key securely in ScriptProperties
+ */
+function setClaudeApiKeyPrompt() {
+  promptAndSaveApiKey_(
+    'Configure Anthropic Claude API Key',
+    'Enter your Anthropic API key (sk-ant-...):',
+    'ANTHROPIC_API_KEY',
+    'Claude API Key saved securely!'
+  );
 }
 
 /**
@@ -2828,6 +2853,14 @@ const CHECKABLE_RUBRIC_RULES = [
   "- The rubric steps must add up to \"points\". For multiple choice and one-step questions write \"N pts for the correct answer; no partial credit.\" When a specific wrong answer should earn partial or zero credit, name that exact answer."
 ].join('\n');
 
+const CLAUDE_POD_MODEL = 'claude-opus-5-5';
+const CLAUDE_POD_FALLBACK_MODELS = ['claude-opus-4-6', 'claude-opus-4-5'];
+const ANTHROPIC_API_VERSION = '2023-06-01';
+
+/**
+ * Calls Anthropic Claude Opus with the provided POD prompt, parses the resulting daily
+ * worksheets, saves them to Supabase (`worksheets` + `questions`), and returns the created IDs.
+ */
 function handleGenerateAndSavePODWeek_(body) {
   const callerPrompt = String((body && body.prompt) || '').trim();
   if (!callerPrompt) {
@@ -2836,55 +2869,60 @@ function handleGenerateAndSavePODWeek_(body) {
   const promptText = callerPrompt + '\n\nRUBRIC RULES (these override any earlier rubric instructions):\n' + CHECKABLE_RUBRIC_RULES;
 
   const props = PropertiesService.getScriptProperties();
-  const apiKey = props.getProperty('GEMINI_API_KEY');
+  const apiKey = props.getProperty('ANTHROPIC_API_KEY');
   if (!apiKey) {
-    throw new Error("Gemini API Key is not set in Worksheet Maker script properties.");
+    throw new Error("Claude API Key is not set. In your Auto Grader 2027 Google Sheet, open '📐 Math Autograder ➔ ⚙️ Set Claude API Key' and paste your Anthropic API key.");
   }
 
-  const primaryModel = props.getProperty('GEMINI_MODEL') || (typeof GEMINI_MODEL !== 'undefined' ? GEMINI_MODEL : 'gemini-3.8-flash');
-  const fallbackList = (typeof FALLBACK_MODELS !== 'undefined') ? FALLBACK_MODELS : ['gemini-flash-latest', 'gemini-2.5-flash'];
-  const modelsToTry = [primaryModel, ...fallbackList.filter(m => m !== primaryModel)];
-
-  const geminiPayload = {
-    contents: [{ parts: [{ text: promptText }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.35
-    }
-  };
-
-  const fetchOpts = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(geminiPayload),
-    muteHttpExceptions: true
-  };
+  const primaryModel = props.getProperty('ANTHROPIC_MODEL') || CLAUDE_POD_MODEL;
+  const modelsToTry = [primaryModel, ...CLAUDE_POD_FALLBACK_MODELS.filter(m => m !== primaryModel)];
 
   let response = null;
   let status = 0;
+  let usedModel = primaryModel;
+
   for (let i = 0; i < modelsToTry.length; i++) {
-    const modelName = modelsToTry[i];
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    response = UrlFetchApp.fetch(endpoint, fetchOpts);
+    usedModel = modelsToTry[i];
+    const claudePayload = {
+      model: usedModel,
+      max_tokens: 16384,
+      system: 'You are a middle school math curriculum generator for Worksheet Maker 2.0. Return ONLY a valid raw JSON array of question objects matching the requested schema, with no markdown fences, no commentary, and no extra text before or after the JSON array.',
+      messages: [{ role: 'user', content: promptText }]
+    };
+
+    response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': ANTHROPIC_API_VERSION
+      },
+      payload: JSON.stringify(claudePayload),
+      muteHttpExceptions: true
+    });
     status = response.getResponseCode();
     if (status !== 404) break;
   }
 
   if (status !== 200) {
-    throw new Error(`Gemini API Error (${status}): ${response ? response.getContentText() : 'No response'}`);
+    throw new Error(`Claude API Error (${status}): ${response ? response.getContentText() : 'No response'}`);
   }
 
   const resJson = JSON.parse(response.getContentText());
-  const candidate = resJson.candidates && resJson.candidates[0] && resJson.candidates[0].content &&
-    resJson.candidates[0].content.parts && resJson.candidates[0].content.parts[0] && resJson.candidates[0].content.parts[0].text;
+  if (resJson.stop_reason === 'max_tokens') {
+    throw new Error('Claude output was truncated at max_tokens before completing the JSON array.');
+  }
+  const candidate = Array.isArray(resJson.content)
+    ? resJson.content.filter(b => b && b.type === 'text' && b.text).map(b => b.text).join('\n').trim()
+    : '';
   if (!candidate) {
-    throw new Error('Gemini returned an empty response.');
+    throw new Error('Claude returned an empty response.');
   }
 
   const parsed = robustParseGeneratedJson_(candidate);
   const items = Array.isArray(parsed) ? parsed : (parsed.questions || parsed.problems || []);
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error('Gemini did not return any questions in the expected JSON array format.');
+    throw new Error('Claude did not return any questions in the expected JSON array format.');
   }
 
   // Group items by assignmentName in chronological order
@@ -3014,6 +3052,7 @@ function handleGenerateAndSavePODWeek_(body) {
 
   return {
     success: true,
+    model: usedModel,
     count: createdIds.length,
     worksheetIds: createdIds,
     shortCodes: createdCodes,
