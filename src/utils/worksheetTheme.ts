@@ -99,9 +99,9 @@ export function getWorksheetTheme(
           badgeLabel: 'PROBLEM OF THE DAY',
           badgeIcon: '★',
           classLabel: 'ACCELERATED',
-          accent: [180, 83, 9], // amber-700
-          tint: [255, 247, 237], // orange-50
-          ink: [124, 45, 18], // orange-900
+          accent: [22, 163, 74], // green-600
+          tint: [240, 253, 244], // green-50
+          ink: [20, 83, 45], // green-900
           headerStyle: 'solid',
           borderStyle: 'double',
           numberShape: 'circle',
